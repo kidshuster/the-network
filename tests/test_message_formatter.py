@@ -59,7 +59,8 @@ def test_profile_emoji_url() -> None:
 
 def test_build_relay_embed_uses_display_name_and_server_icon() -> None:
     profile = _sample_profile()
-    parts = build_relay_embed(_message(content="Raid starts at 8 PM.", author_name="1 test #stingers"), profile)
+    message = _message(content="Raid starts at 8 PM.", author_name="1 test #stingers")
+    parts = build_relay_embed(message, profile)
     embed = parts.embed
 
     assert embed.author.name == "Test Server"
