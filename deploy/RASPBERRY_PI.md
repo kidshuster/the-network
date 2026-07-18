@@ -1,6 +1,6 @@
 # Raspberry Pi deployment
 
-Run The Network from the pre-built Docker image published on each [GitHub Release](https://github.com/kidshuster/the-network/releases). Images support **arm64** (Pi 4/5 64-bit OS) and **arm/v7** (32-bit Pi OS).
+Run The Network from the pre-built Docker image published on each [GitHub Release](https://github.com/kidshuster/the-network/releases). Images support **arm64** (Pi 4/5 with 64-bit Raspberry Pi OS) and **amd64**.
 
 ## Requirements
 
