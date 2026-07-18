@@ -1,0 +1,9 @@
+services:
+  the-network:
+    build: .
+    image: the-network:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data

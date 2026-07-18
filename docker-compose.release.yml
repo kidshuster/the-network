@@ -1,0 +1,15 @@
+# Pull the published image from GitHub Container Registry.
+# Replace GITHUB_USER if you forked the repo.
+#
+#   export GITHUB_USER=your-github-username
+#   docker compose -f docker-compose.release.yml pull
+#   docker compose -f docker-compose.release.yml up -d
+
+services:
+  the-network:
+    image: ghcr.io/${GITHUB_USER:-kidshuster}/the-network:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
