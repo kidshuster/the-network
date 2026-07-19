@@ -8,4 +8,13 @@ __pycache__/
 *.egg-info/
 data/*
 !data/.gitkeep
+
+# Cursor IDE
+.cursor/
+.cursorignore
+
+# Coordinator / foundry tooling
 work/
+doc/
+.coordinator-cache/
+**/.coordinator-cache/

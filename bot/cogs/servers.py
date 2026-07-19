@@ -14,10 +14,12 @@ from bot.context import BotContext
 from bot.domain.errors import ProfileValidationError
 from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
+from bot.ui.profile_views import EditProfileView
 
 logger = logging.getLogger(__name__)
 
 
+@app_commands.default_permissions(manage_guild=True)
 class ServerCog(
     commands.GroupCog,
     group_name="server",
@@ -29,7 +31,7 @@ class ServerCog(
     @require_manage_guild()
     @app_commands.command(
         name="create",
-        description="Create server feed, profile forum, access role, and profile",
+        description="Create server feed channel, access role, and pinned profile post",
     )
     @app_commands.describe(
         key="Network key (nkey)",
@@ -61,16 +63,36 @@ class ServerCog(
             await interaction.followup.send("Bot member is not available in this guild.")
             return
 
-        result = await context.profile_sync.create_profile(
-            guild,
-            bot_member,
-            server_name=server_name,
-            profile_image=profile_image,
-            display_name=display_name,
-            network_key=key,
-            enabled=True,
-        )
-        if not result.success or result.thread is None:
+        try:
+            result = await context.profile_sync.create_profile(
+                guild,
+                bot_member,
+                server_name=server_name,
+                profile_image=profile_image,
+                display_name=display_name,
+                network_key=key,
+                enabled=True,
+            )
+        except Exception:
+            logger.exception(
+                "Server create failed",
+                extra={
+                    "network_key": key,
+                    "server_name": server_name,
+                    "user_id": interaction.user.id,
+                },
+            )
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="Server Create Failed",
+                    description="An unexpected error occurred. Check bot logs.",
+                    colour=discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if not result.success or result.feed_channel is None:
             await interaction.followup.send(
                 embed=discord.Embed(
                     title="Server Create Failed",
@@ -81,27 +103,30 @@ class ServerCog(
             )
             return
 
+        if result.starter_message is not None and result.profile_channel is not None:
+            profile_view = EditProfileView(self.bot, result.profile_channel.id)
+            self.bot.add_view(profile_view)
+            try:
+                await result.starter_message.edit(view=profile_view)
+            except discord.HTTPException:
+                logger.warning(
+                    "Could not attach edit profile view after server create",
+                    extra={"profile_channel_id": result.profile_channel.id},
+                )
+
         profile = result.profile
         embed = discord.Embed(
             title="Server Created",
-            description=f"Profile post created: {result.thread.jump_url}",
+            description=f"Feed channel: {result.feed_channel.mention}",
             colour=discord.Colour.green(),
         )
         embed.add_field(name="Network", value=f"`{key.strip().lower()}`", inline=True)
         embed.add_field(name="Server", value=server_name, inline=True)
         embed.add_field(name="Display name", value=display_name, inline=True)
-        if result.feed_channel is not None:
-            embed.add_field(name="Feed channel", value=result.feed_channel.mention, inline=False)
-        if result.profile_forum is not None:
+        if result.server_role is not None:
             embed.add_field(
-                name="Profile forum",
-                value=f"{result.profile_forum.mention} (network shared)",
-                inline=False,
-            )
-        if result.partner_role is not None:
-            embed.add_field(
-                name="Partner role",
-                value=result.partner_role.mention,
+                name="Server role",
+                value=result.server_role.mention,
                 inline=False,
             )
         if profile is not None:
@@ -362,28 +387,6 @@ class ServerCog(
         return "not set"
 
     @commands.Cog.listener()
-    async def on_raw_thread_delete(self, payload: discord.RawThreadDeleteEvent) -> None:
-        if payload.guild_id != self.bot.settings.guild_id:
-            return
-        context = self.bot.bot_context
-        if context is None:
-            return
-        guild = self.bot.get_guild(payload.guild_id)
-        if guild is None:
-            return
-        try:
-            await context.profile_cleanup.cleanup_by_thread_id(
-                guild,
-                payload.thread_id,
-                parent_forum_id=payload.parent_id,
-            )
-        except Exception:
-            logger.exception(
-                "Server cleanup failed after thread delete",
-                extra={"thread_id": payload.thread_id},
-            )
-
-    @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         if channel.guild.id != self.bot.settings.guild_id:
             return
@@ -392,8 +395,14 @@ class ServerCog(
             return
         try:
             cleanup = context.profile_cleanup
-            await cleanup.cleanup_by_feed_channel_id(channel.guild, channel.id)
-            await cleanup.cleanup_by_profile_forum_id(channel.guild, channel.id)
+            if isinstance(channel, discord.CategoryChannel):
+                await cleanup.cleanup_by_profile_category_id(channel.guild, channel.id)
+                return
+            profile = await context.profile_repo.get_by_source_channel(channel.id)
+            if profile is not None:
+                await cleanup.cleanup_by_feed_channel_id(channel.guild, channel.id)
+                return
+            await cleanup.cleanup_by_profile_channel_id(channel.guild, channel.id)
         except Exception:
             logger.exception(
                 "Server cleanup failed after channel delete",

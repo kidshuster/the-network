@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import logging
 from dataclasses import dataclass
 
@@ -17,7 +16,7 @@ from bot.services.image_service import extract_profile_image
 from bot.services.profile_cache import ProfileCache
 from bot.services.profile_parser import ParsedProfile
 from bot.services.profile_post import parse_starter_message
-from bot.services.profile_provision import PartnerProvisionResult, ProfileProvisionService
+from bot.services.profile_provision import ProfileProvisionService, ServerProvisionResult
 from bot.services.routing_service import RoutingService
 
 logger = logging.getLogger(__name__)
@@ -26,6 +25,11 @@ _ALLOWED_SOURCE_TYPES = {
     discord.ChannelType.text,
     discord.ChannelType.news,
 }
+
+
+async def _pin_profile_starter(message: discord.Message) -> None:
+    """Legacy no-op — profile cards bump to the channel bottom instead of pinning."""
+    return
 
 
 @dataclass(frozen=True)
@@ -47,15 +51,27 @@ class SyncAllResult:
 
 
 @dataclass(frozen=True)
+class PartnerProfileUpdateResult:
+    success: bool
+    profile: ServerProfile | None = None
+    error: str | None = None
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class CreateProfileResult:
     success: bool
-    thread: discord.Thread | None = None
+    feed_channel: discord.TextChannel | None = None
     profile: ServerProfile | None = None
     sync_result: SyncResult | None = None
     error: str | None = None
-    feed_channel: discord.TextChannel | None = None
-    profile_forum: discord.ForumChannel | None = None
-    partner_role: discord.Role | None = None
+    server_role: discord.Role | None = None
+    starter_message: discord.Message | None = None
+
+    @property
+    def profile_channel(self) -> discord.TextChannel | None:
+        """Legacy alias — profile lives in the feed channel now."""
+        return self.feed_channel
 
 
 class ProfileSyncService:
@@ -82,15 +98,17 @@ class ProfileSyncService:
         bot_member: discord.Member,
         *,
         server_name: str,
-        profile_image: discord.Attachment,
         network_key: str,
         display_name: str | None = None,
         enabled: bool = True,
+        profile_image: discord.Attachment | None = None,
+        profile_image_bytes: bytes | None = None,
+        starter_view: discord.ui.View | None = None,
     ) -> CreateProfileResult:
         from bot.services.image_service import normalize_image_bytes
         from bot.services.profile_post import build_profile_embed
 
-        partner: PartnerProvisionResult | None = None
+        provision: ServerProvisionResult | None = None
         try:
             name = server_name.strip()
             if not name:
@@ -101,24 +119,32 @@ class ProfileSyncService:
             network = await self._network_repo.get_by_key(normalized_key)
             if network is None:
                 raise ProfileValidationError(f"Network '{normalized_key}' was not found.")
-            if network.profile_forum_channel_id is None:
+
+            existing_server = await self._profile_repo.get_by_network_and_server_name(
+                network.id,
+                name,
+            )
+            if existing_server is not None:
                 raise ProfileValidationError(
-                    f"Network `{network.key}` has no profiles forum. Run `/network create` first."
+                    f"A server named {name!r} already exists on network `{network.key}`."
                 )
 
-            partner = await self._profile_provision.provision_partner(
+            if profile_image is None and profile_image_bytes is None:
+                raise ProfileValidationError("A profile image is required.")
+
+            provision = await self._profile_provision.provision_server(
                 guild,
                 bot_member,
                 network_key=network.key,
                 server_name=name,
                 feed_category_id=network.feed_category_id,
-                profile_forum_channel_id=network.profile_forum_channel_id,
                 admin_role_name=self._settings.network_access_role_name,
             )
 
+            feed_channel = provision.feed_channel
             parsed = ParsedProfile(
                 server_name=name,
-                source_channel_id=partner.feed_channel.id,
+                source_channel_id=feed_channel.id,
                 enabled=enabled,
                 network_key=network.key,
                 display_name=label,
@@ -132,7 +158,11 @@ class ProfileSyncService:
                     f"'{existing.server_name}'."
                 )
 
-            raw_image = await profile_image.read()
+            if profile_image_bytes is not None:
+                raw_image = profile_image_bytes
+            else:
+                assert profile_image is not None
+                raw_image = await profile_image.read()
             normalized_image = normalize_image_bytes(raw_image)
 
             embed = build_profile_embed(
@@ -142,62 +172,106 @@ class ProfileSyncService:
                 network_key=network.key,
                 enabled=parsed.enabled,
             )
-            thread_with_message = await partner.profile_forum.create_thread(
-                name=parsed.server_name[:100],
+            starter = await feed_channel.send(
                 embed=embed,
-                file=discord.File(fp=io.BytesIO(raw_image), filename="profile.png"),
-                content="\u200b",
+                view=starter_view,
             )
-            thread = thread_with_message.thread
-            starter = thread_with_message.message
-            sync_result = await self.sync_thread(
+            await _pin_profile_starter(starter)
+            sync_result = await self.sync_profile(
                 guild,
-                thread,
+                feed_channel,
                 starter_message=starter,
                 profile_image=normalized_image,
-                partner_role_id=partner.partner_role.id,
-                profile_forum_channel_id=network.profile_forum_channel_id,
+                partner_role_id=provision.server_role.id,
+                profile_category_id=network.feed_category_id,
             )
             if not sync_result.success:
                 return CreateProfileResult(
                     success=False,
-                    thread=thread,
+                    feed_channel=feed_channel,
                     sync_result=sync_result,
                     error=sync_result.error,
-                    feed_channel=partner.feed_channel,
-                    profile_forum=partner.profile_forum,
-                    partner_role=partner.partner_role,
+                    server_role=provision.server_role,
+                    starter_message=starter,
                 )
+            if sync_result.profile is not None:
+                from bot.services.profile_sticky import refresh_profile_starter_embed
+
+                try:
+                    await refresh_profile_starter_embed(
+                        starter,
+                        sync_result.profile,
+                        network_key=network.key,
+                        view=starter_view,
+                    )
+                except discord.HTTPException:
+                    pass
             return CreateProfileResult(
                 success=True,
-                thread=thread,
+                feed_channel=feed_channel,
                 profile=sync_result.profile,
                 sync_result=sync_result,
-                feed_channel=partner.feed_channel,
-                profile_forum=partner.profile_forum,
-                partner_role=partner.partner_role,
+                server_role=provision.server_role,
+                starter_message=starter,
             )
         except (ProfileParseError, ProfileValidationError) as exc:
             return CreateProfileResult(success=False, error=str(exc))
         except discord.HTTPException as exc:
             return CreateProfileResult(success=False, error=f"Discord API error: {exc}")
 
+    async def sync_all_profiles(
+        self,
+        guild: discord.Guild,
+        feed_category_id: int,
+    ) -> SyncAllResult:
+        synced = 0
+        failed = 0
+        preserved = 0
+        seen_channel_ids: set[int] = set()
+
+        for channel in guild.text_channels:
+            if channel.category_id != feed_category_id:
+                continue
+            if channel.id in seen_channel_ids:
+                continue
+            seen_channel_ids.add(channel.id)
+            result = await self.sync_profile(guild, channel)
+            if result.success:
+                synced += 1
+            else:
+                failed += 1
+                if result.preserved_existing:
+                    preserved += 1
+
+        removed_profiles = await self._prune_orphaned_profiles(seen_channel_ids)
+        if removed_profiles:
+            await self._profile_cache.load_cache()
+
+        return SyncAllResult(
+            synced=synced,
+            failed=failed,
+            preserved=preserved,
+            removed=len(removed_profiles),
+            removed_names=tuple(profile.server_name for profile in removed_profiles),
+        )
+
     async def sync_all_forum(
         self,
         guild: discord.Guild,
         forum: discord.ForumChannel,
     ) -> SyncAllResult:
+        """Legacy forum sync — kept for archived forum threads."""
         synced = 0
         failed = 0
         preserved = 0
-        seen_thread_ids: set[int] = set()
+        seen_channel_ids: set[int] = set()
 
         async def sync_one(thread: discord.Thread) -> None:
             nonlocal synced, failed, preserved
-            if thread.id in seen_thread_ids:
+            if thread.id in seen_channel_ids:
                 return
-            seen_thread_ids.add(thread.id)
-            result = await self.sync_thread(guild, thread)
+            seen_channel_ids.add(thread.id)
+            result = await self.sync_profile(guild, thread)
             if result.success:
                 synced += 1
             else:
@@ -211,7 +285,7 @@ class ProfileSyncService:
         async for thread in forum.archived_threads(limit=None):
             await sync_one(thread)
 
-        removed_profiles = await self._prune_orphaned_profiles(seen_thread_ids)
+        removed_profiles = await self._prune_orphaned_profiles(seen_channel_ids)
         if removed_profiles:
             await self._profile_cache.load_cache()
 
@@ -247,36 +321,49 @@ class ProfileSyncService:
         self,
         guild: discord.Guild,
         thread: discord.Thread,
+        **kwargs: object,
+    ) -> SyncResult:
+        return await self.sync_profile(guild, thread, **kwargs)  # type: ignore[arg-type]
+
+    async def sync_profile(
+        self,
+        guild: discord.Guild,
+        profile_channel: discord.TextChannel | discord.Thread,
         *,
         force_emoji: bool = False,
         starter_message: discord.Message | None = None,
         profile_image: ProfileImage | None = None,
         partner_role_id: int | None = None,
+        profile_category_id: int | None = None,
         profile_forum_channel_id: int | None = None,
     ) -> SyncResult:
-        existing = await self._profile_repo.get_by_thread_id(thread.id)
+        category_id = profile_category_id or profile_forum_channel_id
+        existing = await self._profile_repo.get_by_thread_id(profile_channel.id)
+        channel_name = getattr(profile_channel, "name", "")
         try:
-            starter = starter_message or await self._fetch_starter_message(thread)
+            starter = starter_message or await self._fetch_starter_message(profile_channel)
             if profile_image is None and not starter.attachments:
-                starter = await self._fetch_starter_message(thread)
-            parsed = parse_starter_message(starter, thread_name=thread.name)
+                starter = await self._fetch_starter_message(profile_channel)
+            parsed = parse_starter_message(starter, thread_name=channel_name)
             network = await self._resolve_network(guild, parsed)
             await self._validate_source_channel(guild, parsed.source_channel_id, network)
 
-            forum_id = profile_forum_channel_id
-            if forum_id is None:
-                parent_id = getattr(thread, "parent_id", None)
+            resolved_category_id = category_id
+            if resolved_category_id is None:
+                parent_id = getattr(profile_channel, "category_id", None) or getattr(
+                    profile_channel, "parent_id", None
+                )
                 if isinstance(parent_id, int):
-                    forum_id = parent_id
-            if forum_id is None and existing is not None:
-                forum_id = existing.profile_forum_channel_id
+                    resolved_category_id = parent_id
+            if resolved_category_id is None and existing is not None:
+                resolved_category_id = existing.profile_forum_channel_id
 
             previous_hash = existing.image_hash if existing else None
             previous_emoji_id = existing.emoji_id if existing else None
 
             profile = await self._profile_repo.upsert(
                 guild_id=guild.id,
-                profile_thread_id=thread.id,
+                profile_thread_id=profile_channel.id,
                 profile_starter_message_id=starter.id,
                 source_channel_id=parsed.source_channel_id,
                 network_id=network.id,
@@ -286,7 +373,7 @@ class ProfileSyncService:
                 partner_role_id=partner_role_id
                 if partner_role_id is not None
                 else (existing.partner_role_id if existing else None),
-                profile_forum_channel_id=forum_id,
+                profile_forum_channel_id=resolved_category_id,
             )
 
             warnings: list[str] = []
@@ -301,11 +388,22 @@ class ProfileSyncService:
             )
             warnings.extend(emoji_warnings)
 
+            try:
+                from bot.services.profile_sticky import refresh_profile_starter_embed
+
+                await refresh_profile_starter_embed(
+                    starter,
+                    profile,
+                    network_key=network.key,
+                )
+            except discord.HTTPException:
+                warnings.append("Could not refresh profile card embed.")
+
             await self._profile_cache.load_cache()
             logger.info(
                 "Profile synced",
                 extra={
-                    "profile_thread_id": thread.id,
+                    "profile_channel_id": profile_channel.id,
                     "source_channel_id": profile.source_channel_id,
                     "network_id": network.id,
                     "emoji_id": profile.emoji_id,
@@ -316,7 +414,7 @@ class ProfileSyncService:
             if existing is not None:
                 logger.warning(
                     "Profile parse failed; preserved existing record",
-                    extra={"profile_thread_id": thread.id, "error": str(exc)},
+                    extra={"profile_channel_id": profile_channel.id, "error": str(exc)},
                 )
                 return SyncResult(
                     success=False,
@@ -329,7 +427,7 @@ class ProfileSyncService:
             if existing is not None:
                 logger.warning(
                     "Profile validation failed; preserved existing record",
-                    extra={"profile_thread_id": thread.id, "error": str(exc)},
+                    extra={"profile_channel_id": profile_channel.id, "error": str(exc)},
                 )
                 return SyncResult(
                     success=False,
@@ -338,6 +436,134 @@ class ProfileSyncService:
                     profile=existing,
                 )
             return SyncResult(success=False, error=str(exc))
+
+    async def update_partner_profile(
+        self,
+        guild: discord.Guild,
+        profile_channel: discord.TextChannel,
+        *,
+        display_name: str | None = None,
+        profile_image: discord.Attachment | None = None,
+        profile_image_bytes: bytes | None = None,
+        starter_view: discord.ui.View | None = None,
+    ) -> PartnerProfileUpdateResult:
+        from bot.services.image_service import normalize_image_bytes
+        from bot.services.profile_sticky import (
+            refresh_profile_starter_embed,
+            repost_profile_sticky_after_edit,
+        )
+
+        profile = await self._profile_repo.get_by_thread_id(profile_channel.id)
+        if profile is None:
+            return PartnerProfileUpdateResult(
+                success=False,
+                error="This channel is not a registered server feed.",
+            )
+
+        if display_name is None and profile_image is None and profile_image_bytes is None:
+            return PartnerProfileUpdateResult(
+                success=False,
+                error="Provide a display name and/or profile image to update.",
+            )
+
+        new_display = profile.display_name
+        if display_name is not None:
+            cleaned = display_name.strip()
+            if not cleaned:
+                return PartnerProfileUpdateResult(
+                    success=False,
+                    error="Display name cannot be empty.",
+                )
+            new_display = cleaned
+
+        normalized_image = None
+        raw_image: bytes | None = profile_image_bytes
+        if profile_image is not None:
+            try:
+                raw_image = await profile_image.read()
+            except discord.HTTPException:
+                return PartnerProfileUpdateResult(
+                    success=False,
+                    error="Failed to read profile image attachment.",
+                )
+        if raw_image is not None:
+            try:
+                normalized_image = normalize_image_bytes(raw_image)
+            except ProfileValidationError as exc:
+                return PartnerProfileUpdateResult(success=False, error=str(exc))
+
+        try:
+            network = await self._network_repo.get_by_id(profile.network_id)
+            network_key = network.key if network is not None else None
+            if starter_view is None:
+                return PartnerProfileUpdateResult(
+                    success=False,
+                    error="Profile update view is not configured.",
+                )
+
+            new_starter = await repost_profile_sticky_after_edit(
+                profile_channel,
+                profile,
+                display_name=new_display,
+                enabled=profile.enabled,
+                network_key=network_key,
+                edit_view_factory=lambda _channel_id: starter_view,
+            )
+            if new_starter is None:
+                return PartnerProfileUpdateResult(
+                    success=False,
+                    error="Failed to refresh the profile card in this channel.",
+                )
+
+            profile = await self._profile_repo.update_display_name(profile_channel.id, new_display)
+            profile = await self._profile_repo.update_starter_message_id(
+                profile_channel.id,
+                new_starter.id,
+            )
+
+            warnings: list[str] = []
+            if normalized_image is not None:
+                profile, emoji_warnings = await self._sync_emoji(
+                    guild,
+                    profile,
+                    new_starter,
+                    previous_hash=profile.image_hash,
+                    previous_emoji_id=profile.emoji_id,
+                    force=True,
+                    profile_image=normalized_image,
+                )
+                warnings.extend(emoji_warnings)
+            elif display_name is not None:
+                profile, emoji_warnings = await self._sync_emoji(
+                    guild,
+                    profile,
+                    new_starter,
+                    previous_hash=profile.image_hash,
+                    previous_emoji_id=profile.emoji_id,
+                    force=False,
+                )
+                warnings.extend(emoji_warnings)
+
+            try:
+                await refresh_profile_starter_embed(
+                    new_starter,
+                    profile,
+                    network_key=network_key,
+                    view=starter_view,
+                )
+            except discord.HTTPException:
+                pass
+
+            await self._profile_cache.load_cache()
+            return PartnerProfileUpdateResult(
+                success=True,
+                profile=profile,
+                warnings=tuple(warnings),
+            )
+        except ProfileValidationError as exc:
+            return PartnerProfileUpdateResult(success=False, error=str(exc))
+        except discord.HTTPException as exc:
+            return PartnerProfileUpdateResult(success=False, error=f"Discord API error: {exc}")
 
     async def _sync_emoji(
         self,
@@ -403,13 +629,18 @@ class ProfileSyncService:
             warnings.append(emoji_result.warning)
         return profile, warnings
 
-    async def _fetch_starter_message(self, thread: discord.Thread) -> discord.Message:
-        try:
-            return await thread.fetch_message(thread.id)
-        except discord.HTTPException:
-            async for message in thread.history(limit=1, oldest_first=True):
-                return message
-        raise ProfileValidationError("Forum thread has no starter message.")
+    async def _fetch_starter_message(
+        self,
+        profile_channel: discord.TextChannel | discord.Thread,
+    ) -> discord.Message:
+        if isinstance(profile_channel, discord.Thread):
+            try:
+                return await profile_channel.fetch_message(profile_channel.id)
+            except discord.HTTPException:
+                pass
+        async for message in profile_channel.history(limit=1, oldest_first=True):
+            return message
+        raise ProfileValidationError("Profile channel has no starter message.")
 
     async def _resolve_network(
         self,
@@ -484,8 +715,17 @@ class ProfileSyncService:
         if network.concat_channel_id is not None and source_channel_id == network.concat_channel_id:
             raise ProfileValidationError("Source channel cannot be the network concat channel.")
 
-        if (
-            network.profile_forum_channel_id is not None
-            and source_channel_id == network.profile_forum_channel_id
-        ):
-            raise ProfileValidationError("Source channel cannot be the network profile forum.")
+        if network.profile_forum_channel_id is not None:
+            channel = guild.get_channel(source_channel_id)
+            if channel is None:
+                fetched = await guild.fetch_channel(source_channel_id)
+                channel = fetched if isinstance(fetched, discord.abc.GuildChannel) else None
+            parent_id = getattr(channel, "category_id", None)
+            if parent_id == network.profile_forum_channel_id:
+                raise ProfileValidationError(
+                    "Source channel cannot be in the network profiles category."
+                )
+            if source_channel_id == network.profile_forum_channel_id:
+                raise ProfileValidationError(
+                    "Source channel cannot be the network profiles category."
+                )

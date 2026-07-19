@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 
 import discord
 
 from bot.domain.errors import ProfileParseError
+from bot.services.message_formatter import sanitize_author
 from bot.services.profile_parser import ParsedProfile, parse_profile
+
+_PROFILE_CARD_VERSION = 3
+PROFILE_CARD_FOOTER_PREFIX = "The Network • profile card"
 
 _CHANNEL_MENTION_RE = re.compile(r"^<#(\d+)>$")
 _SNOWFLAKE_RE = re.compile(r"^\d{17,20}$")
@@ -21,6 +27,33 @@ _EMBED_FIELD_ALIASES: dict[str, str] = {
     "status": "enabled",
     "enabled": "enabled",
 }
+
+
+def profile_card_footer() -> str:
+    return (
+        f"{PROFILE_CARD_FOOTER_PREFIX} • v{_PROFILE_CARD_VERSION} • "
+        "use Edit Profile below to update"
+    )
+
+
+def _profile_emoji_icon_url(emoji_id: int | None) -> str | None:
+    if emoji_id is None:
+        return None
+    return f"https://cdn.discordapp.com/emojis/{emoji_id}.png?size=128"
+
+
+def profile_embed_content_signature(embed: discord.Embed) -> str:
+    author = embed.author
+    payload = {
+        "title": embed.title,
+        "description": embed.description,
+        "author_name": author.name if author else None,
+        "author_icon_url": author.icon_url if author else None,
+        "fields": [(field.name, field.value, field.inline) for field in embed.fields],
+        "footer": embed.footer.text if embed.footer else None,
+    }
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def format_profile_yaml(
@@ -50,14 +83,19 @@ def build_profile_embed(
     source_channel_id: int,
     network_key: str | None,
     enabled: bool,
+    emoji_id: int | None = None,
 ) -> discord.Embed:
     status = "Enabled" if enabled else "Disabled"
     colour = discord.Colour.green() if enabled else discord.Colour.red()
     embed = discord.Embed(
-        title=display_name,
         description="Server profile for **The Network** relay.",
         colour=colour,
     )
+    author_kwargs: dict[str, str] = {"name": sanitize_author(display_name.strip() or server_name)}
+    icon_url = _profile_emoji_icon_url(emoji_id)
+    if icon_url is not None:
+        author_kwargs["icon_url"] = icon_url
+    embed.set_author(**author_kwargs)
     embed.add_field(name="Server name", value=server_name, inline=True)
     embed.add_field(name="Source channel", value=f"<#{source_channel_id}>", inline=True)
     embed.add_field(
@@ -65,10 +103,17 @@ def build_profile_embed(
         value=f"`{network_key}`" if network_key else "_inferred from feed category_",
         inline=True,
     )
-    embed.add_field(name="Display name", value=display_name, inline=True)
     embed.add_field(name="Status", value=status, inline=True)
-    embed.set_image(url="attachment://profile.png")
-    embed.set_footer(text="The Network • managed by /server commands")
+    embed.add_field(
+        name="Connect your server",
+        value=(
+            "On **your** server, open your announcement channel, click **Follow**, "
+            f"and select <#{source_channel_id}>. Any message **published** from that "
+            "announcement channel is forwarded to the network using this profile card."
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=profile_card_footer())
     return embed
 
 
@@ -128,7 +173,11 @@ def parse_profile_embed(embed: discord.Embed, *, thread_name: str = "") -> Parse
         enabled = True
 
     network_key = _clean_network_key(raw_fields.get("network", ""))
-    display_name = raw_fields.get("display_name", "").strip() or server_name
+    display_name = raw_fields.get("display_name", "").strip()
+    if not display_name and embed.author and embed.author.name:
+        display_name = embed.author.name.strip()
+    if not display_name:
+        display_name = (embed.title or "").strip() or server_name
 
     return ParsedProfile(
         server_name=server_name,

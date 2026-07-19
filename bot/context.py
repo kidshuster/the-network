@@ -11,6 +11,8 @@ if TYPE_CHECKING:
         NetworkRepository,
         ProfileRepository,
         RelayRecordRepository,
+        ServerRequestRepository,
+        SettingsRepository,
     )
     from bot.services.bot_settings import BotSettingsService
     from bot.services.network_cleanup import NetworkCleanupService
@@ -35,6 +37,8 @@ class BotContext:
     network_cleanup: NetworkCleanupService
     relay_service: RelayService
     bot_settings: BotSettingsService
+    settings_repo: SettingsRepository
+    server_request_repo: ServerRequestRepository
     started_at: datetime
     network_count: int = 0
     profile_count: int = 0
@@ -55,6 +59,8 @@ class BotContext:
         network_cleanup: NetworkCleanupService,
         relay_service: RelayService,
         bot_settings: BotSettingsService,
+        settings_repo: SettingsRepository,
+        server_request_repo: ServerRequestRepository,
     ) -> BotContext:
         return cls(
             settings=settings,
@@ -69,6 +75,8 @@ class BotContext:
             network_cleanup=network_cleanup,
             relay_service=relay_service,
             bot_settings=bot_settings,
+            settings_repo=settings_repo,
+            server_request_repo=server_request_repo,
             started_at=datetime.now(tz=UTC),
         )
 

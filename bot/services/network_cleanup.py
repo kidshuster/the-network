@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class NetworkCleanupResult:
     deleted_servers: int
     deleted_channels: int
-    deleted_category: bool
+    deleted_categories: int
     deleted_roles: int
 
 
@@ -44,7 +44,7 @@ class NetworkCleanupService:
         deleted_roles = sum(1 for result in server_results if result.deleted_role)
         await self._profile_cache.load_cache()
 
-        deleted_channels, deleted_category = await self._delete_feed_category_tree(
+        deleted_channels, deleted_categories = await self._delete_network_categories(
             guild,
             network,
         )
@@ -55,43 +55,45 @@ class NetworkCleanupService:
                 "network_key": network.key,
                 "deleted_servers": len(server_results),
                 "deleted_channels": deleted_channels,
-                "deleted_category": deleted_category,
+                "deleted_categories": deleted_categories,
                 "deleted_roles": deleted_roles,
             },
         )
         return NetworkCleanupResult(
             deleted_servers=len(server_results),
             deleted_channels=deleted_channels,
-            deleted_category=deleted_category,
+            deleted_categories=deleted_categories,
             deleted_roles=deleted_roles,
         )
 
-    async def _delete_feed_category_tree(
+    async def _delete_network_categories(
         self,
         guild: discord.Guild,
         network: Network,
-    ) -> tuple[int, bool]:
-        category_id = network.feed_category_id
-        channel_ids: set[int] = set()
+    ) -> tuple[int, int]:
+        category_ids = [network.feed_category_id]
+        if network.profile_forum_channel_id is not None:
+            category_ids.append(network.profile_forum_channel_id)
 
+        channel_ids: set[int] = set()
         for channel in guild.channels:
-            if getattr(channel, "category_id", None) == category_id:
+            parent_id = getattr(channel, "category_id", None)
+            if parent_id in category_ids and channel.id not in category_ids:
                 channel_ids.add(channel.id)
 
-        for known_id in (network.concat_channel_id, network.profile_forum_channel_id):
-            if known_id is not None:
-                channel_ids.add(known_id)
-
-        channel_ids.discard(category_id)
+        if network.concat_channel_id is not None:
+            channel_ids.add(network.concat_channel_id)
+        if network.join_channel_id is not None:
+            channel_ids.add(network.join_channel_id)
 
         deleted_channels = 0
         for channel_id in sorted(channel_ids):
             if await delete_channel(guild, channel_id, label="network channel"):
                 deleted_channels += 1
 
-        deleted_category = await delete_channel(
-            guild,
-            category_id,
-            label="network feed category",
-        )
-        return deleted_channels, deleted_category
+        deleted_categories = 0
+        for category_id in category_ids:
+            if await delete_channel(guild, category_id, label="network category"):
+                deleted_categories += 1
+
+        return deleted_channels, deleted_categories

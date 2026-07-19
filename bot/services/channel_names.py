@@ -28,3 +28,8 @@ def build_network_channel_name(
     key = network_key.strip().lower()
     cleaned_suffix = suffix.strip().lower()
     return build_unique_channel_name(guild, f"{key}-{cleaned_suffix}")
+
+
+def announcement_channel_base_name(network_key: str) -> str:
+    key = network_key.strip().lower()
+    return f"{key}-announcements"[:100]

@@ -13,3 +13,4 @@ class Network:
     concat_channel_id: int | None
     profile_forum_channel_id: int | None
     enabled: bool
+    join_channel_id: int | None = None

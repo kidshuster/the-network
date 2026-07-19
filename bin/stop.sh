@@ -2,33 +2,34 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PIDFILE="$ROOT/data/bot.pid"
+DATA_DIR="${DATA_DIR:-$ROOT/data}"
+PID_FILE="${PID_FILE:-$DATA_DIR/bot.pid}"
 
-if [[ ! -f "$PIDFILE" ]]; then
-  echo "No pid file found — bot is not running."
+if [[ ! -f "$PID_FILE" ]]; then
+  echo "The Network is not running (no pid file at ${PID_FILE})"
   exit 0
 fi
 
-pid="$(cat "$PIDFILE")"
-
+pid="$(cat "$PID_FILE")"
 if ! kill -0 "$pid" 2>/dev/null; then
-  rm -f "$PIDFILE"
-  echo "Removed stale pid file — bot was not running."
+  echo "Removing stale pid file (process ${pid} not found)"
+  rm -f "$PID_FILE"
   exit 0
 fi
 
+echo "Stopping The Network (pid ${pid})"
 kill "$pid"
-echo "Stopping bot (pid $pid)..."
 
 for _ in $(seq 1 30); do
   if ! kill -0 "$pid" 2>/dev/null; then
-    rm -f "$PIDFILE"
-    echo "Bot stopped."
+    rm -f "$PID_FILE"
+    echo "The Network stopped"
     exit 0
   fi
   sleep 1
 done
 
+echo "Process did not exit gracefully; sending SIGKILL" >&2
 kill -9 "$pid" 2>/dev/null || true
-rm -f "$PIDFILE"
-echo "Bot force-stopped."
+rm -f "$PID_FILE"
+echo "The Network stopped"

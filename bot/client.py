@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ from bot.db.repositories import (
     NetworkRepository,
     ProfileRepository,
     RelayRecordRepository,
+    ServerRequestRepository,
     SettingsRepository,
 )
 from bot.services.bot_settings import BotSettingsService
@@ -77,6 +79,7 @@ class NetworkRelayBot(commands.Bot):
         network_cleanup = NetworkCleanupService(profile_cleanup, profile_cache)
 
         settings_repo = SettingsRepository(self.db)
+        server_request_repo = ServerRequestRepository(self.db)
         bot_settings = BotSettingsService(settings_repo, self.settings)
         await bot_settings.load()
 
@@ -100,6 +103,8 @@ class NetworkRelayBot(commands.Bot):
             network_cleanup,
             relay_service,
             bot_settings,
+            settings_repo,
+            server_request_repo,
         )
         self.bot_context.network_count = routing_service.network_count
         self.bot_context.profile_count = profile_cache.profile_count
@@ -108,6 +113,8 @@ class NetworkRelayBot(commands.Bot):
         await self.load_extension("bot.cogs.network")
         await self.load_extension("bot.cogs.servers")
         await self.load_extension("bot.cogs.relay")
+
+        await self._register_persistent_views()
 
         guild = discord.Object(id=self.settings.guild_id)
         self.tree.copy_global_to(guild=guild)
@@ -155,6 +162,65 @@ class NetworkRelayBot(commands.Bot):
         if self.settings.topgg_token and self._topgg is None:
             self._topgg = TopggService(self, self.settings.topgg_token)
             await self._topgg.start()
+
+        asyncio.create_task(self._sync_profile_stickies_on_startup(guild))
+
+    async def _sync_profile_stickies_on_startup(self, guild: discord.Guild) -> None:
+        context = self.bot_context
+        if context is None:
+            return
+
+        from bot.services.profile_sticky import sync_all_profile_stickies
+        from bot.ui.profile_views import EditProfileView
+
+        async def resolve_network_key(network_id: int) -> str | None:
+            network = await context.network_repo.get_by_id(network_id)
+            return network.key if network is not None else None
+
+        async def update_starter_message_id(thread_id: int, message_id: int) -> None:
+            await context.profile_repo.update_starter_message_id(thread_id, message_id)
+
+        try:
+            summary = await sync_all_profile_stickies(
+                guild,
+                await context.profile_repo.list_all(),
+                resolve_network_key=resolve_network_key,
+                update_starter_message_id=update_starter_message_id,
+                edit_view_factory=lambda thread_id: EditProfileView(self, thread_id),
+            )
+        except Exception:
+            logger.exception("Profile sticky startup sync failed")
+            return
+
+        if summary.updated:
+            await context.profile_cache.load_cache()
+
+        logger.info(
+            "Profile sticky startup sync complete",
+            extra={
+                "checked": summary.checked,
+                "updated": summary.updated,
+                "skipped": summary.skipped,
+                "failed": summary.failed,
+            },
+        )
+
+    async def _register_persistent_views(self) -> None:
+        context = self.bot_context
+        if context is None:
+            return
+
+        from bot.ui.join_views import JoinServerView, ModeratorReviewView
+        from bot.ui.profile_views import EditProfileView
+
+        for network in await context.network_repo.list_all():
+            self.add_view(JoinServerView(self, network.key))
+
+        for request in await context.server_request_repo.list_pending():
+            self.add_view(ModeratorReviewView(self, request.id))
+
+        for profile in await context.profile_repo.list_all():
+            self.add_view(EditProfileView(self, profile.profile_thread_id))
 
     async def close(self) -> None:
         if self._topgg is not None:

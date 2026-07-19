@@ -82,6 +82,59 @@ def _save_png(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+async def read_profile_image_attachment(attachment: discord.Attachment) -> ProfileImage:
+    max_mb = MAX_PROFILE_IMAGE_DOWNLOAD_BYTES // (1024 * 1024)
+    if attachment.size and attachment.size > MAX_PROFILE_IMAGE_DOWNLOAD_BYTES:
+        raise ProfileValidationError(f"Profile image exceeds the {max_mb}MB limit.")
+
+    if not _is_supported_attachment(attachment):
+        raise ProfileValidationError(
+            "Profile image must be a PNG, JPG, WebP, or GIF file."
+        )
+
+    try:
+        raw = await attachment.read()
+    except discord.HTTPException as exc:
+        raise ProfileValidationError("Failed to read profile image attachment.") from exc
+
+    if len(raw) > MAX_PROFILE_IMAGE_DOWNLOAD_BYTES:
+        raise ProfileValidationError(f"Profile image exceeds the {max_mb}MB limit.")
+
+    return normalize_image_bytes(raw)
+
+
+async def download_profile_image_from_url(url: str) -> ProfileImage:
+    cleaned = url.strip()
+    if not cleaned.startswith(("http://", "https://")):
+        raise ProfileValidationError("Profile image URL must start with http:// or https://.")
+
+    try:
+        import aiohttp
+    except ImportError as exc:
+        raise ProfileValidationError("Image download is unavailable.") from exc
+
+    max_mb = MAX_PROFILE_IMAGE_DOWNLOAD_BYTES // (1024 * 1024)
+    timeout = aiohttp.ClientTimeout(total=30)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(cleaned) as response:
+                if response.status != 200:
+                    raise ProfileValidationError(
+                        f"Could not download profile image (HTTP {response.status})."
+                    )
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                if content_type.startswith("image/") and "svg" in content_type:
+                    raise ProfileValidationError("SVG images are not supported.")
+                raw = await response.read()
+    except aiohttp.ClientError as exc:
+        raise ProfileValidationError("Failed to download profile image URL.") from exc
+
+    if len(raw) > MAX_PROFILE_IMAGE_DOWNLOAD_BYTES:
+        raise ProfileValidationError(f"Profile image exceeds the {max_mb}MB limit.")
+
+    return normalize_image_bytes(raw)
+
+
 async def extract_profile_image(message: discord.Message) -> ProfileImage | None:
     attachment = find_first_image_attachment(message)
     if attachment is None:

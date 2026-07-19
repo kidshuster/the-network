@@ -12,16 +12,21 @@ from bot.cogs._checks import require_manage_guild
 from bot.context import BotContext
 from bot.domain.errors import NetworkValidationError
 from bot.services.discord_errors import DiscordStepError, format_discord_step_error
+from bot.services.guild_channels import resolve_network_join_channel
+from bot.services.guild_init import initialize_guild
+from bot.services.join_requests_sticky import sync_network_how_to_join_sticky
 from bot.services.network_provision import (
     NetworkProvisionService,
-    create_guide_thread,
     resolve_access_role,
 )
 from bot.services.network_validation import validate_network_channels
+from bot.services.rules_sticky import sync_rules_sticky
+from bot.ui.join_views import JoinServerView
 
 logger = logging.getLogger(__name__)
 
 
+@app_commands.default_permissions(manage_guild=True)
 class NetworkCog(
     commands.GroupCog,
     group_name="network",
@@ -33,20 +38,219 @@ class NetworkCog(
 
     @require_manage_guild()
     @app_commands.command(
+        name="sync-how-to-join",
+        description="Clear a network join channel and repost the public join guide",
+    )
+    @app_commands.describe(key="Network key (nkey)")
+    @app_commands.autocomplete(key=network_key_autocomplete)
+    async def sync_how_to_join(self, interaction: discord.Interaction, key: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None or guild.id != self.bot.settings.guild_id:
+            await interaction.followup.send(
+                "This bot only operates in the configured central guild.",
+                ephemeral=True,
+            )
+            return
+
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send("Bot member is not available in this guild.")
+            return
+
+        context = self._context()
+        network = await context.network_repo.get_by_key(key)
+        if network is None:
+            await interaction.followup.send(
+                f"Network `{key.strip().lower()}` was not found.",
+                ephemeral=True,
+            )
+            return
+
+        channel = resolve_network_join_channel(guild, network)
+        if channel is None and isinstance(interaction.channel, discord.TextChannel):
+            channel = interaction.channel
+        if channel is None:
+            await interaction.followup.send(
+                "No join channel found for this network. Run the command in a text channel "
+                "or recreate the network so a join channel is provisioned.",
+                ephemeral=True,
+            )
+            return
+
+        result = await sync_network_how_to_join_sticky(
+            guild,
+            bot_member,
+            network,
+            self.bot,
+            get_setting=context.settings_repo.get,
+            set_setting=context.settings_repo.set,
+            channel=channel,
+            wipe_channel=True,
+        )
+        if not result.success:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="Sync How-To-Join Failed",
+                    description=result.reason or "Unknown error",
+                    colour=discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="How-To-Join Synced",
+            description=(
+                f"Cleared {channel.mention} and posted the join guide "
+                f"for **{network.display_name}**."
+            ),
+            colour=discord.Colour.green(),
+        )
+        if result.message is not None:
+            embed.add_field(name="Message", value=result.message.jump_url, inline=False)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @require_manage_guild()
+    @app_commands.command(
+        name="sync-rules",
+        description="Clear the rules channel and repost hub relay rules",
+    )
+    async def sync_rules(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None or guild.id != self.bot.settings.guild_id:
+            await interaction.followup.send(
+                "This bot only operates in the configured central guild.",
+                ephemeral=True,
+            )
+            return
+
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send("Bot member is not available in this guild.")
+            return
+
+        context = self._context()
+        result = await sync_rules_sticky(
+            guild,
+            bot_member,
+            get_setting=context.settings_repo.get,
+            set_setting=context.settings_repo.set,
+        )
+        if not result.success:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="Sync Rules Failed",
+                    description=result.reason or "Unknown error",
+                    colour=discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="Hub Rules Synced",
+            description="Cleared the rules channel and posted the relay rules.",
+            colour=discord.Colour.green(),
+        )
+        if result.message is not None:
+            embed.add_field(name="Message", value=result.message.jump_url, inline=False)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @require_manage_guild()
+    @app_commands.command(
+        name="init",
+        description="Set up hub categories, channels, roles, and permissions on a blank guild",
+    )
+    async def init_guild(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None or guild.id != self.bot.settings.guild_id:
+            await interaction.followup.send(
+                "This bot only operates in the configured central guild.",
+                ephemeral=True,
+            )
+            return
+
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send("Bot member is not available in this guild.")
+            return
+
+        result = await initialize_guild(
+            guild,
+            bot_member,
+            access_role_name=self.bot.settings.network_access_role_name,
+            moderator_role_name=self.bot.settings.network_moderator_role_name,
+        )
+        if not result.success:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="Guild Init Failed",
+                    description=result.reason or "Unknown error",
+                    colour=discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="Guild Initialized",
+            description="Hub layout is ready. Run `/network create` next.",
+            colour=discord.Colour.green(),
+        )
+        if result.created_categories:
+            embed.add_field(
+                name="Categories created",
+                value="\n".join(f"• {name}" for name in result.created_categories),
+                inline=False,
+            )
+        if result.created_channels:
+            embed.add_field(
+                name="Channels created",
+                value="\n".join(f"• {name}" for name in result.created_channels),
+                inline=False,
+            )
+        if result.moved_channels:
+            embed.add_field(
+                name="Channels moved",
+                value="\n".join(f"• {item}" for item in result.moved_channels),
+                inline=False,
+            )
+        if result.updated_roles:
+            embed.add_field(
+                name="Roles",
+                value="\n".join(f"• {item}" for item in result.updated_roles),
+                inline=False,
+            )
+        if result.notes:
+            embed.add_field(
+                name="Notes",
+                value="\n".join(f"• {note}" for note in result.notes),
+                inline=False,
+            )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @require_manage_guild()
+    @app_commands.command(
         name="create",
-        description="Create network infrastructure and register a relay network",
+        description="Create network feed category and register a relay network",
     )
     @app_commands.describe(
         key="Network key (nkey)",
         name="Human-readable network name",
-        announcement_channel="Announcement channel for published relays",
+        announcement_channel=(
+            "Announcement channel for published relays (optional — created automatically "
+            "under Subscribe To Me! if omitted)"
+        ),
     )
     async def create(
         self,
         interaction: discord.Interaction,
         key: str,
         name: str,
-        announcement_channel: discord.abc.GuildChannel,
+        announcement_channel: discord.abc.GuildChannel | None = None,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         context = self._context()
@@ -68,36 +272,60 @@ class NetworkCog(
                 guild,
                 role_name=self.bot.settings.network_access_role_name,
             )
+            output_channel: discord.abc.GuildChannel | None
+            if announcement_channel is None:
+                output_channel = None
+            elif getattr(announcement_channel, "type", None) is discord.ChannelType.news:
+                output_channel = announcement_channel
+            else:
+                raise NetworkValidationError(
+                    f"{announcement_channel.mention} must be an announcement channel."
+                )
             channels = await self._provision.provision(
                 guild,
                 bot_member,
                 key=key,
                 display_name=name,
-                output_channel=announcement_channel,
+                output_channel=output_channel,
                 access_role=role,
             )
+            output_channel = channels.output_channel
             await validate_network_channels(
                 guild,
                 bot_member,
-                channels.category,
-                announcement_channel,
+                channels.feed_category,
+                output_channel,
                 None,
             )
             network = await context.network_repo.create(
                 guild_id=guild.id,
                 key=key,
                 display_name=name,
-                feed_category_id=channels.category.id,
-                output_channel_id=announcement_channel.id,
+                feed_category_id=channels.feed_category.id,
+                output_channel_id=output_channel.id,
                 concat_channel_id=None,
-                profile_forum_channel_id=channels.profile_forum.id,
+                profile_forum_channel_id=None,
+                join_channel_id=channels.join_channel.id,
             )
             await context.routing_service.load_cache()
             await context.refresh_network_counts()
-            guide_thread = await create_guide_thread(
-                channels.profile_forum,
-                network=network,
+            rules_result = await sync_rules_sticky(
+                guild,
+                bot_member,
+                get_setting=context.settings_repo.get,
+                set_setting=context.settings_repo.set,
             )
+            how_to_join_result = await sync_network_how_to_join_sticky(
+                guild,
+                bot_member,
+                network,
+                self.bot,
+                get_setting=context.settings_repo.get,
+                set_setting=context.settings_repo.set,
+                channel=channels.join_channel,
+                wipe_channel=True,
+            )
+            self.bot.add_view(JoinServerView(self.bot, network.key))
         except NetworkValidationError as exc:
             embed = discord.Embed(
                 title="Network Create Failed",
@@ -141,24 +369,67 @@ class NetworkCog(
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
+        except Exception:
+            logger.exception(
+                "Network create failed unexpectedly",
+                extra={"user_id": interaction.user.id, "channel_id": interaction.channel_id},
+            )
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="Network Create Failed",
+                    description="An unexpected error occurred. Check bot logs for details.",
+                    colour=discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+            return
 
         embed = discord.Embed(title="Network Created", colour=discord.Colour.green())
         embed.add_field(name="Key", value=f"`{network.key}`", inline=True)
         embed.add_field(name="Name", value=network.display_name, inline=True)
-        embed.add_field(name="Feed category", value=channels.category.mention, inline=False)
-        embed.add_field(name="Profile forum", value=channels.profile_forum.mention, inline=False)
-        embed.add_field(name="Output", value=announcement_channel.mention, inline=False)
+        embed.add_field(name="Feed category", value=channels.feed_category.mention, inline=False)
+        output_label = output_channel.mention
+        if channels.created_output_channel:
+            output_label = f"{output_channel.mention} (created)"
+        embed.add_field(name="Output", value=output_label, inline=False)
+        embed.add_field(name="Join channel", value=channels.join_channel.mention, inline=False)
         embed.add_field(name="Access role", value=role.mention, inline=False)
         embed.add_field(
             name="Next steps",
             value=(
-                f"1. Add servers with `/server create` (network `{network.key}`).\n"
-                "2. Point Channel Follow from partner announcement channels into each "
-                "server's feed channel.\n"
-                f"3. Guide thread: {guide_thread.jump_url}"
+                f"1. Partners follow {channels.join_channel.mention} and click **Join Server**, "
+                "or use `/server create` for admins.\n"
+                "2. Each approved server gets one channel under the feed category with a "
+                "pinned profile and relay feed.\n"
+                "3. Point Channel Follow from partner announcement channels into that channel."
             ),
             inline=False,
         )
+        if rules_result.skipped and rules_result.reason:
+            embed.add_field(
+                name="Hub rules",
+                value=f"Not posted: {rules_result.reason}",
+                inline=False,
+            )
+        elif rules_result.message is not None:
+            embed.add_field(
+                name="Hub rules",
+                value=f"Guidelines posted in {rules_result.message.jump_url}",
+                inline=False,
+            )
+        if how_to_join_result.skipped and how_to_join_result.reason:
+            embed.add_field(
+                name="How-to-join guide",
+                value=f"Not posted: {how_to_join_result.reason}",
+                inline=False,
+            )
+        elif how_to_join_result.message is not None:
+            action = "updated" if how_to_join_result.updated else "already current"
+            embed.add_field(
+                name="How-to-join guide",
+                value=f"Guide {action} in {how_to_join_result.message.jump_url}",
+                inline=False,
+            )
         await interaction.followup.send(embed=embed, ephemeral=True)
         logger.info(
             "Network created",
@@ -186,7 +457,7 @@ class NetworkCog(
 
         deleted_servers = 0
         deleted_channels = 0
-        deleted_category = False
+        deleted_categories = 0
         deleted_roles = 0
         try:
             network = await context.network_repo.get_by_key(key)
@@ -196,7 +467,7 @@ class NetworkCog(
             cleanup = await context.network_cleanup.cleanup_network(guild, network)
             deleted_servers = cleanup.deleted_servers
             deleted_channels = cleanup.deleted_channels
-            deleted_category = cleanup.deleted_category
+            deleted_categories = cleanup.deleted_categories
             deleted_roles = cleanup.deleted_roles
             await context.refresh_profile_counts()
 
@@ -210,6 +481,7 @@ class NetworkCog(
                 )
 
             await context.relay_record_repo.delete_by_network_id(network.id)
+            await context.server_request_repo.delete_by_network_id(network.id)
             await context.network_repo.delete(key)
             await context.routing_service.load_cache()
             await context.refresh_network_counts()
@@ -232,10 +504,10 @@ class NetworkCog(
             parts.append(f"**{deleted_servers}** server(s) removed.")
         if deleted_channels:
             parts.append(f"**{deleted_channels}** channel(s) removed.")
-        if deleted_category:
-            parts.append("Feed category removed.")
+        if deleted_categories:
+            parts.append(f"**{deleted_categories}** categor(ies) removed.")
         if deleted_roles:
-            parts.append(f"**{deleted_roles}** partner role(s) removed.")
+            parts.append(f"**{deleted_roles}** server role(s) removed.")
         parts.append("The announcement output channel was kept.")
         await interaction.followup.send(" ".join(parts), ephemeral=True)
         logger.info(
@@ -245,7 +517,7 @@ class NetworkCog(
                 "user_id": interaction.user.id,
                 "deleted_servers": deleted_servers,
                 "deleted_channels": deleted_channels,
-                "deleted_category": deleted_category,
+                "deleted_categories": deleted_categories,
                 "deleted_roles": deleted_roles,
             },
         )

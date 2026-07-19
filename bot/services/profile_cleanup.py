@@ -18,14 +18,14 @@ logger = logging.getLogger(__name__)
 class ProfileCleanupResult:
     profile: ServerProfile
     deleted_feed: bool
-    deleted_forum: bool
+    deleted_profile_channel: bool
     deleted_role: bool
     deleted_emoji: bool
     deleted_record: bool
 
 
 class ProfileCleanupService:
-    """Remove partner feed, profile forum, role, emoji, and DB row together."""
+    """Remove server feed, profile channel, role, emoji, and DB row together."""
 
     def __init__(
         self,
@@ -42,6 +42,21 @@ class ProfileCleanupService:
         self._relay_records = relay_record_repo
         self._in_progress: set[int] = set()
 
+    async def cleanup_by_profile_channel_id(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+    ) -> ProfileCleanupResult | None:
+        profile = await self._profile_repo.get_by_thread_id(channel_id)
+        if profile is None:
+            return None
+        return await self._cleanup_profile(
+            guild,
+            profile,
+            skip_profile_channel_id=channel_id,
+            reason="profile channel deleted",
+        )
+
     async def cleanup_by_thread_id(
         self,
         guild: discord.Guild,
@@ -49,17 +64,7 @@ class ProfileCleanupService:
         *,
         parent_forum_id: int | None = None,
     ) -> ProfileCleanupResult | None:
-        profile = await self._profile_repo.get_by_thread_id(thread_id)
-        if profile is None:
-            return None
-        forum_id = profile.profile_forum_channel_id or parent_forum_id
-        return await self._cleanup_profile(
-            guild,
-            profile,
-            skip_thread_id=thread_id,
-            forum_id=forum_id,
-            reason="profile thread deleted",
-        )
+        return await self.cleanup_by_profile_channel_id(guild, thread_id)
 
     async def cleanup_by_feed_channel_id(
         self,
@@ -73,26 +78,32 @@ class ProfileCleanupService:
             guild,
             profile,
             skip_feed_id=channel_id,
-            reason="partner feed deleted",
+            reason="server feed deleted",
         )
+
+    async def cleanup_by_profile_category_id(
+        self,
+        guild: discord.Guild,
+        category_id: int,
+    ) -> list[ProfileCleanupResult]:
+        profiles = await self._profile_repo.list_by_profile_forum_channel(category_id)
+        results: list[ProfileCleanupResult] = []
+        for profile in profiles:
+            result = await self._cleanup_profile(
+                guild,
+                profile,
+                reason="profiles category deleted",
+            )
+            if result is not None:
+                results.append(result)
+        return results
 
     async def cleanup_by_profile_forum_id(
         self,
         guild: discord.Guild,
         forum_id: int,
     ) -> list[ProfileCleanupResult]:
-        profiles = await self._profile_repo.list_by_profile_forum_channel(forum_id)
-        results: list[ProfileCleanupResult] = []
-        for profile in profiles:
-            result = await self._cleanup_profile(
-                guild,
-                profile,
-                skip_forum_id=forum_id,
-                reason="partner profile forum deleted",
-            )
-            if result is not None:
-                results.append(result)
-        return results
+        return await self.cleanup_by_profile_category_id(guild, forum_id)
 
     async def cleanup_by_network_id(
         self,
@@ -129,9 +140,7 @@ class ProfileCleanupService:
         *,
         reason: str,
         skip_feed_id: int | None = None,
-        skip_forum_id: int | None = None,
-        skip_thread_id: int | None = None,
-        forum_id: int | None = None,
+        skip_profile_channel_id: int | None = None,
     ) -> ProfileCleanupResult | None:
         if profile.id in self._in_progress:
             logger.debug(
@@ -142,43 +151,38 @@ class ProfileCleanupService:
 
         self._in_progress.add(profile.id)
         deleted_feed = False
-        deleted_forum = False
+        deleted_profile_channel = False
         deleted_role = False
         deleted_emoji = False
         deleted_record = False
 
         try:
-            resolved_forum_id = forum_id or profile.profile_forum_channel_id
+            if profile.source_channel_id == profile.profile_thread_id:
+                channel_id = profile.source_channel_id
+                if channel_id != skip_feed_id and channel_id != skip_profile_channel_id:
+                    deleted = await delete_channel(guild, channel_id, label="server feed")
+                    deleted_feed = deleted
+                    deleted_profile_channel = deleted
+            else:
+                if profile.source_channel_id != skip_feed_id:
+                    deleted_feed = await delete_channel(
+                        guild,
+                        profile.source_channel_id,
+                        label="server feed",
+                    )
 
-            if (
-                profile.source_channel_id != skip_feed_id
-                and profile.source_channel_id != skip_forum_id
-            ):
-                deleted_feed = await delete_channel(
-                    guild,
-                    profile.source_channel_id,
-                    label="partner feed",
-                )
-
-            if await self._should_delete_partner_forum(
-                profile,
-                resolved_forum_id,
-                skip_forum_id,
-            ):
-                assert resolved_forum_id is not None
-                deleted_forum = await delete_channel(
-                    guild,
-                    resolved_forum_id,
-                    label="partner profile forum",
-                )
-            elif skip_thread_id != profile.profile_thread_id:
-                await self._delete_thread(guild, profile.profile_thread_id)
+                if profile.profile_thread_id != skip_profile_channel_id:
+                    deleted_profile_channel = await delete_channel(
+                        guild,
+                        profile.profile_thread_id,
+                        label="server profile channel",
+                    )
 
             if profile.partner_role_id is not None:
                 deleted_role = await delete_role(
                     guild,
                     profile.partner_role_id,
-                    label="partner profile",
+                    label="server access",
                 )
 
             if profile.emoji_id is not None:
@@ -192,13 +196,13 @@ class ProfileCleanupService:
                 await self._profile_cache.load_cache()
 
             logger.info(
-                "Partner profile cleaned up",
+                "Server profile cleaned up",
                 extra={
                     "profile_id": profile.id,
                     "server_name": profile.server_name,
                     "reason": reason,
                     "deleted_feed": deleted_feed,
-                    "deleted_forum": deleted_forum,
+                    "deleted_profile_channel": deleted_profile_channel,
                     "deleted_role": deleted_role,
                     "deleted_emoji": deleted_emoji,
                 },
@@ -206,59 +210,13 @@ class ProfileCleanupService:
             return ProfileCleanupResult(
                 profile=profile,
                 deleted_feed=deleted_feed,
-                deleted_forum=deleted_forum,
+                deleted_profile_channel=deleted_profile_channel,
                 deleted_role=deleted_role,
                 deleted_emoji=deleted_emoji,
                 deleted_record=deleted_record,
             )
         finally:
             self._in_progress.discard(profile.id)
-
-    async def _should_delete_partner_forum(
-        self,
-        profile: ServerProfile,
-        forum_id: int | None,
-        skip_forum_id: int | None,
-    ) -> bool:
-        if forum_id is None or forum_id == skip_forum_id:
-            return False
-        if profile.profile_forum_channel_id is None:
-            return False
-        if profile.profile_forum_channel_id != forum_id:
-            return False
-        network = await self._network_repo.get_by_id(profile.network_id)
-        if network is not None and network.profile_forum_channel_id == forum_id:
-            return False
-        return True
-
-    async def _delete_thread(self, guild: discord.Guild, thread_id: int) -> bool:
-        thread = guild.get_thread(thread_id)
-        if thread is None:
-            try:
-                fetched = await guild.fetch_channel(thread_id)
-            except discord.NotFound:
-                return False
-            except discord.HTTPException as exc:
-                logger.warning(
-                    "Could not fetch thread for cleanup",
-                    extra={"thread_id": thread_id, "error": str(exc)},
-                )
-                return False
-            if not isinstance(fetched, discord.Thread):
-                return False
-            thread = fetched
-
-        try:
-            await thread.delete(reason="The Network: partner profile cleanup")
-            return True
-        except discord.NotFound:
-            return False
-        except discord.HTTPException as exc:
-            logger.warning(
-                "Could not delete thread during profile cleanup",
-                extra={"thread_id": thread_id, "error": str(exc)},
-            )
-            return False
 
     async def _delete_emoji(self, guild: discord.Guild, emoji_id: int) -> bool:
         try:

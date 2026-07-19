@@ -8,7 +8,7 @@ The bot needs a always-on process with persistent storage for `data/relay.db`.
 
 ```bash
 cp .env.example .env   # fill in secrets
-chmod +x bin/package.sh bin/run.sh
+chmod +x bin/package.sh bin/start.sh bin/stop.sh deploy/deploy.sh
 ./bin/package.sh
 docker compose up -d
 docker compose logs -f
@@ -20,10 +20,25 @@ docker compose logs -f
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-./bin/run.sh
+./bin/start.sh
 ```
 
-Use systemd, pm2, or a VPS panel to keep `./bin/run.sh` running across reboots.
+Use `./deploy/deploy.sh` for systemd (pull, install deps, register service). Or keep `./bin/start.sh` running with pm2 or another supervisor.
+
+## 1b. systemd (VPS / Pi without Docker)
+
+```bash
+git clone git@github.com:YOU/the-network.git
+cd the-network
+cp .env.example .env   # secrets
+./deploy/deploy.sh
+```
+
+Updates:
+
+```bash
+./deploy/deploy.sh     # git pull + restart service
+```
 
 ## 2. Required environment
 

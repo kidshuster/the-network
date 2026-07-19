@@ -58,11 +58,16 @@ pip install -e ".[dev]"
 python -m bot.main
 ```
 
-Or use the console script:
+Or bare metal:
 
 ```bash
-the-network
+cp .env.example .env
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+./bin/start.sh
 ```
+
+Systemd deploy: `./deploy/deploy.sh` (see [`deploy/TOPGG.md`](deploy/TOPGG.md)).
 
 6. In Discord, run `/status` in the configured guild to verify connectivity.
 

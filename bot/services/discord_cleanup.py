@@ -14,6 +14,36 @@ _DELETABLE_CHANNEL_TYPES = (
 )
 
 
+async def wipe_text_channel(
+    channel: discord.TextChannel,
+    bot_member: discord.Member,
+) -> tuple[int, str | None]:
+    """Delete all messages in a text channel. Returns (deleted_count, error)."""
+    permissions = channel.permissions_for(bot_member)
+    if not permissions.view_channel:
+        return 0, "The bot needs **View Channel** to clear this channel."
+    if not permissions.manage_messages:
+        return 0, "The bot needs **Manage Messages** to clear this channel."
+
+    deleted = 0
+    while True:
+        purged = await channel.purge(limit=100)
+        if not purged:
+            break
+        deleted += len(purged)
+
+    async for message in channel.history(limit=None):
+        try:
+            await message.delete()
+            deleted += 1
+        except discord.HTTPException as exc:
+            logger.warning(
+                "Could not delete message while wiping channel",
+                extra={"channel_id": channel.id, "message_id": message.id, "error": str(exc)},
+            )
+    return deleted, None
+
+
 async def delete_channel(
     guild: discord.Guild,
     channel_id: int,

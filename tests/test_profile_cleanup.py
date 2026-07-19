@@ -12,7 +12,7 @@ from bot.services.profile_cache import ProfileCache
 from bot.services.profile_cleanup import ProfileCleanupService
 
 
-def _profile(*, forum_id: int | None = 801) -> ServerProfile:
+def _profile(*, category_id: int | None = 801) -> ServerProfile:
     return ServerProfile(
         id=1,
         guild_id=100,
@@ -28,12 +28,12 @@ def _profile(*, forum_id: int | None = 801) -> ServerProfile:
         image_hash="abc",
         degraded_reason=None,
         partner_role_id=701,
-        profile_forum_channel_id=forum_id,
+        profile_forum_channel_id=category_id,
     )
 
 
 @pytest.mark.asyncio
-async def test_cleanup_by_thread_deletes_feed_forum_role_and_record(db) -> None:
+async def test_cleanup_by_profile_channel_deletes_feed_profile_role_and_record(db) -> None:
     network_repo = NetworkRepository(db)
     profile_repo = ProfileRepository(db)
     network = await network_repo.create(
@@ -45,7 +45,7 @@ async def test_cleanup_by_thread_deletes_feed_forum_role_and_record(db) -> None:
         concat_channel_id=None,
         profile_forum_channel_id=999,
     )
-    profile = _profile(forum_id=801)
+    profile = _profile(category_id=801)
     await profile_repo.upsert(
         guild_id=100,
         profile_thread_id=profile.profile_thread_id,
@@ -78,27 +78,27 @@ async def test_cleanup_by_thread_deletes_feed_forum_role_and_record(db) -> None:
     guild.id = 100
     feed = MagicMock(spec=discord.TextChannel)
     feed.delete = AsyncMock()
-    forum = MagicMock(spec=discord.ForumChannel)
-    forum.delete = AsyncMock()
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.delete = AsyncMock()
     role = MagicMock(spec=discord.Role)
     role.delete = AsyncMock()
 
     def get_channel(channel_id: int) -> discord.abc.GuildChannel | None:
         if channel_id == 601:
             return feed
-        if channel_id == 801:
-            return forum
+        if channel_id == 501:
+            return profile_channel
         return None
 
     guild.get_channel = MagicMock(side_effect=get_channel)
     guild.get_role = MagicMock(return_value=role)
 
-    result = await cleanup.cleanup_by_thread_id(guild, 501, parent_forum_id=801)
+    result = await cleanup.cleanup_by_profile_channel_id(guild, 501)
 
     assert result is not None
     assert result.deleted_record is True
     feed.delete.assert_awaited_once()
-    forum.delete.assert_awaited_once()
+    profile_channel.delete.assert_not_awaited()
     role.delete.assert_awaited_once()
     emoji_service.delete_emoji.assert_awaited_once_with(guild, 901)
     assert await profile_repo.get_by_thread_id(501) is None
@@ -137,17 +137,17 @@ async def test_cleanup_by_feed_skips_already_deleted_feed(db) -> None:
     )
 
     guild = MagicMock(spec=discord.Guild)
-    forum = MagicMock(spec=discord.ForumChannel)
-    forum.delete = AsyncMock()
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.delete = AsyncMock()
     role = MagicMock(spec=discord.Role)
     role.delete = AsyncMock()
-    guild.get_channel = MagicMock(side_effect=lambda cid: forum if cid == 801 else None)
+    guild.get_channel = MagicMock(side_effect=lambda cid: profile_channel if cid == 501 else None)
     guild.get_role = MagicMock(return_value=role)
 
     result = await cleanup.cleanup_by_feed_channel_id(guild, 601)
 
     assert result is not None
-    forum.delete.assert_awaited_once()
+    profile_channel.delete.assert_awaited_once()
     role.delete.assert_awaited_once()
 
 
@@ -163,11 +163,11 @@ async def test_cleanup_by_network_id_deletes_all_servers(db) -> None:
         output_channel_id=300,
         concat_channel_id=None,
     )
-    for index, thread_id in enumerate((501, 502), start=1):
+    for index, channel_id in enumerate((501, 502), start=1):
         await profile_repo.upsert(
             guild_id=100,
-            profile_thread_id=thread_id,
-            profile_starter_message_id=thread_id + 100,
+            profile_thread_id=channel_id,
+            profile_starter_message_id=channel_id + 100,
             source_channel_id=600 + index,
             network_id=network.id,
             server_name=f"Partner {index}",
@@ -251,12 +251,9 @@ async def test_cleanup_deletes_relay_records_before_profile(db) -> None:
     channel.delete = AsyncMock()
     guild.get_channel = MagicMock(return_value=channel)
     guild.get_role = MagicMock(return_value=None)
-    guild.get_thread = MagicMock(return_value=None)
-    guild.fetch_channel = AsyncMock(side_effect=discord.NotFound(MagicMock(), "missing"))
 
     result = await cleanup.cleanup_server(guild, profile)
 
     assert result is not None
     assert result.deleted_record is True
     assert await relay_repo.get_by_source_message(9001) is None
-

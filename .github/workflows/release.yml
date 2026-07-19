@@ -49,7 +49,7 @@ jobs:
             ## Docker (Raspberry Pi / Linux)
 
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:1.0.0
             ```
 
             See [deploy/RASPBERRY_PI.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/deploy/RASPBERRY_PI.md) for full setup.

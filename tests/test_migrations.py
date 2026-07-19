@@ -16,7 +16,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
 
     version = await run_migrations(db)
 
-    assert version == 4
+    assert version == 7
     assert db_path.exists()
 
     cursor = await db.connection.execute(
@@ -30,6 +30,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
         "networks",
         "profiles",
         "relay_records",
+        "server_requests",
         "settings",
     }.issubset(tables)
 
@@ -50,12 +51,12 @@ async def test_run_migrations_is_idempotent(tmp_path: Path) -> None:
     first = await run_migrations(db)
     second = await run_migrations(db)
 
-    assert first == 4
-    assert second == 4
+    assert first == 7
+    assert second == 7
 
     cursor = await db.connection.execute("SELECT version FROM schema_migrations")
     migration_rows = await cursor.fetchall()
     await cursor.close()
-    assert len(migration_rows) == 4
+    assert len(migration_rows) == 7
 
     await db.close()

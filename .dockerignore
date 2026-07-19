@@ -6,6 +6,12 @@ __pycache__
 .ruff_cache
 .git
 .env
+.cursor/
+.cursorignore
+.coordinator-cache/
+**/.coordinator-cache/
+work/
+doc/
 data/*
 !data/.gitkeep
 work

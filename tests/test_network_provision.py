@@ -1,22 +1,48 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 
 from bot.domain.errors import NetworkValidationError
 from bot.services.network_provision import (
-    build_base_overwrites,
-    build_forum_overwrites,
     category_name_for,
+    create_announcement_channel,
     resolve_access_role,
+    validate_hub_permissions,
     validate_provision_permissions,
 )
 
 
 def test_category_name_for() -> None:
     assert category_name_for("Stingers") == "Stingers Feed"
+
+
+@pytest.mark.asyncio
+async def test_create_announcement_channel_uses_news_flag() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    category = MagicMock(spec=discord.CategoryChannel)
+    channel = MagicMock()
+    channel.type = discord.ChannelType.news
+    guild.create_text_channel = AsyncMock(return_value=channel)
+
+    result = await create_announcement_channel(
+        guild,
+        name="stingers-announcements",
+        category=category,
+        overwrites={},
+        reason="test",
+    )
+
+    assert result is channel
+    guild.create_text_channel.assert_awaited_once_with(
+        name="stingers-announcements",
+        category=category,
+        overwrites={},
+        news=True,
+        reason="test",
+    )
 
 
 def test_resolve_access_role_explicit() -> None:
@@ -44,17 +70,15 @@ def test_resolve_access_role_missing() -> None:
         resolve_access_role(guild, role_name="Missing Role")
 
 
-def test_forum_overwrites_omit_manage_threads_for_bot() -> None:
-    guild = MagicMock(spec=discord.Guild)
-    guild.default_role = MagicMock(spec=discord.Role)
-    bot = MagicMock(spec=discord.Member)
-    access = MagicMock(spec=discord.Role)
-    overwrites = dict(build_forum_overwrites(guild, bot, access))
-    assert overwrites[bot].manage_threads is None
-    assert overwrites[access].manage_threads is None
+def test_forum_overwrites_removed_from_network_provision() -> None:
+    import bot.services.network_provision as module
+
+    assert not hasattr(module, "build_forum_overwrites")
 
 
 def test_base_overwrites_omit_manage_threads_for_bot() -> None:
+    from bot.services.network_provision import build_base_overwrites
+
     guild = MagicMock(spec=discord.Guild)
     guild.default_role = MagicMock(spec=discord.Role)
     bot = MagicMock(spec=discord.Member)
@@ -82,5 +106,17 @@ def test_validate_provision_permissions_same_role_is_clear() -> None:
     bot.guild_permissions.manage_webhooks = True
     bot.top_role = MagicMock(spec=discord.Role, name="The Network", position=1, id=42)
     access = MagicMock(spec=discord.Role, name="The Network", position=1, id=42)
-    with pytest.raises(NetworkValidationError, match="assigned the role"):
+    with pytest.raises(NetworkValidationError, match="network \\*\\*access role\\*\\*"):
         validate_provision_permissions(bot, access)
+
+
+def test_validate_hub_permissions_requires_role_above_moderator() -> None:
+    bot = MagicMock(spec=discord.Member)
+    bot.guild_permissions.manage_channels = True
+    bot.guild_permissions.manage_roles = True
+    bot.guild_permissions.manage_webhooks = True
+    bot.top_role = MagicMock(spec=discord.Role, name="Network Bot", position=2, id=1)
+    access = MagicMock(spec=discord.Role, name="Partner Access", position=1, id=2)
+    moderator = MagicMock(spec=discord.Role, name="Moderator", position=3, id=3)
+    with pytest.raises(NetworkValidationError, match="Moderator"):
+        validate_hub_permissions(bot, access, moderator_role=moderator)

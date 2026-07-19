@@ -5,7 +5,10 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from bot.constants import DEFAULT_NETWORK_ACCESS_ROLE_NAME
+from bot.constants import (
+    DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+    DEFAULT_NETWORK_MODERATOR_ROLE_NAME,
+)
 
 
 class Settings(BaseSettings):
@@ -27,6 +30,10 @@ class Settings(BaseSettings):
     network_access_role_name: str = Field(
         default=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
         alias="NETWORK_ACCESS_ROLE_NAME",
+    )
+    network_moderator_role_name: str = Field(
+        default=DEFAULT_NETWORK_MODERATOR_ROLE_NAME,
+        alias="NETWORK_MODERATOR_ROLE_NAME",
     )
     topgg_token: str | None = Field(default=None, alias="TOPGG_TOKEN")
 

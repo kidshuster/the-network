@@ -7,6 +7,7 @@ from bot.constants import RelayStatus
 from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
+from bot.domain.server_request import ServerRequest, ServerRequestStatus
 
 
 class NetworkRow:
@@ -25,6 +26,11 @@ class NetworkRow:
                 int(row["profile_forum_channel_id"])
                 if "profile_forum_channel_id" in row.keys()
                 and row["profile_forum_channel_id"] is not None
+                else None
+            ),
+            join_channel_id=(
+                int(row["join_channel_id"])
+                if "join_channel_id" in row.keys() and row["join_channel_id"] is not None
                 else None
             ),
             enabled=bool(row["enabled"]),
@@ -61,6 +67,38 @@ class ProfileRow:
                 and row["profile_forum_channel_id"] is not None
                 else None
             ),
+        )
+
+
+class ServerRequestRow:
+    @staticmethod
+    def from_row(row: Any) -> ServerRequest:
+        return ServerRequest(
+            id=int(row["id"]),
+            guild_id=int(row["guild_id"]),
+            network_id=int(row["network_id"]),
+            requester_user_id=int(row["requester_user_id"]),
+            server_name=str(row["server_name"]),
+            display_name=str(row["display_name"]),
+            profile_image_url=str(row["profile_image_url"]),
+            profile_image_data=(
+                bytes(row["profile_image_data"])
+                if "profile_image_data" in row.keys() and row["profile_image_data"] is not None
+                else None
+            ),
+            status=ServerRequestStatus(str(row["status"])),
+            moderator_message_id=(
+                int(row["moderator_message_id"])
+                if row["moderator_message_id"] is not None
+                else None
+            ),
+            resolved_by_user_id=(
+                int(row["resolved_by_user_id"])
+                if row["resolved_by_user_id"] is not None
+                else None
+            ),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
         )
 
 

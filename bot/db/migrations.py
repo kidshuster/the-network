@@ -118,11 +118,62 @@ async def _migration_v4(db: Database) -> None:
         await db.connection.commit()
 
 
+async def _migration_v5(db: Database) -> None:
+    await db.connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS server_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            network_id INTEGER NOT NULL,
+            requester_user_id INTEGER NOT NULL,
+            server_name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            profile_image_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            moderator_message_id INTEGER,
+            resolved_by_user_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (network_id) REFERENCES networks(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_server_requests_status
+            ON server_requests(status);
+        CREATE INDEX IF NOT EXISTS idx_server_requests_requester
+            ON server_requests(network_id, requester_user_id, status);
+        """
+    )
+    await db.connection.commit()
+
+
+async def _migration_v6(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(server_requests)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "profile_image_data" not in columns:
+        await db.connection.execute(
+            "ALTER TABLE server_requests ADD COLUMN profile_image_data BLOB"
+        )
+        await db.connection.commit()
+
+
+async def _migration_v7(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(networks)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "join_channel_id" not in columns:
+        await db.connection.execute("ALTER TABLE networks ADD COLUMN join_channel_id INTEGER")
+        await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
     3: _migration_v3,
     4: _migration_v4,
+    5: _migration_v5,
+    6: _migration_v6,
+    7: _migration_v7,
 }
 
 

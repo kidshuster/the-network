@@ -57,10 +57,23 @@ cd the-network
 cp .env.example .env   # fill in locally, never commit
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-./bin/run.sh
+./bin/start.sh
 ```
 
-Pull updates with `git pull && ./bin/stop.sh && ./bin/run.sh`.
+Pull updates with `git pull && ./deploy/deploy.sh` (systemd) or `git pull && ./bin/stop.sh && ./bin/start.sh` (manual).
+
+### One-command systemd deploy
+
+After cloning:
+
+```bash
+git clone git@github.com:YOU/the-network.git
+cd the-network
+cp .env.example .env   # fill in DISCORD_TOKEN and GUILD_ID
+./deploy/deploy.sh
+```
+
+`deploy.sh` pulls latest changes, installs Python deps, writes `/etc/systemd/system/the-network.service`, and enables the service. It calls `bin/start.sh` / `bin/stop.sh` for process management.
 
 ### Docker on any server
 

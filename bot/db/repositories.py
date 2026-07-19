@@ -8,11 +8,12 @@ import aiosqlite
 
 from bot.constants import RelayStatus
 from bot.db.connection import Database
-from bot.db.models import NetworkRow, ProfileRow, RelayRecordRow
+from bot.db.models import NetworkRow, ProfileRow, RelayRecordRow, ServerRequestRow
 from bot.domain.errors import NetworkValidationError, ProfileValidationError, RelayError
 from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
+from bot.domain.server_request import ServerRequest, ServerRequestStatus
 
 _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
@@ -41,6 +42,7 @@ class NetworkRepository:
         output_channel_id: int,
         concat_channel_id: int | None,
         profile_forum_channel_id: int | None = None,
+        join_channel_id: int | None = None,
     ) -> Network:
         normalized_key = self.validate_key(key)
         name = display_name.strip()
@@ -54,8 +56,8 @@ class NetworkRepository:
                 INSERT INTO networks (
                     guild_id, key, display_name, feed_category_id,
                     output_channel_id, concat_channel_id, profile_forum_channel_id,
-                    enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    join_channel_id, enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     guild_id,
@@ -65,6 +67,7 @@ class NetworkRepository:
                     output_channel_id,
                     concat_channel_id,
                     profile_forum_channel_id,
+                    join_channel_id,
                     now,
                     now,
                 ),
@@ -299,6 +302,44 @@ class ProfileRepository:
             raise RuntimeError("Profile row not found after upsert")
         return ProfileRow.from_row(row)
 
+    async def update_display_name(self, thread_id: int, display_name: str) -> ServerProfile:
+        label = display_name.strip()
+        if not label:
+            raise ProfileValidationError("Display name cannot be empty.")
+
+        existing = await self.get_by_thread_id(thread_id)
+        if existing is None:
+            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
+
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            "UPDATE profiles SET display_name = ?, updated_at = ? WHERE profile_thread_id = ?",
+            (label, now, thread_id),
+        )
+        updated = await self.get_by_thread_id(thread_id)
+        if updated is None:
+            raise RuntimeError("Profile disappeared after display name update")
+        return updated
+
+    async def update_starter_message_id(self, thread_id: int, message_id: int) -> ServerProfile:
+        existing = await self.get_by_thread_id(thread_id)
+        if existing is None:
+            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
+
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE profiles
+            SET profile_starter_message_id = ?, updated_at = ?
+            WHERE profile_thread_id = ?
+            """,
+            (message_id, now, thread_id),
+        )
+        updated = await self.get_by_thread_id(thread_id)
+        if updated is None:
+            raise RuntimeError("Profile disappeared after starter message update")
+        return updated
+
     async def set_enabled_by_thread(self, thread_id: int, enabled: bool) -> ServerProfile:
         existing = await self.get_by_thread_id(thread_id)
         if existing is None:
@@ -478,6 +519,135 @@ class RelayRecordRepository:
     async def delete_by_network_id(self, network_id: int) -> None:
         await self._db.execute(
             "DELETE FROM relay_records WHERE network_id = ?",
+            (network_id,),
+        )
+
+
+class ServerRequestRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def create(
+        self,
+        *,
+        guild_id: int,
+        network_id: int,
+        requester_user_id: int,
+        server_name: str,
+        display_name: str,
+        profile_image_url: str,
+        profile_image_data: bytes | None = None,
+    ) -> ServerRequest:
+        now = datetime.now(tz=UTC).isoformat()
+        cursor = await self._db.connection.execute(
+            """
+            INSERT INTO server_requests (
+                guild_id, network_id, requester_user_id,
+                server_name, display_name, profile_image_url, profile_image_data,
+                status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                guild_id,
+                network_id,
+                requester_user_id,
+                server_name.strip(),
+                display_name.strip(),
+                profile_image_url.strip(),
+                profile_image_data,
+                ServerRequestStatus.PENDING,
+                now,
+                now,
+            ),
+        )
+        await self._db.connection.commit()
+        request_id = cursor.lastrowid
+        if request_id is None:
+            raise RuntimeError("Failed to create server request")
+        row = await self._db.fetchone(
+            "SELECT * FROM server_requests WHERE id = ?",
+            (request_id,),
+        )
+        if row is None:
+            raise RuntimeError("Created server request not found")
+        return ServerRequestRow.from_row(row)
+
+    async def get_by_id(self, request_id: int) -> ServerRequest | None:
+        row = await self._db.fetchone(
+            "SELECT * FROM server_requests WHERE id = ?",
+            (request_id,),
+        )
+        return ServerRequestRow.from_row(row) if row else None
+
+    async def list_pending(self) -> list[ServerRequest]:
+        cursor = await self._db.connection.execute(
+            "SELECT * FROM server_requests WHERE status = ? ORDER BY id ASC",
+            (ServerRequestStatus.PENDING,),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ServerRequestRow.from_row(row) for row in rows]
+
+    async def get_pending_for_requester(
+        self,
+        network_id: int,
+        requester_user_id: int,
+    ) -> ServerRequest | None:
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM server_requests
+            WHERE network_id = ? AND requester_user_id = ? AND status = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (network_id, requester_user_id, ServerRequestStatus.PENDING),
+        )
+        return ServerRequestRow.from_row(row) if row else None
+
+    async def set_moderator_message_id(self, request_id: int, message_id: int) -> ServerRequest:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE server_requests
+            SET moderator_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, request_id),
+        )
+        row = await self._db.fetchone(
+            "SELECT * FROM server_requests WHERE id = ?",
+            (request_id,),
+        )
+        if row is None:
+            raise RuntimeError("Server request disappeared after update")
+        return ServerRequestRow.from_row(row)
+
+    async def resolve(
+        self,
+        request_id: int,
+        *,
+        status: ServerRequestStatus,
+        resolved_by_user_id: int,
+    ) -> ServerRequest:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE server_requests
+            SET status = ?, resolved_by_user_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (status, resolved_by_user_id, now, request_id),
+        )
+        row = await self._db.fetchone(
+            "SELECT * FROM server_requests WHERE id = ?",
+            (request_id,),
+        )
+        if row is None:
+            raise RuntimeError("Server request disappeared after resolve")
+        return ServerRequestRow.from_row(row)
+
+    async def delete_by_network_id(self, network_id: int) -> None:
+        await self._db.execute(
+            "DELETE FROM server_requests WHERE network_id = ?",
             (network_id,),
         )
 
