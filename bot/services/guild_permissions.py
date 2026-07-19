@@ -46,6 +46,33 @@ def _can_configure_role(bot_member: discord.Member, role: discord.Role) -> bool:
     return bot_member.top_role.position > role.position
 
 
+def filter_configurable_overwrites(
+    bot_member: discord.Member,
+    overwrites: Mapping[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ],
+) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
+    """Drop role overwrites the bot cannot set — prevents 50013 on channel/category edits."""
+    filtered: dict[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ] = {}
+    for target, overwrite in overwrites.items():
+        if isinstance(target, discord.Role):
+            if target.is_default():
+                filtered[target] = overwrite
+            elif _can_configure_role(bot_member, target):
+                filtered[target] = overwrite
+            continue
+        if isinstance(target, discord.Member):
+            if target.id == bot_member.id:
+                filtered[target] = overwrite
+            continue
+        filtered[target] = overwrite
+    return filtered
+
+
 def _with_access_overwrite(
     overwrites: dict[
         discord.Role | discord.Member | discord.Object,
@@ -99,7 +126,7 @@ def build_moderation_only_overwrites(
         OverwriteMap,
         _with_moderator_overwrite(
             {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                guild.default_role: build_everyone_hidden_overwrite(),
                 bot_member: _bot_hub_overwrite(),
             },
             bot_member,
@@ -115,7 +142,7 @@ def build_welcome_sink_overwrites(
     return cast(
         OverwriteMap,
         {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.default_role: build_everyone_hidden_overwrite(),
             bot_member: discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
@@ -124,12 +151,29 @@ def build_welcome_sink_overwrites(
     )
 
 
+def _post_and_thread_lockdown() -> dict[str, bool]:
+    """Explicit denies so hub channels never inherit post/thread rights from the guild."""
+    return {
+        "send_messages": False,
+        "add_reactions": False,
+        "create_public_threads": False,
+        "create_private_threads": False,
+        "send_messages_in_threads": False,
+    }
+
+
 def build_everyone_readonly_overwrite() -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(
         view_channel=True,
         read_message_history=True,
-        send_messages=False,
-        add_reactions=False,
+        **_post_and_thread_lockdown(),
+    )
+
+
+def build_everyone_hidden_overwrite() -> discord.PermissionOverwrite:
+    return discord.PermissionOverwrite(
+        view_channel=False,
+        **_post_and_thread_lockdown(),
     )
 
 
@@ -163,6 +207,18 @@ def build_network_access_overwrite() -> discord.PermissionOverwrite:
         view_channel=True,
         read_message_history=True,
         manage_webhooks=True,
+        **_post_and_thread_lockdown(),
+    )
+
+
+def build_partner_feed_overwrite() -> discord.PermissionOverwrite:
+    """Partner server role — view and follow the feed channel, no posting."""
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        manage_webhooks=True,
+        use_application_commands=False,
+        **_post_and_thread_lockdown(),
     )
 
 
@@ -184,7 +240,7 @@ def build_subscribe_category_overwrites(
         OverwriteMap,
         _finalize_hub_overwrites(
             {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                guild.default_role: build_everyone_hidden_overwrite(),
                 bot_member: _bot_hub_overwrite(),
             },
             bot_member,
@@ -257,7 +313,7 @@ def build_server_feed_channel_overwrites(
         discord.Role | discord.Member | discord.Object,
         discord.PermissionOverwrite,
     ] = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        guild.default_role: build_everyone_hidden_overwrite(),
         bot_member: discord.PermissionOverwrite(
             view_channel=True,
             read_message_history=True,
@@ -270,13 +326,7 @@ def build_server_feed_channel_overwrites(
         ),
     }
     if _can_configure_role(bot_member, server_role):
-        base[server_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            read_message_history=True,
-            manage_webhooks=True,
-            send_messages=False,
-            use_application_commands=False,
-        )
+        base[server_role] = build_partner_feed_overwrite()
     return cast(
         OverwriteMap,
         _finalize_hub_overwrites(base, bot_member, access_role, human_moderator_role),

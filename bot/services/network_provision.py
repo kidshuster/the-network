@@ -21,6 +21,7 @@ from bot.services.guild_permissions import (
     build_feed_category_overwrites,
     build_join_channel_overwrites,
     build_subscribe_announcement_channel_overwrites,
+    filter_configurable_overwrites,
 )
 
 OverwriteMap = Mapping[
@@ -221,11 +222,16 @@ class NetworkProvisionService:
             key,
             category=subscribe_category,
         )
-        announcement_overwrites = build_subscribe_announcement_channel_overwrites(
-            guild,
+        announcement_overwrites = filter_configurable_overwrites(
             bot_member,
-            access_role,
-            human_moderator_role,
+            dict(
+                build_subscribe_announcement_channel_overwrites(
+                    guild,
+                    bot_member,
+                    access_role,
+                    human_moderator_role,
+                )
+            ),
         )
         if existing is not None:
             await self._run_step(
@@ -290,11 +296,16 @@ class NetworkProvisionService:
                 subscribe_category is not None
                 and output_channel.category_id == subscribe_category.id
             ):
-                announcement_overwrites = build_subscribe_announcement_channel_overwrites(
-                    guild,
+                announcement_overwrites = filter_configurable_overwrites(
                     bot_member,
-                    access_role,
-                    human_moderator_role,
+                    dict(
+                        build_subscribe_announcement_channel_overwrites(
+                            guild,
+                            bot_member,
+                            access_role,
+                            human_moderator_role,
+                        )
+                    ),
                 )
                 await self._run_step(
                     "sync announcement output channel permissions",
