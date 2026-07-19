@@ -97,6 +97,7 @@ class ProfileProvisionService:
                     admin_role,
                     human_moderator_role,
                 ),
+                news=True,
                 reason=f"Server feed for {server_name} ({network_key})",
             )
         except discord.HTTPException:

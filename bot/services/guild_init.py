@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 import discord
 
+from bot.constants import LEGACY_MODERATOR_ROLE_NAME
 from bot.domain.errors import NetworkValidationError
 from bot.domain.profile import ServerProfile
 from bot.services.guild_layout import (
@@ -52,6 +53,35 @@ _MODERATOR_GUILD_PERMISSIONS = discord.Permissions(
     manage_webhooks=True,
     mention_everyone=False,
 )
+
+_HUMAN_MODERATOR_GUILD_PERMISSIONS = discord.Permissions(
+    view_channel=True,
+    send_messages=True,
+    embed_links=True,
+    attach_files=True,
+    read_message_history=True,
+    manage_messages=True,
+    mention_everyone=False,
+)
+
+
+def _bot_staff_permission_issue(bot_member: discord.Member) -> str | None:
+    perms = bot_member.guild_permissions
+    missing: list[str] = []
+    if not perms.manage_channels:
+        missing.append("Manage Channels")
+    if not perms.manage_roles:
+        missing.append("Manage Roles")
+    if not perms.manage_webhooks:
+        missing.append("Manage Webhooks")
+    if not missing:
+        return None
+    role_name = bot_member.top_role.name
+    return (
+        f"Enable **{'**, **'.join(missing)}** on the bot role **{role_name}** "
+        "in Server Settings → Roles. Discord requires both **Manage Channels** and "
+        "**Manage Roles** to edit channel permission overwrites."
+    )
 
 
 @dataclass
@@ -248,6 +278,31 @@ async def _ensure_moderator_role(
     if updated is not None:
         result.updated_roles.append(f"Updated {role.name}")
     return role
+
+
+async def _ensure_human_moderator_role(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    *,
+    result: GuildInitResult,
+) -> discord.Role | None:
+    role = resolve_human_moderator_role(guild)
+    if role is not None:
+        return role
+
+    async def _create() -> discord.Role:
+        return await guild.create_role(
+            name=LEGACY_MODERATOR_ROLE_NAME,
+            permissions=_HUMAN_MODERATOR_GUILD_PERMISSIONS,
+            mentionable=False,
+            hoist=True,
+            reason="The Network guild init",
+        )
+
+    created = await _run_init_step(result, "create Moderator role", _create)
+    if created is not None:
+        result.updated_roles.append(f"Created {LEGACY_MODERATOR_ROLE_NAME}")
+    return created
 
 
 async def _ensure_access_role(
@@ -485,10 +540,21 @@ async def initialize_guild(
     try:
         access_role = await _ensure_access_role(guild, access_role_name, result=result)
         if access_role in bot_member.roles:
-            result.notes.append(
-                f"The bot is assigned **{access_role.name}**, which is also the network "
-                "access role. Remove that role from the bot and keep it for staff/partners only."
+            return GuildInitResult(
+                success=False,
+                reason=(
+                    f"Remove **{access_role.name}** from the bot in Server Settings → "
+                    "Members, then run `/network init` again.\n\n"
+                    "The bot should only have **The Network Moderator** (or your bot "
+                    "staff role). **The Network** is the partner/access role and must "
+                    "not be assigned to the bot."
+                ),
             )
+
+        staff_perm_issue = _bot_staff_permission_issue(bot_member)
+        if staff_perm_issue is not None:
+            result.notes.append(staff_perm_issue)
+
         moderator_role = resolve_moderator_role(guild, role_name=moderator_role_name)
         validate_hub_permissions(
             bot_member,
@@ -501,12 +567,19 @@ async def initialize_guild(
             role_name=moderator_role_name,
             result=result,
         )
-        human_moderator_role = resolve_human_moderator_role(guild)
-        if human_moderator_role is None:
+        if moderator_role is not None and bot_member.top_role.id == moderator_role.id:
+            mod_name = moderator_role.name
             result.notes.append(
-                "Could not find a human **Moderator** role — moderation channels are "
-                "bot-only until you create that role and run `/network init` again."
+                f"The bot is assigned **{mod_name}** — Discord will not let a role edit "
+                "its own guild permissions. Ensure that role already has **Manage Channels**, "
+                "**Manage Roles**, and **Manage Webhooks**."
             )
+            if staff_perm_issue is not None:
+                return GuildInitResult(success=False, reason=staff_perm_issue)
+
+        human_moderator_role = await _ensure_human_moderator_role(
+            guild, bot_member, result=result
+        )
 
         await _ensure_welcome_sink_channel(guild, bot_member, result=result)
 

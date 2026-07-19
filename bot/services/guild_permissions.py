@@ -54,7 +54,16 @@ def build_moderator_category_overwrite() -> discord.PermissionOverwrite:
     )
 
 
+def _bot_overwrite_subject(bot_member: discord.Member) -> discord.Role | discord.Member:
+    """Apply channel overwrites to the bot's role, not the member."""
+    return bot_member.top_role
+
+
 def _can_configure_role(bot_member: discord.Member, role: discord.Role) -> bool:
+    if role.is_default():
+        return True
+    if role in bot_member.roles:
+        return False
     if bot_member.top_role.id == role.id:
         return False
     return bot_member.top_role.position > role.position
@@ -68,23 +77,19 @@ def filter_configurable_overwrites(
     ],
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
     """Drop role overwrites the bot cannot set — prevents 50013 on channel/category edits."""
-    if bot_member.guild_permissions.administrator:
-        return dict(overwrites)
-
     filtered: dict[
         discord.Role | discord.Member | discord.Object,
         discord.PermissionOverwrite,
     ] = {}
+    bot_role = bot_member.top_role
     for target, overwrite in overwrites.items():
         if isinstance(target, discord.Role):
-            if target.is_default():
-                filtered[target] = overwrite
-            elif _can_configure_role(bot_member, target):
+            if _can_configure_role(bot_member, target):
                 filtered[target] = overwrite
             continue
         if isinstance(target, discord.Member):
             if target.id == bot_member.id:
-                filtered[target] = overwrite
+                filtered[bot_role] = overwrite
             continue
         filtered[target] = overwrite
     return filtered
@@ -177,7 +182,7 @@ def build_moderation_only_overwrites(
         _with_moderator_overwrite(
             {
                 guild.default_role: hidden(),
-                bot_member: _bot_hub_overwrite(),
+                _bot_overwrite_subject(bot_member): _bot_hub_overwrite(),
             },
             bot_member,
             human_moderator_role,
@@ -194,7 +199,7 @@ def build_welcome_sink_overwrites(
         OverwriteMap,
         {
             guild.default_role: build_everyone_hidden_overwrite(),
-            bot_member: discord.PermissionOverwrite(
+            _bot_overwrite_subject(bot_member): discord.PermissionOverwrite(
                 view_channel=True,
                 read_message_history=True,
             ),
@@ -274,7 +279,7 @@ def build_hub_public_category_overwrites(
         _finalize_hub_overwrites(
             {
                 guild.default_role: everyone(),
-                bot_member: _bot_hub_overwrite(),
+                _bot_overwrite_subject(bot_member): _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
@@ -336,7 +341,7 @@ def build_subscribe_category_overwrites(
         _finalize_hub_overwrites(
             {
                 guild.default_role: build_everyone_hidden_category_overwrite(),
-                bot_member: _bot_hub_overwrite(),
+                _bot_overwrite_subject(bot_member): _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
@@ -358,7 +363,7 @@ def build_subscribe_announcement_channel_overwrites(
         _finalize_hub_overwrites(
             {
                 guild.default_role: build_everyone_readonly_overwrite(),
-                bot_member: _bot_hub_overwrite(),
+                _bot_overwrite_subject(bot_member): _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
@@ -378,7 +383,7 @@ def build_join_channel_overwrites(
         _finalize_hub_overwrites(
             {
                 guild.default_role: build_everyone_readonly_overwrite(),
-                bot_member: _bot_hub_overwrite(),
+                _bot_overwrite_subject(bot_member): _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
@@ -410,7 +415,7 @@ def build_server_feed_channel_overwrites(
         discord.PermissionOverwrite,
     ] = {
         guild.default_role: build_everyone_hidden_overwrite(),
-        bot_member: discord.PermissionOverwrite(
+        _bot_overwrite_subject(bot_member): discord.PermissionOverwrite(
             view_channel=True,
             read_message_history=True,
             send_messages=True,

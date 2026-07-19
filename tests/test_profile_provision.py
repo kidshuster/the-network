@@ -39,6 +39,7 @@ def test_server_feed_channel_overwrites() -> None:
     moderator.position = 2
     bot = MagicMock(spec=discord.Member)
     bot.top_role = MagicMock(spec=discord.Role, position=5)
+    bot.roles = [bot.top_role]
     partner.position = 1
     admin.position = 1
 
@@ -57,4 +58,4 @@ def test_server_feed_channel_overwrites() -> None:
     assert overwrites[partner].manage_webhooks is True
     assert overwrites[partner].send_messages is False
     assert overwrites[partner].use_application_commands is False
-    assert overwrites[bot].manage_messages is True
+    assert overwrites[bot.top_role].manage_messages is True

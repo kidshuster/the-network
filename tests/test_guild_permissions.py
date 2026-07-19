@@ -85,6 +85,7 @@ def test_filter_configurable_overwrites_skips_high_roles() -> None:
     low_role.is_default.return_value = False
     bot = MagicMock(spec=discord.Member, id=999)
     bot.top_role = MagicMock(spec=discord.Role, position=5, id=1)
+    bot.roles = [bot.top_role]
     perms = MagicMock(administrator=False)
     type(bot).guild_permissions = PropertyMock(return_value=perms)
 
@@ -99,7 +100,8 @@ def test_filter_configurable_overwrites_skips_high_roles() -> None:
     assert everyone in filtered
     assert high_role not in filtered
     assert low_role in filtered
-    assert bot in filtered
+    assert bot.top_role in filtered
+    assert bot not in filtered
 
 
 def test_partner_feed_overwrite_allows_webhooks_only() -> None:

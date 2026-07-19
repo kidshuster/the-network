@@ -148,6 +148,12 @@ def validate_provision_permissions(
         issues.append("**Manage Webhooks** — required for partner feed channels.")
 
     top = bot_member.top_role
+    if access_role in bot_member.roles:
+        issues.append(
+            f"Remove **{access_role.name}** from the bot member in Server Settings → "
+            "Members. That role is for partners/staff only — the bot should use its "
+            "own staff role for channel permission edits."
+        )
     if top.id == access_role.id:
         issues.append(
             f"The bot is assigned **{access_role.name}**, which is also the configured "
