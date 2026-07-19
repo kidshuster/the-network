@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import discord
@@ -13,7 +14,7 @@ from bot.context import BotContext
 from bot.domain.errors import NetworkValidationError
 from bot.services.discord_errors import DiscordStepError, format_discord_step_error
 from bot.services.guild_channels import resolve_network_join_channel
-from bot.services.guild_init import initialize_guild
+from bot.services.guild_init import GuildInitResult, initialize_guild
 from bot.services.join_requests_sticky import sync_network_how_to_join_sticky
 from bot.services.network_provision import (
     NetworkProvisionService,
@@ -24,6 +25,75 @@ from bot.services.rules_sticky import sync_rules_sticky
 from bot.ui.join_views import JoinServerView
 
 logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
+_MAX_INIT_FIELD_ITEMS = 8
+_MAX_INIT_FIELD_CHARS = 900
+
+
+def _guild_init_embed(result: GuildInitResult) -> discord.Embed:
+    if not result.success:
+        return discord.Embed(
+            title="Guild Init Failed",
+            description=result.reason or "Unknown error",
+            colour=discord.Colour.red(),
+        )
+
+    embed = discord.Embed(
+        title="Guild Initialized",
+        description="Hub layout is ready. Run `/network create` next.",
+        colour=discord.Colour.green(),
+    )
+    if result.created_categories:
+        names = result.created_categories[:_MAX_INIT_FIELD_ITEMS]
+        embed.add_field(
+            name="Categories created",
+            value="\n".join(f"• {name}" for name in names),
+            inline=False,
+        )
+    if result.created_channels:
+        names = result.created_channels[:_MAX_INIT_FIELD_ITEMS]
+        embed.add_field(
+            name="Channels created",
+            value="\n".join(f"• {name}" for name in names),
+            inline=False,
+        )
+    if result.moved_channels:
+        embed.add_field(
+            name="Channels moved",
+            value="\n".join(f"• {item}" for item in result.moved_channels[:_MAX_INIT_FIELD_ITEMS]),
+            inline=False,
+        )
+    if result.updated_roles:
+        embed.add_field(
+            name="Roles",
+            value="\n".join(f"• {item}" for item in result.updated_roles[:_MAX_INIT_FIELD_ITEMS]),
+            inline=False,
+        )
+    if result.failed_steps:
+        embed.colour = discord.Colour.gold()
+        embed.description = (
+            "Hub layout sync finished with warnings. Review the notes below, "
+            "then run `/network create` if categories look correct."
+        )
+        warnings = "\n".join(
+            f"• {step}" for step in result.failed_steps[:_MAX_INIT_FIELD_ITEMS]
+        )
+        if len(result.failed_steps) > _MAX_INIT_FIELD_ITEMS:
+            warnings += f"\n• …and {len(result.failed_steps) - _MAX_INIT_FIELD_ITEMS} more"
+        embed.add_field(
+            name="Permission warnings",
+            value=warnings[:_MAX_INIT_FIELD_CHARS],
+            inline=False,
+        )
+    if result.notes:
+        notes = "\n".join(f"• {note}" for note in result.notes[:_MAX_INIT_FIELD_ITEMS])
+        if len(result.notes) > _MAX_INIT_FIELD_ITEMS:
+            notes += f"\n• …and {len(result.notes) - _MAX_INIT_FIELD_ITEMS} more"
+        embed.add_field(name="Notes", value=notes[:_MAX_INIT_FIELD_CHARS], inline=False)
+    return embed
 
 
 @app_commands.default_permissions(manage_guild=True)
@@ -178,75 +248,40 @@ class NetworkCog(
             await interaction.followup.send("Bot member is not available in this guild.")
             return
 
-        result = await initialize_guild(
-            guild,
-            bot_member,
-            access_role_name=self.bot.settings.network_access_role_name,
-            moderator_role_name=self.bot.settings.network_moderator_role_name,
-            profiles=(
-                await self.bot.bot_context.profile_repo.list_all()
-                if self.bot.bot_context is not None
-                else None
-            ),
+        await interaction.followup.send(
+            "Guild init started — syncing categories and permissions. "
+            "You'll get another message when it finishes (usually under a minute).",
+            ephemeral=True,
         )
-        if not result.success:
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Guild Init Failed",
-                    description=result.reason or "Unknown error",
-                    colour=discord.Colour.red(),
-                ),
-                ephemeral=True,
-            )
-            return
 
-        embed = discord.Embed(
-            title="Guild Initialized",
-            description="Hub layout is ready. Run `/network create` next.",
-            colour=discord.Colour.green(),
-        )
-        if result.created_categories:
-            embed.add_field(
-                name="Categories created",
-                value="\n".join(f"• {name}" for name in result.created_categories),
-                inline=False,
-            )
-        if result.created_channels:
-            embed.add_field(
-                name="Channels created",
-                value="\n".join(f"• {name}" for name in result.created_channels),
-                inline=False,
-            )
-        if result.moved_channels:
-            embed.add_field(
-                name="Channels moved",
-                value="\n".join(f"• {item}" for item in result.moved_channels),
-                inline=False,
-            )
-        if result.updated_roles:
-            embed.add_field(
-                name="Roles",
-                value="\n".join(f"• {item}" for item in result.updated_roles),
-                inline=False,
-            )
-        if result.failed_steps:
-            embed.colour = discord.Colour.gold()
-            embed.description = (
-                "Hub layout sync finished with warnings. Review the notes below, "
-                "then run `/network create` if categories look correct."
-            )
-            embed.add_field(
-                name="Permission warnings",
-                value="\n".join(f"• {step}" for step in result.failed_steps[:8]),
-                inline=False,
-            )
-        if result.notes:
-            embed.add_field(
-                name="Notes",
-                value="\n".join(f"• {note}" for note in result.notes),
-                inline=False,
-            )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        async def _run_init() -> None:
+            try:
+                profiles = None
+                if self.bot.bot_context is not None:
+                    profiles = await self.bot.bot_context.profile_repo.list_all()
+                result = await initialize_guild(
+                    guild,
+                    bot_member,
+                    access_role_name=self.bot.settings.network_access_role_name,
+                    moderator_role_name=self.bot.settings.network_moderator_role_name,
+                    profiles=profiles,
+                )
+                await interaction.followup.send(
+                    embed=_guild_init_embed(result),
+                    ephemeral=True,
+                )
+            except Exception:
+                logger.exception("Guild init failed unexpectedly")
+                await interaction.followup.send(
+                    embed=discord.Embed(
+                        title="Guild Init Failed",
+                        description="An unexpected error occurred. Check bot logs for details.",
+                        colour=discord.Colour.red(),
+                    ),
+                    ephemeral=True,
+                )
+
+        asyncio.create_task(_run_init())
 
     @require_manage_guild()
     @app_commands.command(

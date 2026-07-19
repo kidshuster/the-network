@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -37,6 +38,8 @@ from bot.services.network_provision import resolve_access_role, validate_hub_per
 
 logger = logging.getLogger(__name__)
 
+_STEP_TIMEOUT_SECONDS = 45.0
+
 _MODERATOR_GUILD_PERMISSIONS = discord.Permissions(
     view_channel=True,
     send_messages=True,
@@ -71,7 +74,13 @@ async def _run_init_step[T](
     fallback: T | None = None,
 ) -> T | None:
     try:
-        return await action()
+        return await asyncio.wait_for(action(), timeout=_STEP_TIMEOUT_SECONDS)
+    except TimeoutError:
+        message = f"{step}: timed out after {_STEP_TIMEOUT_SECONDS:.0f}s"
+        result.failed_steps.append(message)
+        result.notes.append(f"Could not {step}: timed out")
+        logger.warning("Guild init step timed out", extra={"step": step})
+        return fallback
     except discord.HTTPException as exc:
         message = f"{step}: {exc}"
         result.failed_steps.append(message)
@@ -633,8 +642,6 @@ async def initialize_guild(
                     result.notes.append(
                         f"Synced permissions on feed category {category.name}"
                     )
-
-        await _ensure_welcome_sink_channel(guild, bot_member, result=result)
 
         if subscribe is not None:
             await _sync_subscribe_announcement_channels(
