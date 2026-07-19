@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 import discord
@@ -58,7 +59,47 @@ class GuildInitResult:
     moved_channels: list[str] = field(default_factory=list)
     updated_roles: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    failed_steps: list[str] = field(default_factory=list)
     reason: str | None = None
+
+
+async def _run_init_step[T](
+    result: GuildInitResult,
+    step: str,
+    action: Callable[[], Awaitable[T]],
+    *,
+    fallback: T | None = None,
+) -> T | None:
+    try:
+        return await action()
+    except discord.HTTPException as exc:
+        message = f"{step}: {exc}"
+        result.failed_steps.append(message)
+        result.notes.append(f"Could not {step}: {exc}")
+        logger.warning("Guild init step failed", extra={"step": step, "error": str(exc)})
+        return fallback
+
+
+async def _edit_overwrites(
+    bot_member: discord.Member,
+    target: discord.abc.GuildChannel,
+    overwrites: dict,
+    *,
+    result: GuildInitResult,
+    step: str,
+    **edit_kwargs: object,
+) -> bool:
+    safe_overwrites = filter_configurable_overwrites(bot_member, overwrites)
+
+    async def _edit() -> None:
+        await target.edit(
+            overwrites=safe_overwrites,
+            reason="The Network guild init",
+            **edit_kwargs,  # type: ignore[arg-type]
+        )
+
+    edited = await _run_init_step(result, step, _edit)
+    return edited is not None
 
 
 async def _ensure_category(
@@ -68,41 +109,31 @@ async def _ensure_category(
     overwrites: dict,
     *,
     result: GuildInitResult,
-) -> discord.CategoryChannel:
+) -> discord.CategoryChannel | None:
     existing = resolve_category(guild, display_name)
-    safe_overwrites = filter_configurable_overwrites(bot_member, overwrites)
     if existing is not None:
-        await existing.edit(overwrites=safe_overwrites, reason="The Network guild init")
+        await _edit_overwrites(
+            bot_member,
+            existing,
+            overwrites,
+            result=result,
+            step=f"sync {display_name} category permissions",
+        )
         return existing
-    created = await guild.create_category(
-        name=display_name,
-        overwrites=safe_overwrites,
-        reason="The Network guild init",
-    )
-    result.created_categories.append(display_name)
-    return created
 
-
-async def _edit_channel_overwrites(
-    bot_member: discord.Member,
-    channel: discord.abc.GuildChannel,
-    overwrites: dict,
-    *,
-    result: GuildInitResult,
-    label: str,
-    **edit_kwargs: object,
-) -> bool:
     safe_overwrites = filter_configurable_overwrites(bot_member, overwrites)
-    try:
-        await channel.edit(
+
+    async def _create() -> discord.CategoryChannel:
+        return await guild.create_category(
+            name=display_name,
             overwrites=safe_overwrites,
             reason="The Network guild init",
-            **edit_kwargs,  # type: ignore[arg-type]
         )
-        return True
-    except discord.HTTPException as exc:
-        result.notes.append(f"Could not sync {label}: {exc}")
-        return False
+
+    created = await _run_init_step(result, f"create {display_name} category", _create)
+    if created is not None:
+        result.created_categories.append(display_name)
+    return created
 
 
 async def _ensure_text_channel(
@@ -114,38 +145,50 @@ async def _ensure_text_channel(
     overwrites: dict,
     topic: str | None,
     result: GuildInitResult,
-) -> discord.TextChannel:
+) -> discord.TextChannel | None:
     safe_overwrites = filter_configurable_overwrites(bot_member, overwrites)
+
     for channel in guild.text_channels:
         if channel.name.casefold() == name.casefold() and channel.category_id == category.id:
-            await channel.edit(
-                overwrites=safe_overwrites,
+            await _edit_overwrites(
+                bot_member,
+                channel,
+                overwrites,
+                result=result,
+                step=f"sync #{name} permissions",
                 name=name,
                 topic=topic,
-                reason="The Network guild init",
             )
             return channel
 
     for channel in guild.text_channels:
         if channel.name.casefold() == name.casefold():
-            await channel.edit(
+            moved = await _edit_overwrites(
+                bot_member,
+                channel,
+                overwrites,
+                result=result,
+                step=f"move #{name} into {category.name}",
                 category=category,
-                overwrites=safe_overwrites,
                 name=name,
                 topic=topic,
-                reason="The Network guild init",
             )
-            result.moved_channels.append(f"#{name} → {category.name}")
+            if moved:
+                result.moved_channels.append(f"#{name} → {category.name}")
             return channel
 
-    created = await guild.create_text_channel(
-        name=name,
-        category=category,
-        overwrites=safe_overwrites,
-        topic=topic,
-        reason="The Network guild init",
-    )
-    result.created_channels.append(f"#{name}")
+    async def _create() -> discord.TextChannel:
+        return await guild.create_text_channel(
+            name=name,
+            category=category,
+            overwrites=safe_overwrites,
+            topic=topic,
+            reason="The Network guild init",
+        )
+
+    created = await _run_init_step(result, f"create #{name}", _create)
+    if created is not None:
+        result.created_channels.append(f"#{name}")
     return created
 
 
@@ -155,18 +198,23 @@ async def _ensure_moderator_role(
     *,
     role_name: str,
     result: GuildInitResult,
-) -> discord.Role:
+) -> discord.Role | None:
     role = resolve_moderator_role(guild, role_name=role_name)
     if role is None:
-        role = await guild.create_role(
-            name=role_name,
-            permissions=_MODERATOR_GUILD_PERMISSIONS,
-            mentionable=False,
-            hoist=True,
-            reason="The Network guild init",
-        )
-        result.updated_roles.append(f"Created {role_name}")
-        return role
+
+        async def _create() -> discord.Role:
+            return await guild.create_role(
+                name=role_name,
+                permissions=_MODERATOR_GUILD_PERMISSIONS,
+                mentionable=False,
+                hoist=True,
+                reason="The Network guild init",
+            )
+
+        created = await _run_init_step(result, f"create {role_name} role", _create)
+        if created is not None:
+            result.updated_roles.append(f"Created {role_name}")
+        return created
 
     if bot_member.top_role.id == role.id:
         result.notes.append(
@@ -183,8 +231,13 @@ async def _ensure_moderator_role(
         )
         return role
 
-    await role.edit(permissions=_MODERATOR_GUILD_PERMISSIONS, reason="The Network guild init")
-    result.updated_roles.append(f"Updated {role.name}")
+    async def _update() -> discord.Role:
+        await role.edit(permissions=_MODERATOR_GUILD_PERMISSIONS, reason="The Network guild init")
+        return role
+
+    updated = await _run_init_step(result, f"update {role.name} role permissions", _update)
+    if updated is not None:
+        result.updated_roles.append(f"Updated {role.name}")
     return role
 
 
@@ -213,21 +266,16 @@ async def _move_rules_channel(
         if rules.category_id != network_category.id or rules.name != CHANNEL_RULES:
             edit_kwargs["category"] = network_category
             edit_kwargs["name"] = CHANNEL_RULES
-        synced = await _edit_channel_overwrites(
+        synced = await _edit_overwrites(
             bot_member,
             rules,
             overwrites,
             result=result,
-            label=f"rules channel {rules.mention}",
+            step=f"sync rules channel {rules.mention}",
             **edit_kwargs,
         )
         if synced and edit_kwargs:
             result.moved_channels.append(f"{rules.mention} → {CATEGORY_NETWORK}/{CHANNEL_RULES}")
-        elif not synced:
-            result.notes.append(
-                "Could not update the Community rules channel automatically — set its "
-                "permissions manually or grant the bot **Manage Guild**."
-            )
         return
 
     await _ensure_text_channel(
@@ -257,28 +305,41 @@ async def _ensure_welcome_sink_channel(
     bot_member: discord.Member,
     *,
     result: GuildInitResult,
-) -> discord.TextChannel:
+) -> discord.TextChannel | None:
     overwrites = dict(build_welcome_sink_overwrites(guild, bot_member))
-    safe_overwrites = filter_configurable_overwrites(bot_member, overwrites)
     sink = resolve_welcome_sink_channel(guild)
     if sink is None:
-        sink = await guild.create_text_channel(
-            name=CHANNEL_WELCOME_SINK,
-            overwrites=safe_overwrites,
-            reason="The Network guild init",
-        )
-        result.created_channels.append(f"#{CHANNEL_WELCOME_SINK} (hidden)")
-    else:
-        await sink.edit(overwrites=safe_overwrites, reason="The Network guild init")
 
-    if sink.position != 0:
-        try:
+        async def _create() -> discord.TextChannel:
+            safe = filter_configurable_overwrites(bot_member, overwrites)
+            return await guild.create_text_channel(
+                name=CHANNEL_WELCOME_SINK,
+                overwrites=safe,
+                reason="The Network guild init",
+            )
+
+        sink = await _run_init_step(result, f"create #{CHANNEL_WELCOME_SINK}", _create)
+        if sink is not None:
+            result.created_channels.append(f"#{CHANNEL_WELCOME_SINK} (hidden)")
+    else:
+        await _edit_overwrites(
+            bot_member,
+            sink,
+            overwrites,
+            result=result,
+            step=f"sync #{CHANNEL_WELCOME_SINK} permissions",
+        )
+
+    if sink is not None and sink.position != 0:
+
+        async def _move_top() -> None:
             await sink.edit(position=0, reason="The Network guild init")
+
+        moved = await _run_init_step(result, f"move #{CHANNEL_WELCOME_SINK} to top", _move_top)
+        if moved is not None:
             result.notes.append(
                 f"Moved #{CHANNEL_WELCOME_SINK} to the top to absorb Discord's welcome message."
             )
-        except discord.HTTPException as exc:
-            result.notes.append(f"Could not move #{CHANNEL_WELCOME_SINK} to the top: {exc}")
     return sink
 
 
@@ -298,12 +359,12 @@ async def _sync_subscribe_announcement_channels(
     )
     for channel in iter_subscribe_announcement_channels(guild, subscribe_category):
         label = f"#{channel.name}" if hasattr(channel, "name") else str(channel.id)
-        if await _edit_channel_overwrites(
+        if await _edit_overwrites(
             bot_member,
             channel,
             overwrites,
             result=result,
-            label=f"subscribe announcement {label}",
+            step=f"sync subscribe announcement {label}",
         ):
             result.notes.append(f"Synced public subscribe permissions on {label}")
 
@@ -326,12 +387,12 @@ async def _sync_hub_public_channels(
             continue
         if rules_channel_id is not None and channel.id == rules_channel_id:
             continue
-        if await _edit_channel_overwrites(
+        if await _edit_overwrites(
             bot_member,
             channel,
             overwrites,
             result=result,
-            label=f"hub channel #{channel.name}",
+            step=f"sync hub channel #{channel.name}",
         ):
             result.notes.append(f"Synced hub permissions on #{channel.name}")
 
@@ -378,12 +439,12 @@ async def _sync_partner_feed_channels(
                 )
             )
             label = f"partner feed #{channel.name} ({server_role.name})"
-            if await _edit_channel_overwrites(
+            if await _edit_overwrites(
                 bot_member,
                 channel,
                 overwrites,
                 result=result,
-                label=label,
+                step=f"sync {label}",
             ):
                 result.notes.append(f"Synced partner follow permissions on {label}")
             if channel.type is not discord.ChannelType.news:
@@ -425,7 +486,7 @@ async def initialize_guild(
             access_role,
             moderator_role=moderator_role,
         )
-        moderator_role = await _ensure_moderator_role(
+        await _ensure_moderator_role(
             guild,
             bot_member,
             role_name=moderator_role_name,
@@ -444,27 +505,47 @@ async def initialize_guild(
             guild,
             bot_member,
             CATEGORY_SUBSCRIBE,
-            dict(build_subscribe_category_overwrites(
-                guild, bot_member, access_role, human_moderator_role
-            )),
+            dict(
+                build_subscribe_category_overwrites(
+                    guild, bot_member, access_role, human_moderator_role
+                )
+            ),
             result=result,
         )
         network_cat = await _ensure_category(
             guild,
             bot_member,
             CATEGORY_NETWORK,
-            dict(build_hub_public_category_overwrites(
-                guild, bot_member, access_role, human_moderator_role
-            )),
+            dict(
+                build_hub_public_category_overwrites(
+                    guild,
+                    bot_member,
+                    access_role,
+                    human_moderator_role,
+                    for_category=True,
+                )
+            ),
             result=result,
         )
         moderation = await _ensure_category(
             guild,
             bot_member,
             CATEGORY_MODERATION,
-            dict(build_moderation_staff_overwrites(guild, bot_member, human_moderator_role)),
+            dict(
+                build_moderation_staff_overwrites(
+                    guild, bot_member, human_moderator_role, for_category=True
+                )
+            ),
             result=result,
         )
+
+        if network_cat is None:
+            result.success = False
+            result.reason = (
+                "Could not create or sync **The Network** category. "
+                "Check the bot role has **Manage Channels** and sits above partner roles."
+            )
+            return result
 
         rules_overwrites = dict(
             build_hub_public_category_overwrites(
@@ -478,88 +559,92 @@ async def initialize_guild(
             guild, bot_member, network_cat, rules_overwrites, result=result
         )
 
-        mod_only_source = await _find_moderator_only_channel(guild)
         mod_only_overwrites = dict(
             build_moderation_staff_overwrites(guild, bot_member, human_moderator_role)
         )
-        if mod_only_source is not None and mod_only_source.category_id != moderation.id:
-            if await _edit_channel_overwrites(
-                bot_member,
-                mod_only_source,
-                mod_only_overwrites,
-                result=result,
-                label=f"moderator-only channel #{mod_only_source.name}",
-                category=moderation,
-                name=CHANNEL_MODERATOR_ONLY,
-            ):
-                result.moved_channels.append(
-                    f"{mod_only_source.mention} → {CATEGORY_MODERATION}/{CHANNEL_MODERATOR_ONLY}"
+        if moderation is not None:
+            mod_only_source = await _find_moderator_only_channel(guild)
+            if mod_only_source is not None and mod_only_source.category_id != moderation.id:
+                if await _edit_overwrites(
+                    bot_member,
+                    mod_only_source,
+                    mod_only_overwrites,
+                    result=result,
+                    step=f"move moderator-only channel #{mod_only_source.name}",
+                    category=moderation,
+                    name=CHANNEL_MODERATOR_ONLY,
+                ):
+                    result.moved_channels.append(
+                        f"{mod_only_source.mention} → "
+                        f"{CATEGORY_MODERATION}/{CHANNEL_MODERATOR_ONLY}"
+                    )
+            else:
+                await _ensure_text_channel(
+                    guild,
+                    bot_member,
+                    name=CHANNEL_MODERATOR_ONLY,
+                    category=moderation,
+                    overwrites=mod_only_overwrites,
+                    topic="Moderator discussion",
+                    result=result,
                 )
-        else:
+
             await _ensure_text_channel(
                 guild,
                 bot_member,
-                name=CHANNEL_MODERATOR_ONLY,
+                name=CHANNEL_JOIN_REQUESTS,
                 category=moderation,
                 overwrites=mod_only_overwrites,
-                topic="Moderator discussion",
+                topic="Pending partner join requests",
+                result=result,
+            )
+            await _ensure_text_channel(
+                guild,
+                bot_member,
+                name=CHANNEL_COMMANDS,
+                category=moderation,
+                overwrites=dict(
+                    build_commands_channel_overwrites(guild, bot_member, human_moderator_role)
+                ),
+                topic="Run The Network bot commands here",
                 result=result,
             )
 
-        await _ensure_text_channel(
-            guild,
-            bot_member,
-            name=CHANNEL_JOIN_REQUESTS,
-            category=moderation,
-            overwrites=mod_only_overwrites,
-            topic="Pending partner join requests",
-            result=result,
-        )
-        await _ensure_text_channel(
-            guild,
-            bot_member,
-            name=CHANNEL_COMMANDS,
-            category=moderation,
-            overwrites=dict(
-                build_commands_channel_overwrites(guild, bot_member, human_moderator_role)
-            ),
-            topic="Run The Network bot commands here",
-            result=result,
-        )
-
+        managed_category_ids = {
+            category.id
+            for category in (subscribe, network_cat, moderation)
+            if category is not None
+        }
         for category in guild.categories:
-            if category.id in {subscribe.id, network_cat.id, moderation.id}:
+            if category.id in managed_category_ids:
                 continue
             if category.name.casefold().endswith(" feed"):
-                feed_overwrites = filter_configurable_overwrites(
+                if await _edit_overwrites(
                     bot_member,
+                    category,
                     dict(
                         build_subscribe_category_overwrites(
                             guild, bot_member, access_role, human_moderator_role
                         )
                     ),
-                )
-                try:
-                    await category.edit(
-                        overwrites=feed_overwrites,
-                        reason="The Network guild init",
-                    )
-                    result.notes.append(f"Synced permissions on feed category {category.name}")
-                except discord.HTTPException as exc:
+                    result=result,
+                    step=f"sync feed category {category.name}",
+                ):
                     result.notes.append(
-                        f"Could not sync feed category {category.name}: {exc}"
+                        f"Synced permissions on feed category {category.name}"
                     )
 
         await _ensure_welcome_sink_channel(guild, bot_member, result=result)
 
-        await _sync_subscribe_announcement_channels(
-            guild,
-            bot_member,
-            subscribe,
-            access_role,
-            human_moderator_role,
-            result=result,
-        )
+        if subscribe is not None:
+            await _sync_subscribe_announcement_channels(
+                guild,
+                bot_member,
+                subscribe,
+                access_role,
+                human_moderator_role,
+                result=result,
+            )
 
         if profiles:
             await _sync_partner_feed_channels(
@@ -575,9 +660,12 @@ async def initialize_guild(
             f"Place network announcement outputs in **{CATEGORY_SUBSCRIBE}**. "
             f"Partner feeds are created under each network's feed category."
         )
-    except discord.HTTPException as exc:
-        logger.warning("Guild init failed", extra={"error": str(exc)})
-        return GuildInitResult(success=False, reason=f"Discord API error during init: {exc}")
+        if result.failed_steps:
+            result.notes.insert(
+                0,
+                f"Init completed with {len(result.failed_steps)} permission sync warning(s). "
+                "See notes below for each step.",
+            )
     except NetworkValidationError as exc:
         return GuildInitResult(success=False, reason=str(exc))
 

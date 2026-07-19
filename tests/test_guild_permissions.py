@@ -85,6 +85,8 @@ def test_filter_configurable_overwrites_skips_high_roles() -> None:
     low_role.is_default.return_value = False
     bot = MagicMock(spec=discord.Member, id=999)
     bot.top_role = MagicMock(spec=discord.Role, position=5, id=1)
+    perms = MagicMock(administrator=False)
+    type(bot).guild_permissions = PropertyMock(return_value=perms)
 
     source = {
         everyone: discord.PermissionOverwrite(view_channel=True),

@@ -40,6 +40,20 @@ def build_moderator_channel_overwrite() -> discord.PermissionOverwrite:
     )
 
 
+def build_moderator_category_overwrite() -> discord.PermissionOverwrite:
+    """Category overwrite for staff — no thread flags (invalid on categories)."""
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        send_messages=True,
+        embed_links=True,
+        attach_files=True,
+        manage_channels=True,
+        manage_webhooks=True,
+        manage_messages=True,
+    )
+
+
 def _can_configure_role(bot_member: discord.Member, role: discord.Role) -> bool:
     if bot_member.top_role.id == role.id:
         return False
@@ -54,6 +68,9 @@ def filter_configurable_overwrites(
     ],
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
     """Drop role overwrites the bot cannot set — prevents 50013 on channel/category edits."""
+    if bot_member.guild_permissions.administrator:
+        return dict(overwrites)
+
     filtered: dict[
         discord.Role | discord.Member | discord.Object,
         discord.PermissionOverwrite,
@@ -80,9 +97,16 @@ def _with_access_overwrite(
     ],
     bot_member: discord.Member,
     access_role: discord.Role,
+    *,
+    for_category: bool = False,
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
     if _can_configure_role(bot_member, access_role):
-        overwrites[access_role] = build_network_access_overwrite()
+        builder = (
+            build_network_access_category_overwrite
+            if for_category
+            else build_network_access_overwrite
+        )
+        overwrites[access_role] = builder()
     return overwrites
 
 
@@ -93,13 +117,20 @@ def _with_moderator_overwrite(
     ],
     bot_member: discord.Member,
     moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
     """Skip Moderator channel overwrites when the bot cannot configure that role."""
     if moderator_role is None:
         return overwrites
     if not _can_configure_role(bot_member, moderator_role):
         return overwrites
-    overwrites[moderator_role] = build_moderator_channel_overwrite()
+    builder = (
+        build_moderator_category_overwrite
+        if for_category
+        else build_moderator_channel_overwrite
+    )
+    overwrites[moderator_role] = builder()
     return overwrites
 
 
@@ -111,26 +142,46 @@ def _finalize_hub_overwrites(
     bot_member: discord.Member,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
-    overwrites = _with_access_overwrite(overwrites, bot_member, access_role)
-    return _with_moderator_overwrite(overwrites, bot_member, human_moderator_role)
+    overwrites = _with_access_overwrite(
+        overwrites,
+        bot_member,
+        access_role,
+        for_category=for_category,
+    )
+    return _with_moderator_overwrite(
+        overwrites,
+        bot_member,
+        human_moderator_role,
+        for_category=for_category,
+    )
 
 
 def build_moderation_only_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
     human_moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
 ) -> OverwriteMap:
     """Moderation category — human moderators and the bot only."""
+    hidden = (
+        build_everyone_hidden_category_overwrite
+        if for_category
+        else build_everyone_hidden_overwrite
+    )
     return cast(
         OverwriteMap,
         _with_moderator_overwrite(
             {
-                guild.default_role: build_everyone_hidden_overwrite(),
+                guild.default_role: hidden(),
                 bot_member: _bot_hub_overwrite(),
             },
             bot_member,
             human_moderator_role,
+            for_category=for_category,
         ),
     )
 
@@ -162,6 +213,14 @@ def _post_and_thread_lockdown() -> dict[str, bool]:
     }
 
 
+def _category_post_lockdown() -> dict[str, bool]:
+    """Category-safe lockdown — omit thread flags (not valid on category overwrites)."""
+    return {
+        "send_messages": False,
+        "add_reactions": False,
+    }
+
+
 def build_everyone_readonly_overwrite() -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(
         view_channel=True,
@@ -170,10 +229,25 @@ def build_everyone_readonly_overwrite() -> discord.PermissionOverwrite:
     )
 
 
+def build_everyone_readonly_category_overwrite() -> discord.PermissionOverwrite:
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        **_category_post_lockdown(),
+    )
+
+
 def build_everyone_hidden_overwrite() -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(
         view_channel=False,
         **_post_and_thread_lockdown(),
+    )
+
+
+def build_everyone_hidden_category_overwrite() -> discord.PermissionOverwrite:
+    return discord.PermissionOverwrite(
+        view_channel=False,
+        **_category_post_lockdown(),
     )
 
 
@@ -187,17 +261,25 @@ def build_hub_public_category_overwrites(
     bot_member: discord.Member,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
 ) -> OverwriteMap:
+    everyone = (
+        build_everyone_readonly_category_overwrite
+        if for_category
+        else build_everyone_readonly_overwrite
+    )
     return cast(
         OverwriteMap,
         _finalize_hub_overwrites(
             {
-                guild.default_role: build_everyone_readonly_overwrite(),
+                guild.default_role: everyone(),
                 bot_member: _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
             human_moderator_role,
+            for_category=for_category,
         ),
     )
 
@@ -208,6 +290,15 @@ def build_network_access_overwrite() -> discord.PermissionOverwrite:
         read_message_history=True,
         manage_webhooks=True,
         **_post_and_thread_lockdown(),
+    )
+
+
+def build_network_access_category_overwrite() -> discord.PermissionOverwrite:
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        manage_webhooks=True,
+        **_category_post_lockdown(),
     )
 
 
@@ -226,8 +317,12 @@ def build_moderation_staff_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
     human_moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
 ) -> OverwriteMap:
-    return build_moderation_only_overwrites(guild, bot_member, human_moderator_role)
+    return build_moderation_only_overwrites(
+        guild, bot_member, human_moderator_role, for_category=for_category
+    )
 
 
 def build_subscribe_category_overwrites(
@@ -240,12 +335,13 @@ def build_subscribe_category_overwrites(
         OverwriteMap,
         _finalize_hub_overwrites(
             {
-                guild.default_role: build_everyone_hidden_overwrite(),
+                guild.default_role: build_everyone_hidden_category_overwrite(),
                 bot_member: _bot_hub_overwrite(),
             },
             bot_member,
             access_role,
             human_moderator_role,
+            for_category=True,
         ),
     )
 

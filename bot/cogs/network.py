@@ -183,6 +183,11 @@ class NetworkCog(
             bot_member,
             access_role_name=self.bot.settings.network_access_role_name,
             moderator_role_name=self.bot.settings.network_moderator_role_name,
+            profiles=(
+                await self.bot.bot_context.profile_repo.list_all()
+                if self.bot.bot_context is not None
+                else None
+            ),
         )
         if not result.success:
             await interaction.followup.send(
@@ -222,6 +227,17 @@ class NetworkCog(
             embed.add_field(
                 name="Roles",
                 value="\n".join(f"• {item}" for item in result.updated_roles),
+                inline=False,
+            )
+        if result.failed_steps:
+            embed.colour = discord.Colour.gold()
+            embed.description = (
+                "Hub layout sync finished with warnings. Review the notes below, "
+                "then run `/network create` if categories look correct."
+            )
+            embed.add_field(
+                name="Permission warnings",
+                value="\n".join(f"• {step}" for step in result.failed_steps[:8]),
                 inline=False,
             )
         if result.notes:
