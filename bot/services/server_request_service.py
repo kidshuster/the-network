@@ -15,7 +15,6 @@ from bot.services.image_service import (
     normalize_image_bytes,
     read_profile_image_attachment,
 )
-from bot.ui.profile_views import EditProfileView
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -41,23 +40,20 @@ class ReviewRequestResult:
 
 def build_moderator_request_embed(
     *,
-    network_display_name: str,
     requester: discord.abc.User,
     server_name: str,
     display_name: str,
     request_id: int,
 ) -> discord.Embed:
-    embed = discord.Embed(
-        title="Server join request",
-        description=f"Network **{network_display_name}**",
-        colour=discord.Colour.gold(),
+    from bot.messages import render_embed
+
+    return render_embed(
+        "join_request_moderator",
+        requester_mention=requester.mention,
+        request_id=request_id,
+        server_name=server_name,
+        display_name=display_name,
     )
-    embed.add_field(name="Requester", value=requester.mention, inline=True)
-    embed.add_field(name="Request ID", value=f"`{request_id}`", inline=True)
-    embed.add_field(name="Server name", value=server_name, inline=False)
-    embed.add_field(name="Display name", value=display_name, inline=False)
-    embed.set_footer(text="The Network • moderator review")
-    return embed
 
 
 async def _load_request_profile_image(request: ServerRequest) -> ProfileImage:
@@ -95,7 +91,6 @@ class ServerRequestService:
         guild: discord.Guild,
         *,
         requester: discord.abc.User,
-        network_key: str,
         server_name: str,
         display_name: str,
         profile_image: discord.Attachment,
@@ -105,31 +100,23 @@ class ServerRequestService:
         if not display_name.strip():
             return SubmitRequestResult(success=False, error="Display name cannot be empty.")
 
-        network = await self._context.network_repo.get_by_key(network_key)
-        if network is None:
-            return SubmitRequestResult(
-                success=False,
-                error=f"Network `{network_key.strip().lower()}` was not found.",
-            )
-
         existing_pending = await self._context.server_request_repo.get_pending_for_requester(
-            network.id,
             requester.id,
         )
         if existing_pending is not None:
             return SubmitRequestResult(
                 success=False,
-                error="You already have a pending join request for this network.",
+                error="You already have a pending join request.",
             )
 
-        existing_server = await self._context.profile_repo.get_by_network_and_server_name(
-            network.id,
+        existing_client = await self._context.client_repo.get_by_server_name(
+            guild.id,
             server_name,
         )
-        if existing_server is not None:
+        if existing_client is not None:
             return SubmitRequestResult(
                 success=False,
-                error=f"A server named {server_name!r} already exists on this network.",
+                error=f"A client named {server_name!r} already exists on this hub.",
             )
 
         try:
@@ -139,7 +126,7 @@ class ServerRequestService:
 
         request = await self._context.server_request_repo.create(
             guild_id=guild.id,
-            network_id=network.id,
+            network_id=None,
             requester_user_id=requester.id,
             server_name=server_name,
             display_name=display_name,
@@ -147,7 +134,7 @@ class ServerRequestService:
             profile_image_data=image.data,
         )
 
-        from bot.services.guild_channels import resolve_join_requests_channel
+        from bot.services.guild_layout import resolve_join_requests_channel
         from bot.ui.join_views import ModeratorReviewView
 
         requests_channel = resolve_join_requests_channel(guild)
@@ -171,17 +158,23 @@ class ServerRequestService:
         view = ModeratorReviewView(self._bot, request.id)
         self._bot.add_view(view)
         embed = build_moderator_request_embed(
-            network_display_name=network.display_name,
             requester=requester,
             server_name=request.server_name,
             display_name=request.display_name,
             request_id=request.id,
         )
         try:
+            from bot.services.guild_layout import resolve_human_moderator_role
+            from bot.services.message_delivery import build_moderator_join_request_send_kwargs
+
+            send_kwargs = build_moderator_join_request_send_kwargs(
+                resolve_human_moderator_role(guild),
+            )
             message = await requests_channel.send(
                 embed=embed,
                 file=discord.File(fp=io.BytesIO(image.data), filename="profile.png"),
                 view=view,
+                **send_kwargs,
             )
         except discord.HTTPException as exc:
             return SubmitRequestResult(success=False, error=f"Discord API error: {exc}")
@@ -209,13 +202,6 @@ class ServerRequestService:
         if request.status != ServerRequestStatus.PENDING:
             return ReviewRequestResult(success=False, error="This request was already reviewed.")
 
-        network = await self._context.network_repo.get_by_id(request.network_id)
-        if network is None:
-            return ReviewRequestResult(
-                success=False,
-                error="Network for this request was not found.",
-            )
-
         try:
             image = await _load_request_profile_image(request)
         except ProfileValidationError as exc:
@@ -225,47 +211,37 @@ class ServerRequestService:
         if bot_member is None:
             return ReviewRequestResult(success=False, error="Bot member is unavailable.")
 
-        result = await self._context.profile_sync.create_profile(
-            guild,
-            bot_member,
-            server_name=request.server_name,
-            display_name=request.display_name,
-            network_key=network.key,
-            profile_image_bytes=image.data,
-        )
-
-        if not result.success or result.profile_channel is None or result.server_role is None:
+        try:
+            result = await self._provision_client_from_request(
+                guild,
+                bot_member,
+                request,
+                image,
+            )
+        except Exception:
+            logger.exception(
+                "Join request approval provisioning failed",
+                extra={"request_id": request_id},
+            )
             return ReviewRequestResult(
                 success=False,
-                error=result.error or "Server provisioning failed.",
+                error="Client provisioning failed unexpectedly. Check bot logs.",
             )
 
-        if result.starter_message is not None and result.profile_channel is not None:
-            profile_view = EditProfileView(self._bot, result.profile_channel.id)
-            self._bot.add_view(profile_view)
-            try:
-                await result.starter_message.edit(view=profile_view)
-            except discord.HTTPException:
-                logger.warning(
-                    "Could not attach edit profile view after approval",
-                    extra={"profile_channel_id": result.profile_channel.id},
-                )
+        if not result.success:
+            return ReviewRequestResult(success=False, error=result.error)
 
         requester = guild.get_member(request.requester_user_id)
-        if requester is not None:
+        if requester is not None and result.client_role is not None:
             try:
                 await requester.add_roles(
-                    result.server_role,
-                    reason=f"Approved network join request #{request.id}",
+                    result.client_role,
+                    reason=f"Approved client join request #{request.id}",
                 )
             except discord.HTTPException as exc:
                 logger.warning(
-                    "Could not grant partner role after approval",
-                    extra={
-                        "request_id": request.id,
-                        "user_id": request.requester_user_id,
-                        "error": str(exc),
-                    },
+                    "Could not grant client role after approval",
+                    extra={"request_id": request.id, "error": str(exc)},
                 )
 
         await self._context.server_request_repo.resolve(
@@ -273,18 +249,120 @@ class ServerRequestService:
             status=ServerRequestStatus.APPROVED,
             resolved_by_user_id=moderator.id,
         )
+        await self._context.client_cache.load_cache()
         await self._finalize_review_message(guild, request, moderator, ServerRequestStatus.APPROVED)
 
-        summary = f"Created {result.feed_channel.mention}."
+        summary = "Client category created."
+        if result.profile_channel is not None:
+            summary = f"Created {result.profile_channel.mention}."
         if requester is not None:
             await self._notify_requester(
                 requester,
                 approved=True,
-                network_display_name=network.display_name,
-                feed_channel=result.feed_channel,
                 profile_channel=result.profile_channel,
             )
         return ReviewRequestResult(success=True, message=summary)
+
+    async def _provision_client_from_request(
+        self,
+        guild: discord.Guild,
+        bot_member: discord.Member,
+        request: ServerRequest,
+        image: ProfileImage,
+    ):
+        from dataclasses import dataclass
+
+        from bot.services.client_provision import ClientProvisionService
+        from bot.services.client_profile_post import build_client_profile_embed
+        from bot.services.client_profile_sync import refresh_client_profile_message
+        from bot.services.emoji_service import EmojiService
+        from bot.ui.network_views import NetworkProfileView
+
+        @dataclass
+        class ProvisionOutcome:
+            success: bool
+            client_role: discord.Role | None = None
+            profile_channel: discord.TextChannel | None = None
+            error: str | None = None
+
+        provision_service = ClientProvisionService()
+        try:
+            provision = await provision_service.provision_client(
+                guild,
+                bot_member,
+                server_name=request.server_name,
+                access_role_name=self._bot.settings.network_access_role_name,
+                operator_role_name=self._bot.settings.network_operator_role_name,
+            )
+        except ProfileValidationError as exc:
+            return ProvisionOutcome(success=False, error=str(exc))
+        except discord.HTTPException as exc:
+            return ProvisionOutcome(success=False, error=f"Discord API error: {exc}")
+
+        networks = await self._context.network_repo.list_all()
+        view = NetworkProfileView(self._bot, 0, [n.key for n in networks])
+        embed = build_client_profile_embed(
+            server_name=request.server_name,
+            display_name=request.display_name,
+            enabled=True,
+        )
+        starter = await provision.profile_channel.send(
+            embed=embed,
+            view=view,
+            silent=True,
+        )
+
+        client = await self._context.client_repo.create(
+            guild_id=guild.id,
+            server_name=request.server_name,
+            display_name=request.display_name,
+            category_id=provision.category.id,
+            client_role_id=provision.client_role.id,
+            profile_channel_id=provision.profile_channel.id,
+            profile_message_id=starter.id,
+        )
+
+        view = NetworkProfileView(self._bot, client.id, [n.key for n in networks])
+        self._bot.add_view(view)
+        await starter.edit(view=view)
+
+        emoji_service = EmojiService()
+        emoji_result = await emoji_service.sync_for_profile(
+            guild,
+            type(
+                "ProfileAdapter",
+                (),
+                {
+                    "emoji_id": None,
+                    "emoji_name": None,
+                    "image_hash": None,
+                    "degraded_reason": None,
+                    "server_name": request.server_name,
+                    "display_name": request.display_name,
+                    "source_channel_id": provision.profile_channel.id,
+                },
+            )(),
+            image,
+            previous_hash=None,
+            previous_emoji_id=None,
+            force=True,
+        )
+        if emoji_result.emoji_id is not None:
+            await self._context.client_repo.update_emoji_fields(
+                client.id,
+                emoji_id=emoji_result.emoji_id,
+                emoji_name=emoji_result.emoji_name,
+                image_hash=emoji_result.image_hash,
+                degraded_reason=emoji_result.degraded_reason,
+            )
+            client = await self._context.client_repo.get_by_id(client.id) or client
+
+        await refresh_client_profile_message(self._bot, self._context, guild, client)
+        return ProvisionOutcome(
+            success=True,
+            client_role=provision.client_role,
+            profile_channel=provision.profile_channel,
+        )
 
     async def deny_request(
         self,
@@ -311,26 +389,20 @@ class ServerRequestService:
             )
             requester = guild.get_member(request.requester_user_id)
             if requester is not None:
-                network = await self._context.network_repo.get_by_id(request.network_id)
-                display = network.display_name if network is not None else "the network"
-                await self._notify_requester(
-                    requester,
-                    approved=False,
-                    network_display_name=display,
-                )
+                await self._notify_requester(requester, approved=False)
 
         return ReviewRequestResult(success=True, message="The join request was denied.")
 
     async def _finalize_review_message(
         self,
         guild: discord.Guild,
-        request,
+        request: ServerRequest,
         moderator: discord.Member,
         status: ServerRequestStatus,
     ) -> None:
         if request.moderator_message_id is None:
             return
-        from bot.services.guild_channels import resolve_join_requests_channel
+        from bot.services.guild_layout import resolve_join_requests_channel
 
         channel = resolve_join_requests_channel(guild)
         if channel is None:
@@ -359,30 +431,42 @@ class ServerRequestService:
         requester: discord.Member,
         *,
         approved: bool,
-        network_display_name: str,
-        feed_channel: discord.TextChannel | None = None,
         profile_channel: discord.TextChannel | None = None,
     ) -> None:
+        bot_user = self._bot.user
+        if bot_user is not None and requester.id == bot_user.id:
+            logger.debug(
+                "Skipping join-request DM to bot user",
+                extra={"user_id": requester.id, "approved": approved},
+            )
+            return
+        if getattr(requester, "bot", False):
+            logger.debug(
+                "Skipping join-request DM to bot account",
+                extra={"user_id": requester.id, "approved": approved},
+            )
+            return
+
         if approved:
             description = (
-                f"Your request to join **{network_display_name}** was approved.\n\n"
-                "Open your feed channel and use **Subscribe to Me!** (Channel Follow) "
-                "to connect your announcement channel. Use the pinned **Edit Profile** "
-                "button to update your display name or image.\n"
+                "Your request to join **The Network** hub was approved.\n\n"
+                "Open your **network-profile** channel and subscribe to networks "
+                "with the buttons there. Connect your announcement channel to each "
+                "**publish** channel via Channel Follow.\n"
             )
-            if feed_channel is not None:
-                description += f"\nChannel: {feed_channel.mention}"
+            if profile_channel is not None:
+                description += f"\nProfile: {profile_channel.mention}"
             colour = discord.Colour.green()
             title = "Join request approved"
         else:
-            description = f"Your request to join **{network_display_name}** was denied."
+            description = "Your request to join **The Network** hub was denied."
             colour = discord.Colour.red()
             title = "Join request denied"
 
         embed = discord.Embed(title=title, description=description, colour=colour)
         try:
             await requester.send(embed=embed)
-        except discord.HTTPException:
+        except (discord.HTTPException, AttributeError):
             logger.debug(
                 "Could not DM requester about review outcome",
                 extra={"user_id": requester.id, "approved": approved},

@@ -8,8 +8,8 @@ class Network:
     id: int
     key: str
     display_name: str
-    feed_category_id: int
-    output_channel_id: int
+    feed_category_id: int | None
+    output_channel_id: int | None
     concat_channel_id: int | None
     profile_forum_channel_id: int | None
     enabled: bool

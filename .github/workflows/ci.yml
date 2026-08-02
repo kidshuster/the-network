@@ -25,3 +25,6 @@ jobs:
 
       - name: Pytest
         run: pytest -q
+
+      - name: Deploy bundle smoke test
+        run: ./bin/test_deploy_bundle.sh

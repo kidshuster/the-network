@@ -1,0 +1,35 @@
+kind: embed
+title: "📡 The Network — Relay Rules"
+colour: gold
+description: |
+  Servers linked to a network **publish to every participant**.
+  What you post in your announcement channel is relayed across the whole network —
+  treat it like a shared megaphone, not your personal spam cannon. 📢
+fields:
+  - name: "🚫 Don't flood the network"
+    value: |
+      No spam, no junk, no constant low-effort posts.
+      If you abuse the relay, you'll be **removed from the network** — no drama, just gone.
+    inline: false
+  - name: "🔒 Lock down your announcement channel"
+    value: |
+      On **your** server, restrict who can post in your announcement channel —
+      **officers and moderators only**. One careless member posting for everyone
+      is how networks get burned.
+    inline: false
+  - name: "🎯 Post what matters"
+    value: |
+      Updates, events, ops, recruitment — things partner servers actually want to see.
+      Not memes, not ads, not noise.
+    inline: false
+  - name: "⚖️ Play by Discord's rules too"
+    value: |
+      Illegal content, hate, scams, and ToS violations get you bounced from the network
+      and reported. Don't be that server.
+    inline: false
+  - name: "🛠️ Joining the hub"
+    value: |
+      Open **#join-the-network** under **The Network** and click
+      **Join Network** when you're ready to link up.
+    inline: false
+footer: "The Network • hub rules • v{version}"

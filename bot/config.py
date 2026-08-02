@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-    DEFAULT_NETWORK_MODERATOR_ROLE_NAME,
+    DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
 )
 
 
@@ -29,12 +29,17 @@ class Settings(BaseSettings):
     manual_relay_enabled: bool = Field(default=False, alias="MANUAL_RELAY_ENABLED")
     network_access_role_name: str = Field(
         default=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        alias="NETWORK_ACCESS_ROLE_NAME",
+        validation_alias=AliasChoices("NETWORK_ACCESS_ROLE_NAME", "NETWORK_BOT_ROLE_NAME"),
     )
-    network_moderator_role_name: str = Field(
-        default=DEFAULT_NETWORK_MODERATOR_ROLE_NAME,
-        alias="NETWORK_MODERATOR_ROLE_NAME",
+    network_operator_role_name: str = Field(
+        default=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        alias="NETWORK_OPERATOR_ROLE_NAME",
     )
+
+    @property
+    def network_bot_role_name(self) -> str:
+        """Backwards-compatible alias for the hub access role."""
+        return self.network_access_role_name
     topgg_token: str | None = Field(default=None, alias="TOPGG_TOKEN")
 
     @field_validator(

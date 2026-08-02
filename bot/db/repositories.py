@@ -8,7 +8,16 @@ import aiosqlite
 
 from bot.constants import RelayStatus
 from bot.db.connection import Database
-from bot.db.models import NetworkRow, ProfileRow, RelayRecordRow, ServerRequestRow
+from bot.db.models import (
+    ClientRow,
+    ClientSubscriptionRow,
+    NetworkRow,
+    ProfileRow,
+    RelayRecordRow,
+    ServerRequestRow,
+)
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
 from bot.domain.errors import NetworkValidationError, ProfileValidationError, RelayError
 from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
@@ -38,9 +47,9 @@ class NetworkRepository:
         guild_id: int,
         key: str,
         display_name: str,
-        feed_category_id: int,
-        output_channel_id: int,
-        concat_channel_id: int | None,
+        feed_category_id: int | None = None,
+        output_channel_id: int | None = None,
+        concat_channel_id: int | None = None,
         profile_forum_channel_id: int | None = None,
         join_channel_id: int | None = None,
     ) -> Network:
@@ -75,7 +84,7 @@ class NetworkRepository:
             await self._db.connection.commit()
         except aiosqlite.IntegrityError as exc:
             raise NetworkValidationError(
-                "A network with that key, feed category, or output channel already exists."
+                "A network with that key already exists."
             ) from exc
         network_id = cursor.lastrowid
         if network_id is None:
@@ -430,7 +439,8 @@ class RelayRecordRepository:
         source_message_id: int,
         source_channel_id: int,
         source_webhook_id: int | None,
-        profile_id: int,
+        profile_id: int | None = None,
+        client_id: int | None = None,
         network_id: int,
         destination_channel_id: int,
     ) -> RelayRecord:
@@ -440,16 +450,17 @@ class RelayRecordRepository:
                 """
                 INSERT INTO relay_records (
                     source_message_id, source_channel_id, source_webhook_id,
-                    profile_id, network_id, destination_channel_id,
+                    profile_id, client_id, network_id, destination_channel_id,
                     destination_message_ids, status, error_message,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_message_id,
                     source_channel_id,
                     source_webhook_id,
                     profile_id,
+                    client_id,
                     network_id,
                     destination_channel_id,
                     "[]",
@@ -531,7 +542,7 @@ class ServerRequestRepository:
         self,
         *,
         guild_id: int,
-        network_id: int,
+        network_id: int | None,
         requester_user_id: int,
         server_name: str,
         display_name: str,
@@ -590,17 +601,28 @@ class ServerRequestRepository:
 
     async def get_pending_for_requester(
         self,
-        network_id: int,
         requester_user_id: int,
+        *,
+        network_id: int | None = None,
     ) -> ServerRequest | None:
-        row = await self._db.fetchone(
-            """
-            SELECT * FROM server_requests
-            WHERE network_id = ? AND requester_user_id = ? AND status = ?
-            ORDER BY id DESC LIMIT 1
-            """,
-            (network_id, requester_user_id, ServerRequestStatus.PENDING),
-        )
+        if network_id is not None:
+            row = await self._db.fetchone(
+                """
+                SELECT * FROM server_requests
+                WHERE network_id = ? AND requester_user_id = ? AND status = ?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (network_id, requester_user_id, ServerRequestStatus.PENDING),
+            )
+        else:
+            row = await self._db.fetchone(
+                """
+                SELECT * FROM server_requests
+                WHERE network_id IS NULL AND requester_user_id = ? AND status = ?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (requester_user_id, ServerRequestStatus.PENDING),
+            )
         return ServerRequestRow.from_row(row) if row else None
 
     async def set_moderator_message_id(self, request_id: int, message_id: int) -> ServerRequest:
@@ -651,6 +673,12 @@ class ServerRequestRepository:
             (network_id,),
         )
 
+    async def delete_by_id(self, request_id: int) -> None:
+        await self._db.execute(
+            "DELETE FROM server_requests WHERE id = ?",
+            (request_id,),
+        )
+
 
 class SettingsRepository:
     def __init__(self, db: Database) -> None:
@@ -671,4 +699,413 @@ class SettingsRepository:
             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
             """,
             (key, value, now),
+        )
+
+
+class ClientRepository:
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def create(
+        self,
+        *,
+        guild_id: int,
+        server_name: str,
+        display_name: str,
+        category_id: int,
+        client_role_id: int,
+        profile_channel_id: int,
+        profile_message_id: int,
+        enabled: bool = True,
+    ) -> Client:
+        now = datetime.now(tz=UTC).isoformat()
+        try:
+            cursor = await self._db.connection.execute(
+                """
+                INSERT INTO clients (
+                    guild_id, server_name, display_name, category_id,
+                    client_role_id, profile_channel_id, profile_message_id,
+                    enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    guild_id,
+                    server_name.strip(),
+                    display_name.strip(),
+                    category_id,
+                    client_role_id,
+                    profile_channel_id,
+                    profile_message_id,
+                    1 if enabled else 0,
+                    now,
+                    now,
+                ),
+            )
+            await self._db.connection.commit()
+        except aiosqlite.IntegrityError as exc:
+            raise ProfileValidationError(
+                f"A client named {server_name!r} already exists."
+            ) from exc
+        client_id = cursor.lastrowid
+        if client_id is None:
+            raise RuntimeError("Failed to create client row")
+        row = await self._db.fetchone("SELECT * FROM clients WHERE id = ?", (client_id,))
+        if row is None:
+            raise RuntimeError("Created client row not found")
+        return ClientRow.from_row(row)
+
+    async def get_by_id(self, client_id: int) -> Client | None:
+        row = await self._db.fetchone("SELECT * FROM clients WHERE id = ?", (client_id,))
+        return ClientRow.from_row(row) if row else None
+
+    async def get_by_server_name(
+        self,
+        guild_id: int,
+        server_name: str,
+    ) -> Client | None:
+        name = server_name.strip()
+        if not name:
+            return None
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM clients
+            WHERE guild_id = ? AND server_name = ? COLLATE NOCASE
+            """,
+            (guild_id, name),
+        )
+        return ClientRow.from_row(row) if row else None
+
+    async def get_by_profile_channel(self, channel_id: int) -> Client | None:
+        row = await self._db.fetchone(
+            "SELECT * FROM clients WHERE profile_channel_id = ?",
+            (channel_id,),
+        )
+        return ClientRow.from_row(row) if row else None
+
+    async def list_all(self) -> list[Client]:
+        cursor = await self._db.connection.execute(
+            "SELECT * FROM clients ORDER BY server_name ASC"
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ClientRow.from_row(row) for row in rows]
+
+    async def update_profile_message_id(self, client_id: int, message_id: int) -> Client:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE clients SET profile_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, client_id),
+        )
+        updated = await self.get_by_id(client_id)
+        if updated is None:
+            raise RuntimeError("Client disappeared after profile message update")
+        return updated
+
+    async def update_display_name(self, client_id: int, display_name: str) -> Client:
+        label = display_name.strip()
+        if not label:
+            raise ProfileValidationError("Display name cannot be empty.")
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            "UPDATE clients SET display_name = ?, updated_at = ? WHERE id = ?",
+            (label, now, client_id),
+        )
+        updated = await self.get_by_id(client_id)
+        if updated is None:
+            raise RuntimeError("Client disappeared after display name update")
+        return updated
+
+    async def update_emoji_fields(
+        self,
+        client_id: int,
+        *,
+        emoji_id: int | None,
+        emoji_name: str | None,
+        image_hash: str | None,
+        degraded_reason: str | None,
+    ) -> Client:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE clients SET
+                emoji_id = ?, emoji_name = ?, image_hash = ?,
+                degraded_reason = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (emoji_id, emoji_name, image_hash, degraded_reason, now, client_id),
+        )
+        updated = await self.get_by_id(client_id)
+        if updated is None:
+            raise RuntimeError("Client disappeared after emoji update")
+        return updated
+
+    async def set_enabled(self, client_id: int, enabled: bool) -> Client:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            "UPDATE clients SET enabled = ?, updated_at = ? WHERE id = ?",
+            (1 if enabled else 0, now, client_id),
+        )
+        updated = await self.get_by_id(client_id)
+        if updated is None:
+            raise RuntimeError("Client disappeared after enable update")
+        return updated
+
+    async def delete(self, client_id: int) -> Client | None:
+        existing = await self.get_by_id(client_id)
+        if existing is None:
+            return None
+        await self._db.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+        return existing
+
+    async def create_subscription(
+        self,
+        *,
+        client_id: int,
+        network_id: int,
+        publish_channel_id: int,
+        subscribe_channel_id: int,
+        moderation_message_id: int | None = None,
+        enabled: bool = True,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        try:
+            cursor = await self._db.connection.execute(
+                """
+                INSERT INTO client_subscriptions (
+                    client_id, network_id, publish_channel_id,
+                    subscribe_channel_id, moderation_message_id,
+                    enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    client_id,
+                    network_id,
+                    publish_channel_id,
+                    subscribe_channel_id,
+                    moderation_message_id,
+                    1 if enabled else 0,
+                    now,
+                    now,
+                ),
+            )
+            await self._db.connection.commit()
+        except aiosqlite.IntegrityError as exc:
+            raise ProfileValidationError(
+                "This client is already subscribed to that network."
+            ) from exc
+        sub_id = cursor.lastrowid
+        if sub_id is None:
+            raise RuntimeError("Failed to create subscription row")
+        row = await self._db.fetchone(
+            "SELECT * FROM client_subscriptions WHERE id = ?",
+            (sub_id,),
+        )
+        if row is None:
+            raise RuntimeError("Created subscription row not found")
+        return ClientSubscriptionRow.from_row(row)
+
+    async def get_subscription_by_id(self, subscription_id: int) -> ClientSubscription | None:
+        row = await self._db.fetchone(
+            "SELECT * FROM client_subscriptions WHERE id = ?",
+            (subscription_id,),
+        )
+        return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def get_subscription(
+        self,
+        client_id: int,
+        network_id: int,
+    ) -> ClientSubscription | None:
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM client_subscriptions
+            WHERE client_id = ? AND network_id = ?
+            """,
+            (client_id, network_id),
+        )
+        return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def get_subscription_by_publish_channel(
+        self,
+        publish_channel_id: int,
+    ) -> ClientSubscription | None:
+        row = await self._db.fetchone(
+            "SELECT * FROM client_subscriptions WHERE publish_channel_id = ?",
+            (publish_channel_id,),
+        )
+        return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def list_subscriptions_by_network(
+        self,
+        network_id: int,
+    ) -> list[ClientSubscription]:
+        cursor = await self._db.connection.execute(
+            """
+            SELECT * FROM client_subscriptions
+            WHERE network_id = ? ORDER BY id ASC
+            """,
+            (network_id,),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ClientSubscriptionRow.from_row(row) for row in rows]
+
+    async def list_subscriptions_by_client(
+        self,
+        client_id: int,
+    ) -> list[ClientSubscription]:
+        cursor = await self._db.connection.execute(
+            """
+            SELECT * FROM client_subscriptions
+            WHERE client_id = ? ORDER BY id ASC
+            """,
+            (client_id,),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ClientSubscriptionRow.from_row(row) for row in rows]
+
+    async def list_all_subscriptions(self) -> list[ClientSubscription]:
+        cursor = await self._db.connection.execute(
+            "SELECT * FROM client_subscriptions ORDER BY id ASC"
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ClientSubscriptionRow.from_row(row) for row in rows]
+
+    async def update_moderation_message_id(
+        self,
+        subscription_id: int,
+        message_id: int,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET moderation_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after moderation message update")
+        return updated
+
+    async def set_subscription_enabled(
+        self,
+        subscription_id: int,
+        enabled: bool,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions SET enabled = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (1 if enabled else 0, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after enable update")
+        return updated
+
+    async def delete_subscription(self, subscription_id: int) -> ClientSubscription | None:
+        existing = await self.get_subscription_by_id(subscription_id)
+        if existing is None:
+            return None
+        await self._db.execute(
+            "DELETE FROM client_subscriptions WHERE id = ?",
+            (subscription_id,),
+        )
+        return existing
+
+    async def delete_subscriptions_by_network(self, network_id: int) -> None:
+        await self._db.execute(
+            "DELETE FROM client_subscriptions WHERE network_id = ?",
+            (network_id,),
+        )
+
+    async def add_blacklist(
+        self,
+        subscription_id: int,
+        blocked_client_id: int,
+    ) -> None:
+        now = datetime.now(tz=UTC).isoformat()
+        try:
+            await self._db.execute(
+                """
+                INSERT INTO client_blacklists (
+                    subscription_id, blocked_client_id, created_at
+                ) VALUES (?, ?, ?)
+                """,
+                (subscription_id, blocked_client_id, now),
+            )
+        except aiosqlite.IntegrityError:
+            return
+
+    async def remove_blacklist(
+        self,
+        subscription_id: int,
+        blocked_client_id: int,
+    ) -> None:
+        await self._db.execute(
+            """
+            DELETE FROM client_blacklists
+            WHERE subscription_id = ? AND blocked_client_id = ?
+            """,
+            (subscription_id, blocked_client_id),
+        )
+
+    async def is_blacklisted(
+        self,
+        subscription_id: int,
+        blocked_client_id: int,
+    ) -> bool:
+        row = await self._db.fetchone(
+            """
+            SELECT 1 FROM client_blacklists
+            WHERE subscription_id = ? AND blocked_client_id = ?
+            """,
+            (subscription_id, blocked_client_id),
+        )
+        return row is not None
+
+    async def list_blacklisted_client_ids(self, subscription_id: int) -> list[int]:
+        cursor = await self._db.connection.execute(
+            """
+            SELECT blocked_client_id FROM client_blacklists
+            WHERE subscription_id = ?
+            ORDER BY blocked_client_id ASC
+            """,
+            (subscription_id,),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [int(row["blocked_client_id"]) for row in rows]
+
+    async def delete_blacklists_for_subscription(self, subscription_id: int) -> None:
+        await self._db.execute(
+            "DELETE FROM client_blacklists WHERE subscription_id = ?",
+            (subscription_id,),
+        )
+
+    async def delete_blacklists_for_client(self, client_id: int) -> None:
+        await self._db.execute(
+            """
+            DELETE FROM client_blacklists
+            WHERE subscription_id IN (
+                SELECT id FROM client_subscriptions WHERE client_id = ?
+            )
+            """,
+            (client_id,),
+        )
+
+    async def delete_blacklists_blocking_client(self, client_id: int) -> None:
+        await self._db.execute(
+            "DELETE FROM client_blacklists WHERE blocked_client_id = ?",
+            (client_id,),
         )

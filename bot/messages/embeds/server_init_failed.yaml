@@ -1,0 +1,4 @@
+kind: embed
+title: "Server Init Failed"
+colour: red
+description: "{description}"

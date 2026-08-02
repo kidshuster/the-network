@@ -9,6 +9,7 @@ from bot.services.guild_layout import (
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_WELCOME_SINK,
     join_channel_name,
+    resolve_bot_role,
     resolve_human_moderator_role,
     resolve_moderator_role,
     resolve_network_announcement_channel,
@@ -31,28 +32,28 @@ def test_resolve_network_hub_category() -> None:
 
 def test_resolve_human_moderator_role_prefers_moderator() -> None:
     guild = MagicMock(spec=discord.Guild)
-    bot_staff = MagicMock(spec=discord.Role)
-    bot_staff.name = "The Network Moderator"
+    bot_role = MagicMock(spec=discord.Role)
+    bot_role.name = "The Network"
     human = MagicMock(spec=discord.Role)
     human.name = "Moderator"
-    guild.roles = [bot_staff, human]
+    guild.roles = [bot_role, human]
     assert resolve_human_moderator_role(guild) is human
 
 
-def test_resolve_moderator_role_prefers_network_moderator() -> None:
+def test_resolve_bot_role_finds_network() -> None:
     guild = MagicMock(spec=discord.Guild)
     legacy = MagicMock(spec=discord.Role)
     legacy.name = "Moderator"
-    preferred = MagicMock(spec=discord.Role)
-    preferred.name = "The Network Moderator"
-    guild.roles = [legacy, preferred]
-    assert resolve_moderator_role(guild) is preferred
+    network = MagicMock(spec=discord.Role)
+    network.name = "The Network"
+    guild.roles = [legacy, network]
+    assert resolve_bot_role(guild) is network
 
 
-def test_resolve_moderator_role_falls_back_to_legacy() -> None:
+def test_resolve_moderator_role_is_bot_role_alias() -> None:
     guild = MagicMock(spec=discord.Guild)
     role = MagicMock(spec=discord.Role)
-    role.name = "Moderator"
+    role.name = "The Network"
     guild.roles = [role]
     assert resolve_moderator_role(guild) is role
 

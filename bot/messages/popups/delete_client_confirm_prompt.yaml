@@ -1,0 +1,5 @@
+kind: text
+content: |
+  Permanently delete client **{server_name}**?
+
+  This removes your profile channel, client role, network subscriptions, and all related blacklists. This cannot be undone.

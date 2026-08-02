@@ -1,0 +1,9 @@
+kind: embed
+title: "Join Guide Synced"
+colour: green
+description: "Refreshed {channel_mention}."
+fields:
+  - name: Message
+    value: "{message_url}"
+    inline: false
+    when: "{message_url}"

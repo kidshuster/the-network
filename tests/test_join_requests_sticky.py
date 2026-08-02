@@ -1,37 +1,23 @@
 from __future__ import annotations
 
-from bot.domain.network import Network
 from bot.services.join_requests_sticky import (
     build_how_to_join_embed,
+    build_how_to_join_footer,
     format_how_to_join_sticky_location,
     parse_how_to_join_sticky_location,
 )
 
 
-def _network() -> Network:
-    return Network(
-        id=1,
-        key="stingers",
-        display_name="Stingers",
-        feed_category_id=100,
-        output_channel_id=200,
-        concat_channel_id=None,
-        profile_forum_channel_id=300,
-        enabled=True,
-    )
-
-
 def test_build_how_to_join_embed_covers_setup_and_subscribe() -> None:
-    embed = build_how_to_join_embed(_network())
+    embed = build_how_to_join_embed()
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "Enable Community" in body
     assert "Announcement" in body
-    assert "Join Server" in body
-    assert "Subscribe to Me!" in body
-    assert "Edit Profile" in body
-    assert "`stingers`" not in body
+    assert "Join Network" in body
+    assert "network-profile" in body
+    assert "Blacklist" in body
     assert embed.footer is not None
-    assert embed.footer.text == "The Network • how to join • 1 • v6"
+    assert embed.footer.text == build_how_to_join_footer()
 
 
 def test_parse_how_to_join_sticky_location_supports_channel_message_pair() -> None:

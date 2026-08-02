@@ -2,87 +2,57 @@ from __future__ import annotations
 
 import pytest
 
-from bot.db.repositories import NetworkRepository
+from bot.db.repositories import ClientRepository, NetworkRepository
 from bot.domain.errors import RoutingError
+from bot.services.client_cache import ClientCache
 from bot.services.routing_service import RoutingService
 
 
 @pytest.mark.asyncio
 async def test_load_cache_indexes_networks(db) -> None:
     repo = NetworkRepository(db)
-    await repo.create(
-        guild_id=100,
-        key="net-a",
-        display_name="Net A",
-        feed_category_id=10,
-        output_channel_id=20,
-        concat_channel_id=None,
-    )
-    await repo.create(
-        guild_id=100,
-        key="net-b",
-        display_name="Net B",
-        feed_category_id=11,
-        output_channel_id=21,
-        concat_channel_id=22,
-    )
+    await repo.create(guild_id=100, key="net-a", display_name="Net A")
+    await repo.create(guild_id=100, key="net-b", display_name="Net B")
 
     routing = RoutingService(repo)
     await routing.load_cache()
 
     assert routing.network_count == 2
     assert routing.get_by_key("net-a") is not None
-    assert routing.get_by_category(11) is not None
-    assert routing.get_by_category(999) is None
+    assert routing.get_by_key("missing") is None
 
 
 @pytest.mark.asyncio
-async def test_resolve_category_route_respects_enabled(db) -> None:
-    repo = NetworkRepository(db)
-    await repo.create(
+async def test_resolve_publish_subscription(db) -> None:
+    network_repo = NetworkRepository(db)
+    client_repo = ClientRepository(db)
+    network = await network_repo.create(guild_id=100, key="route-me", display_name="Route Me")
+    client = await client_repo.create(
         guild_id=100,
-        key="route-me",
-        display_name="Route Me",
-        feed_category_id=42,
-        output_channel_id=99,
-        concat_channel_id=43,
+        server_name="c1",
+        display_name="C1",
+        category_id=1,
+        client_role_id=2,
+        profile_channel_id=3,
+        profile_message_id=4,
     )
-    await repo.set_enabled("route-me", False)
-
-    routing = RoutingService(repo)
-    await routing.load_cache()
-
-    assert routing.resolve_category_route(42) is None
-
-    await repo.set_enabled("route-me", True)
-    await routing.load_cache()
-
-    route = routing.resolve_category_route(42)
-    assert route is not None
-    assert route.output_channel_id == 99
-    assert route.concat_channel_id == 43
-
-
-@pytest.mark.asyncio
-async def test_resolve_source_channel_uses_parent_category(db) -> None:
-    repo = NetworkRepository(db)
-    await repo.create(
-        guild_id=100,
-        key="parent",
-        display_name="Parent",
-        feed_category_id=77,
-        output_channel_id=88,
-        concat_channel_id=None,
+    await client_repo.create_subscription(
+        client_id=client.id,
+        network_id=network.id,
+        publish_channel_id=201,
+        subscribe_channel_id=301,
     )
 
-    routing = RoutingService(repo)
+    routing = RoutingService(network_repo, client_repo)
+    cache = ClientCache(client_repo)
+    await cache.load_cache()
+    routing.attach_client_cache(cache)
     await routing.load_cache()
 
-    route = routing.resolve_source_channel(channel_id=501, parent_id=77)
-    assert route is not None
-    assert route.network.key == "parent"
-
-    assert routing.resolve_source_channel(channel_id=501, parent_id=None) is None
+    sub = routing.resolve_publish_subscription(201)
+    assert sub is not None
+    assert sub.publish_channel_id == 201
+    assert routing.resolve_publish_subscription(999) is None
 
 
 @pytest.mark.asyncio

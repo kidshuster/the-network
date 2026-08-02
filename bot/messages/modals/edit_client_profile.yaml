@@ -1,0 +1,16 @@
+kind: modal
+title: "Edit profile"
+fields:
+  - id: display_name
+    type: text
+    label: "Display name"
+    description: "Name shown on relayed messages"
+    placeholder: "My Server"
+    max_length: 100
+    required: true
+  - id: profile_image
+    type: file_upload
+    label: "Profile image"
+    description: "Upload a PNG, JPG, WebP, or GIF (optional — leave empty to keep current)"
+    required: false
+    max_values: 1

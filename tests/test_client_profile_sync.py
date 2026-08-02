@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import discord
+import pytest
+
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
+from bot.domain.network import Network
+from bot.services.client_profile_sync import post_subscription_moderation_embed
+
+
+def _client() -> Client:
+    return Client(
+        id=1,
+        guild_id=100,
+        server_name="acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+
+def _subscription(*, moderation_message_id: int | None = None) -> ClientSubscription:
+    return ClientSubscription(
+        id=5,
+        client_id=1,
+        network_id=2,
+        publish_channel_id=201,
+        subscribe_channel_id=501,
+        moderation_message_id=moderation_message_id,
+        enabled=True,
+    )
+
+
+def _network() -> Network:
+    return Network(
+        id=2,
+        key="stingers",
+        display_name="Stingers",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        enabled=True,
+        join_channel_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_moderation_embed_posts_to_profile_channel() -> None:
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.id = 30
+    profile_channel.send = AsyncMock(
+        return_value=MagicMock(spec=discord.Message, id=999)
+    )
+    profile_channel.fetch_message = AsyncMock()
+
+    subscribe_channel = MagicMock(spec=discord.TextChannel)
+    subscribe_channel.id = 501
+    subscribe_channel.send = AsyncMock()
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.get_channel = MagicMock(
+        side_effect=lambda channel_id: (
+            profile_channel if channel_id == 30 else subscribe_channel
+        )
+    )
+
+    bot = MagicMock()
+    bot.add_view = MagicMock()
+    context = MagicMock()
+    context.client_repo.update_moderation_message_id = AsyncMock()
+
+    await post_subscription_moderation_embed(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        network=_network(),
+        subscription=_subscription(),
+    )
+
+    profile_channel.send.assert_awaited_once()
+    subscribe_channel.send.assert_not_called()
+    context.client_repo.update_moderation_message_id.assert_awaited_once_with(5, 999)
+
+
+@pytest.mark.asyncio
+async def test_moderation_embed_deletes_prior_message_in_profile() -> None:
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.id = 30
+    prior = MagicMock(spec=discord.Message)
+    prior.delete = AsyncMock()
+    profile_channel.fetch_message = AsyncMock(return_value=prior)
+    profile_channel.send = AsyncMock(
+        return_value=MagicMock(spec=discord.Message, id=1000)
+    )
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.get_channel = MagicMock(return_value=profile_channel)
+
+    bot = MagicMock()
+    bot.add_view = MagicMock()
+    context = MagicMock()
+    context.client_repo.update_moderation_message_id = AsyncMock()
+
+    await post_subscription_moderation_embed(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        network=_network(),
+        subscription=_subscription(moderation_message_id=888),
+    )
+
+    profile_channel.fetch_message.assert_awaited_once_with(888)
+    prior.delete.assert_awaited_once()
+    profile_channel.send.assert_awaited_once()

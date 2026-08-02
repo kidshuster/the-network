@@ -1,0 +1,17 @@
+kind: modal
+title: "Create network"
+fields:
+  - id: key
+    type: text
+    label: "Network key (nkey)"
+    description: "Short identifier used in channel names and buttons"
+    placeholder: "my-network"
+    max_length: 50
+    required: true
+  - id: display_name
+    type: text
+    label: "Display name"
+    description: "Human-readable network name"
+    placeholder: "My Network"
+    max_length: 100
+    required: true

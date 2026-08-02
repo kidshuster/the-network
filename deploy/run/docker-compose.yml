@@ -1,0 +1,9 @@
+# The Network — runtime compose (image tag set by bin/package.sh)
+services:
+  the-network:
+    image: ghcr.io/__GITHUB_USER__/the-network:__IMAGE_TAG__
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data

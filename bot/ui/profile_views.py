@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.messages import modal_spec, render_embed, render_text
+from bot.messages.modals_builder import add_modal_fields
 from bot.ui.custom_ids import profile_edit_button
 
 if TYPE_CHECKING:
@@ -13,15 +15,100 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class EditClientProfileModal(discord.ui.Modal):
+    def __init__(
+        self,
+        bot: NetworkRelayBot,
+        client_id: int,
+        current_display_name: str,
+    ) -> None:
+        spec = modal_spec("edit_client_profile")
+        super().__init__(title=spec.title)
+        self._bot = bot
+        self._client_id = client_id
+        self._fields = add_modal_fields(self, spec)
+        display_input = self._fields["display_name"].component
+        assert isinstance(display_input, discord.ui.TextInput)
+        display_input.default = current_display_name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send(render_text("hub_guild_form_only"))
+            return
+
+        context = self._bot.bot_context
+        if context is None:
+            await interaction.followup.send(render_text("bot_not_ready"))
+            return
+
+        client = await context.client_repo.get_by_id(self._client_id)
+        if client is None:
+            await interaction.followup.send(render_text("client_not_found"))
+            return
+
+        member = interaction.user
+        if isinstance(member, discord.Member):
+            client_role = guild.get_role(client.client_role_id)
+            if client_role is None or client_role not in member.roles:
+                if not member.guild_permissions.manage_guild:
+                    await interaction.followup.send(
+                        render_text("client_role_required_edit"),
+                    )
+                    return
+
+        display_name = self._fields["display_name"].component.value.strip()
+        profile_image: discord.Attachment | None = None
+        attachments = self._fields["profile_image"].component.values
+        if attachments:
+            profile_image = attachments[0]
+
+        from bot.services.client_profile_edit import apply_client_profile_edit
+
+        result = await apply_client_profile_edit(
+            self._bot,
+            context,
+            guild,
+            client_id=self._client_id,
+            display_name=display_name,
+            profile_image=profile_image,
+        )
+        if not result.success or result.client is None:
+            await interaction.followup.send(
+                embed=render_embed(
+                    "profile_update_failed",
+                    description=result.error or "Unknown error",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        warnings = ""
+        if result.warnings:
+            warnings = "\n".join(f"• {warning}" for warning in result.warnings)
+
+        await interaction.followup.send(
+            embed=render_embed(
+                "profile_updated",
+                display_name=result.client.display_name,
+                warnings=warnings,
+            ),
+            ephemeral=True,
+        )
+
+
 class EditProfileView(discord.ui.View):
-    def __init__(self, bot: NetworkRelayBot, profile_channel_id: int) -> None:
+    """Legacy alias — use NetworkProfileView for new clients."""
+
+    def __init__(self, bot: NetworkRelayBot, client_id: int) -> None:
         super().__init__(timeout=None)
         self._bot = bot
-        self._profile_channel_id = profile_channel_id
+        self._client_id = client_id
         button = discord.ui.Button(
             label="Edit Profile",
             style=discord.ButtonStyle.primary,
-            custom_id=profile_edit_button(profile_channel_id),
+            custom_id=profile_edit_button(client_id),
         )
         button.callback = self._edit_callback
         self.add_item(button)
@@ -29,173 +116,108 @@ class EditProfileView(discord.ui.View):
     async def _edit_callback(self, interaction: discord.Interaction) -> None:
         context = self._bot.bot_context
         if context is None:
-            await interaction.response.send_message("Bot is not ready yet.", ephemeral=True)
+            await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
-
-        profile = await context.profile_repo.get_by_thread_id(self._profile_channel_id)
-        if profile is None:
+        client = await context.client_repo.get_by_id(self._client_id)
+        if client is None:
             await interaction.response.send_message(
-                "This profile is no longer registered.",
+                render_text("client_not_found"),
                 ephemeral=True,
             )
             return
-
-        member = interaction.user
-        if not isinstance(member, discord.Member):
-            await interaction.response.send_message(
-                "Could not resolve your membership.",
-                ephemeral=True,
-            )
-            return
-
-        if not member.guild_permissions.manage_guild:
-            if profile.partner_role_id is None:
-                await interaction.response.send_message(
-                    "This profile has no partner role configured.",
-                    ephemeral=True,
-                )
-                return
-            server_role = (
-                interaction.guild.get_role(profile.partner_role_id) if interaction.guild else None
-            )
-            if server_role is None or server_role not in member.roles:
-                await interaction.response.send_message(
-                    "You need the partner role for this server to edit its profile.",
-                    ephemeral=True,
-                )
-                return
-
         await interaction.response.send_modal(
-            EditProfileModal(
-                self._bot,
-                self._profile_channel_id,
-                profile.display_name,
-            )
+            EditClientProfileModal(self._bot, self._client_id, client.display_name),
         )
 
 
-class EditProfileModal(discord.ui.Modal, title="Edit profile"):
-    def __init__(
-        self,
-        bot: NetworkRelayBot,
-        profile_channel_id: int,
-        current_display_name: str,
-    ) -> None:
-        super().__init__()
+class DeleteClientConfirmView(discord.ui.View):
+    def __init__(self, bot: NetworkRelayBot, client_id: int) -> None:
+        super().__init__(timeout=60)
         self._bot = bot
-        self._profile_channel_id = profile_channel_id
+        self._client_id = client_id
 
-        self.display_name = discord.ui.Label(
-            text="Display name",
-            description="Name shown on relayed messages",
-            component=discord.ui.TextInput(
-                default=current_display_name,
-                placeholder="My Server",
-                max_length=100,
-                required=True,
-            ),
-        )
-        self.profile_image = discord.ui.Label(
-            text="Profile image",
-            description="Upload a PNG, JPG, WebP, or GIF (optional — leave empty to keep current)",
-            component=discord.ui.FileUpload(required=False, max_values=1),
-        )
-        self.add_item(self.display_name)
-        self.add_item(self.profile_image)
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True  # type: ignore[attr-defined]
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
+    @discord.ui.button(
+        label="Delete permanently",
+        style=discord.ButtonStyle.danger,
+    )
+    async def confirm(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
-        channel = interaction.channel
-        if guild is None or not isinstance(channel, discord.TextChannel):
-            await interaction.followup.send("This form only works inside your server feed channel.")
+        if guild is None:
+            await interaction.followup.send(render_text("invalid_guild"))
             return
 
         context = self._bot.bot_context
         if context is None:
-            await interaction.followup.send("Bot is not ready yet.")
+            await interaction.followup.send(render_text("bot_not_ready"))
             return
 
-        profile = await context.profile_repo.get_by_thread_id(self._profile_channel_id)
-        if profile is None:
-            await interaction.followup.send("This profile is no longer registered.")
+        client = await context.client_repo.get_by_id(self._client_id)
+        if client is None:
+            await interaction.followup.send(render_text("client_not_found"))
             return
 
         member = interaction.user
         if not isinstance(member, discord.Member):
-            await interaction.followup.send("Could not resolve your membership.")
+            await interaction.followup.send(render_text("invalid_member"))
             return
 
-        if not member.guild_permissions.manage_guild:
-            if profile.partner_role_id is None:
-                await interaction.followup.send("This profile has no partner role configured.")
-                return
-            server_role = guild.get_role(profile.partner_role_id)
-            if server_role is None or server_role not in member.roles:
-                await interaction.followup.send(
-                    "You need the partner role for this server to edit its profile."
-                )
-                return
+        client_role = guild.get_role(client.client_role_id)
+        if client_role is None or (
+            client_role not in member.roles and not member.guild_permissions.manage_guild
+        ):
+            await interaction.followup.send(render_text("client_role_required_delete"))
+            return
 
-        display_name = self.display_name.component.value.strip()
-        raw_image: bytes | None = None
-        attachments = self.profile_image.component.values
-        if attachments:
-            from bot.domain.errors import ProfileValidationError
-            from bot.services.image_service import read_profile_image_attachment
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send(render_text("bot_member_unavailable_brief"))
+            return
 
-            try:
-                image = await read_profile_image_attachment(attachments[0])
-            except ProfileValidationError as exc:
-                await interaction.followup.send(
-                    embed=discord.Embed(
-                        title="Profile Update Failed",
-                        description=str(exc),
-                        colour=discord.Colour.red(),
-                    ),
-                    ephemeral=True,
-                )
-                return
-            except discord.HTTPException:
-                await interaction.followup.send(
-                    embed=discord.Embed(
-                        title="Profile Update Failed",
-                        description="Failed to read the uploaded profile image.",
-                        colour=discord.Colour.red(),
-                    ),
-                    ephemeral=True,
-                )
-                return
-            raw_image = image.data
+        from bot.services.client_deletion import ClientDeletionService
 
-        result = await context.profile_sync.update_partner_profile(
+        result = await ClientDeletionService().delete_client(
             guild,
-            channel,
-            display_name=display_name,
-            profile_image_bytes=raw_image,
-            starter_view=EditProfileView(self._bot, self._profile_channel_id),
+            bot_member,
+            client=client,
+            client_repo=context.client_repo,
+            network_repo=context.network_repo,
+            context=context,
         )
-        if not result.success or result.profile is None:
+        if not result.success:
             await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Profile Update Failed",
-                    description=result.error or "Unknown error",
-                    colour=discord.Colour.red(),
+                embed=render_embed(
+                    "delete_client_failed",
+                    error=result.error or "Unknown error",
                 ),
-                ephemeral=True,
             )
             return
 
-        embed = discord.Embed(
-            title="Profile Updated",
-            description="Your relay profile was updated.",
-            colour=discord.Colour.green(),
+        await interaction.followup.send(
+            embed=render_embed(
+                "delete_client_success",
+                server_name=client.server_name,
+            ),
         )
-        embed.add_field(name="Display name", value=result.profile.display_name, inline=True)
-        if result.warnings:
-            embed.add_field(
-                name="Warnings",
-                value="\n".join(f"• {warning}" for warning in result.warnings),
-                inline=False,
-            )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def cancel(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await interaction.response.edit_message(
+            content=render_text("delete_client_cancelled"),
+            view=None,
+        )

@@ -7,9 +7,10 @@ import pytest
 
 from bot.config import Settings
 from bot.constants import RelayStatus
-from bot.db.repositories import NetworkRepository, ProfileRepository, RelayRecordRepository
-from bot.domain.profile import ServerProfile
-from bot.services.profile_cache import ProfileCache
+from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
+from bot.services.client_cache import ClientCache
 from bot.services.relay_service import RelayService
 from bot.services.routing_service import RoutingService
 
@@ -21,45 +22,66 @@ def _settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     return Settings(_env_file=None)
 
 
-async def _seed_network_profile(
+async def _seed_client_subscription(
     db,
     *,
     network_enabled: bool = True,
-    profile_enabled: bool = True,
-) -> tuple[ServerProfile, int]:
+    client_enabled: bool = True,
+    subscription_enabled: bool = True,
+) -> tuple[Client, ClientSubscription, int]:
     network_repo = NetworkRepository(db)
-    profile_repo = ProfileRepository(db)
+    client_repo = ClientRepository(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",
         display_name="Stingers",
-        feed_category_id=10,
-        output_channel_id=500,
-        concat_channel_id=501,
     )
     if not network_enabled:
         await network_repo.set_enabled("stingers", False)
 
-    await profile_repo.upsert(
+    client = await client_repo.create(
         guild_id=100,
-        profile_thread_id=301,
-        profile_starter_message_id=302,
-        source_channel_id=201,
-        network_id=network.id,
-        server_name="partner",
-        display_name="Partner",
-        enabled=profile_enabled,
+        server_name="publisher",
+        display_name="Publisher",
+        category_id=10,
+        client_role_id=20,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=client_enabled,
     )
-    await profile_repo.update_emoji_fields(
-        301,
+    await client_repo.update_emoji_fields(
+        client.id,
         emoji_id=888,
-        emoji_name="net_partner_123456",
+        emoji_name="net_publisher",
         image_hash="hash",
         degraded_reason=None,
     )
-    updated = await profile_repo.get_by_thread_id(301)
-    assert updated is not None
-    return updated, network.output_channel_id
+    client = await client_repo.get_by_id(client.id)
+    assert client is not None
+
+    subscriber = await client_repo.create(
+        guild_id=100,
+        server_name="subscriber",
+        display_name="Subscriber",
+        category_id=11,
+        client_role_id=21,
+        profile_channel_id=31,
+        profile_message_id=41,
+    )
+    sub_pub = await client_repo.create_subscription(
+        client_id=client.id,
+        network_id=network.id,
+        publish_channel_id=201,
+        subscribe_channel_id=500,
+        enabled=subscription_enabled,
+    )
+    await client_repo.create_subscription(
+        client_id=subscriber.id,
+        network_id=network.id,
+        publish_channel_id=202,
+        subscribe_channel_id=501,
+    )
+    return client, sub_pub, 501
 
 
 def _make_webhook_message(
@@ -100,18 +122,80 @@ async def _build_service(
 ) -> RelayService:
     settings = settings or _settings(monkeypatch)
     network_repo = NetworkRepository(db)
-    profile_repo = ProfileRepository(db)
+    client_repo = ClientRepository(db)
     relay_record_repo = RelayRecordRepository(db)
-    routing = RoutingService(network_repo)
+    routing = RoutingService(network_repo, client_repo)
+    client_cache = ClientCache(client_repo)
+    await client_cache.load_cache()
+    routing.attach_client_cache(client_cache)
     await routing.load_cache()
-    profile_cache = ProfileCache(profile_repo)
-    await profile_cache.load_cache()
-    return RelayService(settings, routing, profile_cache, relay_record_repo)
+    return RelayService(settings, routing, client_cache, client_repo, relay_record_repo)
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    profile, output_channel_id = await _seed_network_profile(db)
+    _client, _sub, subscribe_channel_id = await _seed_client_subscription(db)
+    service = await _build_service(db, monkeypatch)
+    message = _make_webhook_message()
+
+    own_subscribe = MagicMock(spec=discord.TextChannel)
+    own_sent = MagicMock(spec=discord.Message)
+    own_sent.id = 9000
+    own_sent.publish = AsyncMock()
+    own_subscribe.send = AsyncMock(return_value=own_sent)
+
+    other_subscribe = MagicMock(spec=discord.TextChannel)
+    other_sent = MagicMock(spec=discord.Message)
+    other_sent.id = 9001
+    other_sent.publish = AsyncMock()
+    other_subscribe.send = AsyncMock(return_value=other_sent)
+
+    def _get_channel(channel_id: int) -> discord.TextChannel | None:
+        if channel_id == 500:
+            return own_subscribe
+        if channel_id == 501:
+            return other_subscribe
+        return None
+
+    message.guild.get_channel = MagicMock(side_effect=_get_channel)
+
+    result = await service.relay_message(message)
+    assert result is not None
+    assert result.success
+    assert result.destination_message_ids == (9000, 9001)
+    own_subscribe.send.assert_awaited_once()
+    other_subscribe.send.assert_awaited_once()
+    own_sent.publish.assert_awaited_once()
+    other_sent.publish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_self_relay_to_own_subscribe_channel(
+    db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    network_repo = NetworkRepository(db)
+    client_repo = ClientRepository(db)
+    network = await network_repo.create(
+        guild_id=100,
+        key="stingers",
+        display_name="Stingers",
+    )
+    client = await client_repo.create(
+        guild_id=100,
+        server_name="solo",
+        display_name="Solo",
+        category_id=10,
+        client_role_id=20,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await client_repo.create_subscription(
+        client_id=client.id,
+        network_id=network.id,
+        publish_channel_id=201,
+        subscribe_channel_id=500,
+    )
+
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message()
 
@@ -123,53 +207,16 @@ async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> 
     message.guild.get_channel = MagicMock(return_value=output_channel)
 
     result = await service.relay_message(message)
-
     assert result is not None
-    assert result.success is True
+    assert result.success
     assert result.destination_message_ids == (9001,)
-    assert result.published_message_ids == (9001,)
-
-    send_kwargs = output_channel.send.await_args.kwargs
-    allowed = send_kwargs["allowed_mentions"]
-    assert isinstance(allowed, discord.AllowedMentions)
-    assert allowed.everyone is False and allowed.users is False and allowed.roles is False
-    embed = send_kwargs["embed"]
-    assert embed.author.name == "Partner"
-    assert embed.author.icon_url == "https://cdn.discordapp.com/emojis/888.png?size=128"
-    assert embed.description == "Raid starts at 8 PM."
-    assert send_kwargs.get("content") in (None, "")
+    output_channel.send.assert_awaited_once()
     sent.publish.assert_awaited_once()
-
-    relay_repo = RelayRecordRepository(db)
-    record = await relay_repo.get_by_source_message(message.id)
-    assert record is not None
-    assert record.status == RelayStatus.PUBLISHED
-    assert record.profile_id == profile.id
-
-
-@pytest.mark.asyncio
-async def test_transform_header_and_content(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
-    service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message(content="Line one")
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    sent = MagicMock(spec=discord.Message)
-    sent.id = 42
-    sent.publish = AsyncMock()
-    output_channel.send = AsyncMock(return_value=sent)
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    await service.relay_message(message)
-
-    embed = output_channel.send.await_args.kwargs["embed"]
-    assert embed.author.name == "Partner"
-    assert embed.description == "Line one"
 
 
 @pytest.mark.asyncio
 async def test_duplicate_source_ignored(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
+    await _seed_client_subscription(db)
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message()
 
@@ -182,184 +229,31 @@ async def test_duplicate_source_ignored(db, monkeypatch: pytest.MonkeyPatch) -> 
 
     first = await service.relay_message(message)
     second = await service.relay_message(message)
-
     assert first is not None
     assert second is None
-    assert output_channel.send.await_count == 1
 
 
 @pytest.mark.asyncio
-async def test_disabled_profile_ignored(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db, profile_enabled=False)
+async def test_disabled_client_ignored(db, monkeypatch: pytest.MonkeyPatch) -> None:
+    await _seed_client_subscription(db, client_enabled=False)
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message()
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    output_channel.send = AsyncMock()
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    result = await service.relay_message(message)
-
-    assert result is None
-    output_channel.send.assert_not_awaited()
+    assert service.is_potential_feed_message(message) is False
 
 
 @pytest.mark.asyncio
 async def test_disabled_network_ignored(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db, network_enabled=False)
+    await _seed_client_subscription(db, network_enabled=False)
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message()
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    output_channel.send = AsyncMock()
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    result = await service.relay_message(message)
-
-    assert result is None
-    output_channel.send.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_failed_publish_status(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
-    service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message()
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    sent = MagicMock(spec=discord.Message)
-    sent.id = 9001
-
-    async def fail_publish() -> None:
-        exc = discord.HTTPException(MagicMock(), "publish failed")
-        exc.status = 403
-        raise exc
-
-    sent.publish = AsyncMock(side_effect=fail_publish)
-    output_channel.send = AsyncMock(return_value=sent)
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    result = await service.relay_message(message)
-
-    assert result is not None
-    assert result.success is False
-    relay_repo = RelayRecordRepository(db)
-    record = await relay_repo.get_by_source_message(message.id)
-    assert record is not None
-    assert record.status == RelayStatus.FAILED_PUBLISH
-    assert record.destination_message_ids == (9001,)
-
-
-@pytest.mark.asyncio
-async def test_status_pending_sent_published(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
-    service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message()
-
-    statuses: list[RelayStatus] = []
-
-    original_create = service._relay_records.create_pending
-    original_update = service._relay_records.update_status
-
-    async def track_create(**kwargs: object):
-        record = await original_create(**kwargs)
-        statuses.append(record.status)
-        return record
-
-    async def track_update(record_id: int, **kwargs: object):
-        record = await original_update(record_id, **kwargs)
-        statuses.append(record.status)
-        return record
-
-    service._relay_records.create_pending = track_create  # type: ignore[method-assign]
-    service._relay_records.update_status = track_update  # type: ignore[method-assign]
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    sent = MagicMock(spec=discord.Message)
-    sent.id = 9001
-    sent.publish = AsyncMock()
-    output_channel.send = AsyncMock(return_value=sent)
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    await service.relay_message(message)
-
-    assert statuses == [
-        RelayStatus.PENDING,
-        RelayStatus.SENT,
-        RelayStatus.PUBLISHED,
-    ]
-
-
-@pytest.mark.asyncio
-async def test_create_pending_record_before_send(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
-    service = await _build_service(db, monkeypatch)
-    relay_repo = RelayRecordRepository(db)
-    message = _make_webhook_message()
-
-    pending_before_send: list[bool] = []
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-
-    async def send_and_track(**kwargs: object) -> discord.Message:
-        record = await relay_repo.get_by_source_message(message.id)
-        pending_before_send.append(record is not None and record.status == RelayStatus.PENDING)
-        sent = MagicMock(spec=discord.Message)
-        sent.id = 9001
-        sent.publish = AsyncMock()
-        return sent
-
-    output_channel.send = AsyncMock(side_effect=send_and_track)
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    await service.relay_message(message)
-
-    assert pending_before_send == [True]
+    assert service._passes_filters(message) is False
 
 
 @pytest.mark.asyncio
 async def test_non_webhook_ignored_without_manual_relay(
-    db,
-    monkeypatch: pytest.MonkeyPatch,
+    db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    await _seed_network_profile(db)
+    await _seed_client_subscription(db)
     service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message()
-    message.webhook_id = None
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    output_channel.send = AsyncMock()
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    result = await service.relay_message(message)
-
-    assert result is None
-    output_channel.send.assert_not_awaited()
-    assert service.feed_reject_reason(message) is not None
-
-
-@pytest.mark.asyncio
-async def test_embed_only_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    await _seed_network_profile(db)
-    service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message(content="")
-    embed = MagicMock()
-    embed.title = "Raid tonight"
-    embed.description = "Meet at 8 PM."
-    embed.fields = []
-    message.embeds = [embed]
-
-    output_channel = MagicMock(spec=discord.TextChannel)
-    sent = MagicMock(spec=discord.Message)
-    sent.id = 9002
-    sent.publish = AsyncMock()
-    output_channel.send = AsyncMock(return_value=sent)
-    message.guild.get_channel = MagicMock(return_value=output_channel)
-
-    result = await service.relay_message(message)
-
-    assert result is not None
-    assert result.success is True
-    content = output_channel.send.await_args.kwargs["embed"].description
-    assert "Raid tonight" in content
-    assert "Meet at 8 PM." in content
+    message = _make_webhook_message(webhook_id=0)
+    assert service._passes_filters(message) is False

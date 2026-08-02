@@ -1,0 +1,23 @@
+kind: modal
+title: "Join the network"
+fields:
+  - id: server_name
+    type: text
+    label: "Server name"
+    description: "Your Discord server name (cannot be changed later)"
+    placeholder: "My Community Server"
+    max_length: 100
+    required: true
+  - id: display_name
+    type: text
+    label: "Display name"
+    description: "Label shown on relayed messages"
+    placeholder: "My Server"
+    max_length: 100
+    required: true
+  - id: profile_image
+    type: file_upload
+    label: "Profile image"
+    description: "Upload a PNG, JPG, WebP, or GIF"
+    required: true
+    max_values: 1

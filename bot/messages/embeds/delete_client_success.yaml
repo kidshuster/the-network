@@ -1,0 +1,6 @@
+kind: embed
+title: Client deleted
+colour: green
+description: |
+  Client **{server_name}** was permanently removed from The Network hub.
+  Its channels, role, subscriptions, and blacklists were cleaned up.

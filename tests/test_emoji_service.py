@@ -6,12 +6,9 @@ import discord
 import pytest
 
 from bot.services.emoji_service import EmojiService, build_emoji_name, sanitize_slug
+from bot.testing.png_fixtures import probe_png_bytes
 
-SAMPLE_PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
-    b"\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+SAMPLE_PNG = probe_png_bytes()
 
 
 def test_sanitize_slug() -> None:

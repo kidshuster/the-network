@@ -32,3 +32,11 @@ def test_normalize_image_crops_to_square() -> None:
     wide = normalize_image_bytes(_make_png(120, 40, (10, 20, 30)))
     assert len(wide.data) > 0
     assert len(wide.image_hash) == 64
+
+
+def test_probe_png_bytes_normalizes() -> None:
+    from bot.testing.png_fixtures import probe_png_bytes
+
+    result = normalize_image_bytes(probe_png_bytes())
+    assert result.data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert len(result.image_hash) == 64

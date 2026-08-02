@@ -14,7 +14,7 @@ class ServerRequestStatus(StrEnum):
 class ServerRequest:
     id: int
     guild_id: int
-    network_id: int
+    network_id: int | None
     requester_user_id: int
     server_name: str
     display_name: str

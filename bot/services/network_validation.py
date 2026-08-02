@@ -57,7 +57,12 @@ def _check_bot_permissions(
         missing = [p for p in perms if not getattr(resolved, p, False)]
         if missing:
             readable = ", ".join(p.replace("_", " ") for p in missing)
-            issues.append(f"Missing permissions on {label}: {readable}")
+            hint = (
+                f"Missing permissions on {label}: {readable}. "
+                "Run `/server init` to resync hub categories, and ensure "
+                "**The Network+** is assigned to the bot above **The Network**."
+            )
+            issues.append(hint)
 
     check(
         feed_category,

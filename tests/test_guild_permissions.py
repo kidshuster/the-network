@@ -11,13 +11,12 @@ from bot.services.guild_permissions import (
 )
 
 
-def test_moderation_channels_deny_everyone_and_access() -> None:
+def test_moderation_channels_deny_everyone() -> None:
     guild = MagicMock(spec=discord.Guild)
     everyone = MagicMock(spec=discord.Role)
     guild.default_role = everyone
-    access = MagicMock(spec=discord.Role, position=2)
     human_mod = MagicMock(spec=discord.Role, position=3, id=99)
-    bot = MagicMock(spec=discord.Member)
+    bot = MagicMock(spec=discord.Member, id=999)
     bot.top_role = MagicMock(spec=discord.Role, position=5, id=1)
 
     for builder in (
@@ -27,9 +26,9 @@ def test_moderation_channels_deny_everyone_and_access() -> None:
         overwrites = dict(builder(guild, bot, human_mod))
         assert everyone in overwrites
         assert overwrites[everyone].view_channel is False
-        assert access not in overwrites
         assert human_mod in overwrites
         assert overwrites[human_mod].view_channel is True
+        assert bot not in overwrites
 
 
 def test_commands_channel_allows_slash_commands_for_moderators_only() -> None:
@@ -48,19 +47,25 @@ def test_subscribe_announcement_channel_allows_everyone_readonly() -> None:
     guild = MagicMock(spec=discord.Guild)
     everyone = MagicMock(spec=discord.Role)
     guild.default_role = everyone
-    access = MagicMock(spec=discord.Role, position=2)
+    access = MagicMock(spec=discord.Role, position=2, id=88)
+    access.is_default.return_value = False
     human_mod = MagicMock(spec=discord.Role, position=3, id=99)
-    bot = MagicMock(spec=discord.Member)
+    human_mod.is_default.return_value = False
+    bot = MagicMock(spec=discord.Member, id=999)
     bot.top_role = MagicMock(spec=discord.Role, position=5, id=1)
 
     overwrites = dict(
-        build_subscribe_announcement_channel_overwrites(guild, bot, access, human_mod)
+        build_subscribe_announcement_channel_overwrites(
+            guild, bot, access, human_mod
+        )
     )
     assert overwrites[everyone].view_channel is True
     assert overwrites[everyone].send_messages is False
-    assert overwrites[everyone].create_public_threads is False
-    assert overwrites[everyone].create_private_threads is False
+    assert overwrites[everyone].create_public_threads is None
+    assert overwrites[everyone].add_reactions is None
     assert overwrites[everyone].read_message_history is True
+    assert overwrites[access].view_channel is True
+    assert overwrites[human_mod].create_public_threads is None
 
 
 def test_everyone_hidden_overwrite_denies_threads() -> None:
@@ -100,8 +105,10 @@ def test_filter_configurable_overwrites_skips_high_roles() -> None:
     assert everyone in filtered
     assert high_role not in filtered
     assert low_role in filtered
-    assert bot.top_role in filtered
-    assert bot not in filtered
+    assert bot in filtered
+
+    channel_filtered = filter_configurable_overwrites(bot, source, for_channel=True)
+    assert bot not in channel_filtered
 
 
 def test_partner_feed_overwrite_allows_webhooks_only() -> None:

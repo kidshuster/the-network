@@ -1,0 +1,13 @@
+kind: embed
+title: "Request Submitted"
+colour: green
+description: |
+  Your join request was sent to moderators for review.
+  You will be notified when it is approved or denied.
+fields:
+  - name: Server name
+    value: "{server_name}"
+    inline: true
+  - name: Display name
+    value: "{display_name}"
+    inline: true

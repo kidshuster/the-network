@@ -8,11 +8,12 @@ The bot needs a always-on process with persistent storage for `data/relay.db`.
 
 ```bash
 cp .env.example .env   # fill in secrets
-chmod +x bin/package.sh bin/start.sh bin/stop.sh deploy/deploy.sh
+chmod +x bin/package.sh bin/publish.sh bin/start.sh bin/stop.sh deploy/deploy.sh
 ./bin/package.sh
-docker compose up -d
-docker compose logs -f
+cd publish && cp .env.example .env && ./scripts/start.sh
 ```
+
+For production: `./bin/publish.sh` pushes the image and updates the **the-network-run** deploy repo. On the host, clone that repo and run `./scripts/enable.sh`.
 
 ### Bare metal
 

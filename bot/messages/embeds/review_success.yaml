@@ -1,0 +1,4 @@
+kind: embed
+title: "Request {label}"
+colour: "{colour}"
+description: "{description}"

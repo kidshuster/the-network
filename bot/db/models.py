@@ -8,6 +8,8 @@ from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
 from bot.domain.server_request import ServerRequest, ServerRequestStatus
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
 
 
 class NetworkRow:
@@ -17,8 +19,12 @@ class NetworkRow:
             id=int(row["id"]),
             key=str(row["key"]),
             display_name=str(row["display_name"]),
-            feed_category_id=int(row["feed_category_id"]),
-            output_channel_id=int(row["output_channel_id"]),
+            feed_category_id=(
+                int(row["feed_category_id"]) if row["feed_category_id"] is not None else None
+            ),
+            output_channel_id=(
+                int(row["output_channel_id"]) if row["output_channel_id"] is not None else None
+            ),
             concat_channel_id=(
                 int(row["concat_channel_id"]) if row["concat_channel_id"] is not None else None
             ),
@@ -76,7 +82,9 @@ class ServerRequestRow:
         return ServerRequest(
             id=int(row["id"]),
             guild_id=int(row["guild_id"]),
-            network_id=int(row["network_id"]),
+            network_id=(
+                int(row["network_id"]) if row["network_id"] is not None else None
+            ),
             requester_user_id=int(row["requester_user_id"]),
             server_name=str(row["server_name"]),
             display_name=str(row["display_name"]),
@@ -119,10 +127,55 @@ class RelayRecordRow:
             source_webhook_id=(
                 int(row["source_webhook_id"]) if row["source_webhook_id"] is not None else None
             ),
-            profile_id=int(row["profile_id"]),
+            profile_id=(
+                int(row["profile_id"]) if row["profile_id"] is not None else None
+            ),
+            client_id=(
+                int(row["client_id"]) if row["client_id"] is not None else None
+            ),
             network_id=int(row["network_id"]),
             destination_channel_id=int(row["destination_channel_id"]),
             destination_message_ids=destination_ids,
             status=RelayStatus(str(row["status"])),
             error_message=str(row["error_message"]) if row["error_message"] is not None else None,
+        )
+
+
+class ClientRow:
+    @staticmethod
+    def from_row(row: Any) -> Client:
+        return Client(
+            id=int(row["id"]),
+            guild_id=int(row["guild_id"]),
+            server_name=str(row["server_name"]),
+            display_name=str(row["display_name"]),
+            category_id=int(row["category_id"]),
+            client_role_id=int(row["client_role_id"]),
+            profile_channel_id=int(row["profile_channel_id"]),
+            profile_message_id=int(row["profile_message_id"]),
+            enabled=bool(row["enabled"]),
+            emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
+            emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,
+            image_hash=str(row["image_hash"]) if row["image_hash"] is not None else None,
+            degraded_reason=(
+                str(row["degraded_reason"]) if row["degraded_reason"] is not None else None
+            ),
+        )
+
+
+class ClientSubscriptionRow:
+    @staticmethod
+    def from_row(row: Any) -> ClientSubscription:
+        return ClientSubscription(
+            id=int(row["id"]),
+            client_id=int(row["client_id"]),
+            network_id=int(row["network_id"]),
+            publish_channel_id=int(row["publish_channel_id"]),
+            subscribe_channel_id=int(row["subscribe_channel_id"]),
+            moderation_message_id=(
+                int(row["moderation_message_id"])
+                if row["moderation_message_id"] is not None
+                else None
+            ),
+            enabled=bool(row["enabled"]),
         )

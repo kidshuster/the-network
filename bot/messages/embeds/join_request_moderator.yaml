@@ -1,0 +1,18 @@
+kind: embed
+title: "Client join request"
+colour: gold
+description: "New hub client onboarding request"
+fields:
+  - name: Requester
+    value: "{requester_mention}"
+    inline: true
+  - name: Request ID
+    value: "`{request_id}`"
+    inline: true
+  - name: Server name
+    value: "{server_name}"
+    inline: false
+  - name: Display name
+    value: "{display_name}"
+    inline: false
+footer: "The Network • moderator review"

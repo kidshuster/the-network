@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import discord
+import pytest
+
+from bot.domain.errors import NetworkValidationError
+from bot.domain.network import Network
+from bot.services.network_admin import create_network, delete_network
+from bot.services.network_admin_sticky import build_network_admin_embed
+
+
+def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
+    context = MagicMock()
+    networks = networks or []
+    context.network_repo.list_all = AsyncMock(return_value=networks)
+    context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[])
+    context.network_repo.create = AsyncMock(
+        return_value=Network(
+            id=1,
+            key="stingers",
+            display_name="Stingers",
+            feed_category_id=None,
+            output_channel_id=None,
+            concat_channel_id=None,
+            profile_forum_channel_id=None,
+            join_channel_id=None,
+            enabled=True,
+        )
+    )
+    context.network_repo.get_by_key = AsyncMock(return_value=None)
+    context.routing_service.load_cache = AsyncMock()
+    context.refresh_network_counts = AsyncMock()
+    context.client_cache.load_cache = AsyncMock()
+    return context
+
+
+@pytest.mark.asyncio
+async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    import bot.services.client_subscription as client_subscription
+
+    context = _mock_context()
+    context.client_repo.list_all = AsyncMock(return_value=[])
+    bot = MagicMock()
+    bot.settings.network_access_role_name = "The Network"
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.me = MagicMock()
+    monkeypatch.setattr(
+        "bot.services.client_profile_sync.refresh_all_client_profiles",
+        AsyncMock(return_value=2),
+    )
+    monkeypatch.setattr(
+        client_subscription,
+        "resync_subscriptions_for_network",
+        AsyncMock(return_value=0),
+    )
+
+    result = await create_network(
+        context,
+        bot,
+        guild,
+        key="stingers",
+        display_name="Stingers",
+    )
+
+    assert result.success is True
+    assert result.network is not None
+    assert result.network.key == "stingers"
+    assert result.updated_profile_count == 2
+
+
+@pytest.mark.asyncio
+async def test_create_network_validation_error() -> None:
+    context = _mock_context()
+    context.network_repo.create = AsyncMock(
+        side_effect=NetworkValidationError("duplicate key")
+    )
+    bot = MagicMock()
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+
+    result = await create_network(
+        context,
+        bot,
+        guild,
+        key="stingers",
+        display_name="Stingers",
+    )
+
+    assert result.success is False
+    assert result.error == "duplicate key"
+
+
+@pytest.mark.asyncio
+async def test_delete_network_not_found() -> None:
+    context = _mock_context()
+    bot = MagicMock()
+    guild = MagicMock(spec=discord.Guild)
+
+    result = await delete_network(context, bot, guild, key="missing")
+
+    assert result.success is False
+    assert "not found" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_build_network_admin_embed_lists_networks() -> None:
+    network = Network(
+        id=1,
+        key="alpha",
+        display_name="Alpha Net",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        join_channel_id=None,
+        enabled=True,
+    )
+    context = _mock_context(networks=[network])
+
+    embed = await build_network_admin_embed(context)
+
+    assert embed.title == "Network Administration"
+    assert len(embed.fields) == 1
+    assert "alpha" in embed.fields[0].name

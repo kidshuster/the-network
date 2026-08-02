@@ -3,15 +3,12 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import discord
 
 from bot.constants import DEGRADED_FALLBACK
-from bot.domain.profile import ServerProfile
-
-if TYPE_CHECKING:
-    pass
+from bot.domain.client import Client
+from bot.messages.loader import relay_embed_spec, resolve_colour
 
 MENTION_TOKEN_RE = re.compile(r"<@[!&]?\d+>")
 EVERYONE_HERE_RE = re.compile(r"@everyone|@here", re.IGNORECASE)
@@ -31,20 +28,14 @@ def sanitize_author(name: str) -> str:
     return cleaned
 
 
-def profile_emoji_token(profile: ServerProfile) -> str:
-    if profile.emoji_id and profile.emoji_name:
-        return f"<:{profile.emoji_name}:{profile.emoji_id}>"
-    return DEGRADED_FALLBACK
+def client_display_name(client: Client) -> str:
+    return sanitize_author(client.display_name.strip() or client.server_name.strip())
 
 
-def profile_emoji_url(profile: ServerProfile) -> str | None:
-    if profile.emoji_id is None:
+def client_emoji_url(client: Client) -> str | None:
+    if client.emoji_id is None:
         return None
-    return f"https://cdn.discordapp.com/emojis/{profile.emoji_id}.png?size=128"
-
-
-def profile_display_name(profile: ServerProfile) -> str:
-    return sanitize_author(profile.display_name.strip() or profile.server_name.strip())
+    return f"https://cdn.discordapp.com/emojis/{client.emoji_id}.png?size=128"
 
 
 def sender_name(message: discord.Message) -> str:
@@ -116,26 +107,26 @@ class RelayEmbedParts:
     primary_image_url: str | None
 
 
-def build_relay_embed(message: discord.Message, profile: ServerProfile) -> RelayEmbedParts:
-    """Build an embed with server icon, display name, body text, and primary image."""
+def build_relay_embed_from_client(message: discord.Message, client: Client) -> RelayEmbedParts:
+    shell = relay_embed_spec()
     body = extract_relay_body(message)
     image_urls = extract_relay_image_urls(message)
     primary_image_url = image_urls[0] if image_urls else None
 
-    embed = discord.Embed(
-        description=body or None,
-        colour=discord.Colour(0x5865F2),
-    )
+    colour = resolve_colour(shell.colour)
+    embed = discord.Embed(description=body or None, colour=colour)
 
-    author_kwargs: dict[str, str] = {"name": profile_display_name(profile)}
-    icon_url = profile_emoji_url(profile)
+    author_name = client_display_name(client)
+    author_kwargs: dict[str, str] = {"name": author_name}
+    icon_url = client_emoji_url(client)
     if icon_url is not None:
         author_kwargs["icon_url"] = icon_url
+    elif shell.degraded_emoji_prefix and client.emoji_id is None:
+        author_kwargs["name"] = f"{DEGRADED_FALLBACK} {author_name}"
     embed.set_author(**author_kwargs)
 
     if primary_image_url is not None:
         embed.set_image(url=primary_image_url)
-
     return RelayEmbedParts(embed=embed, primary_image_url=primary_image_url)
 
 
@@ -145,12 +136,13 @@ class RelayPayload:
     files: tuple[discord.File, ...] = ()
 
 
-async def build_relay_payload(message: discord.Message, profile: ServerProfile) -> RelayPayload:
-    """Build embed relay payload plus any extra attachments to re-upload."""
-    parts = build_relay_embed(message, profile)
+async def build_relay_payload_from_client(
+    message: discord.Message,
+    client: Client,
+) -> RelayPayload:
+    parts = build_relay_embed_from_client(message, client)
     files: list[discord.File] = []
     skip_url = parts.primary_image_url
-
     for attachment in message.attachments:
         if skip_url is not None and attachment.url == skip_url:
             continue
@@ -161,5 +153,4 @@ async def build_relay_payload(message: discord.Message, profile: ServerProfile) 
         if not data:
             continue
         files.append(discord.File(fp=io.BytesIO(data), filename=attachment.filename))
-
     return RelayPayload(embed=parts.embed, files=tuple(files))

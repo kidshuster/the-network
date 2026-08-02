@@ -1,0 +1,10 @@
+kind: modal
+title: "Delete network"
+fields:
+  - id: key
+    type: text
+    label: "Network key (nkey)"
+    description: "Key of the network to delete (removes all subscriptions)"
+    placeholder: "my-network"
+    max_length: 50
+    required: true

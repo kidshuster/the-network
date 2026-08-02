@@ -11,7 +11,8 @@ class RelayRecord:
     source_message_id: int
     source_channel_id: int
     source_webhook_id: int | None
-    profile_id: int
+    profile_id: int | None
+    client_id: int | None
     network_id: int
     destination_channel_id: int
     destination_message_ids: tuple[int, ...]

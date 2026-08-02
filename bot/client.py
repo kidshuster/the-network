@@ -11,18 +11,14 @@ from bot.context import BotContext
 from bot.db import migrations
 from bot.db.connection import Database
 from bot.db.repositories import (
+    ClientRepository,
     NetworkRepository,
-    ProfileRepository,
     RelayRecordRepository,
     ServerRequestRepository,
     SettingsRepository,
 )
 from bot.services.bot_settings import BotSettingsService
-from bot.services.emoji_service import EmojiService
-from bot.services.network_cleanup import NetworkCleanupService
-from bot.services.profile_cache import ProfileCache
-from bot.services.profile_cleanup import ProfileCleanupService
-from bot.services.profile_sync import ProfileSyncService
+from bot.services.client_cache import ClientCache
 from bot.services.relay_service import RelayService
 from bot.services.routing_service import RoutingService
 from bot.services.topgg import TopggService
@@ -46,37 +42,20 @@ class NetworkRelayBot(commands.Bot):
         self.bot_context: BotContext | None = None
         self.schema_version: int = 0
         self._topgg: TopggService | None = None
+        self._slash_sync_started = False
 
     async def setup_hook(self) -> None:
         await self.db.connect()
         self.schema_version = await migrations.run_migrations(self.db)
 
         network_repo = NetworkRepository(self.db)
-        profile_repo = ProfileRepository(self.db)
+        client_repo = ClientRepository(self.db)
         relay_record_repo = RelayRecordRepository(self.db)
-        routing_service = RoutingService(network_repo)
+        routing_service = RoutingService(network_repo, client_repo)
+        client_cache = ClientCache(client_repo)
+        await client_cache.load_cache()
+        routing_service.attach_client_cache(client_cache)
         await routing_service.load_cache()
-
-        profile_cache = ProfileCache(profile_repo)
-        await profile_cache.load_cache()
-
-        emoji_service = EmojiService()
-        profile_sync = ProfileSyncService(
-            profile_repo,
-            network_repo,
-            routing_service,
-            profile_cache,
-            emoji_service,
-            self.settings,
-        )
-        profile_cleanup = ProfileCleanupService(
-            profile_repo,
-            network_repo,
-            profile_cache,
-            emoji_service,
-            relay_record_repo,
-        )
-        network_cleanup = NetworkCleanupService(profile_cleanup, profile_cache)
 
         settings_repo = SettingsRepository(self.db)
         server_request_repo = ServerRequestRepository(self.db)
@@ -86,7 +65,8 @@ class NetworkRelayBot(commands.Bot):
         relay_service = RelayService(
             self.settings,
             routing_service,
-            profile_cache,
+            client_cache,
+            client_repo,
             relay_record_repo,
         )
 
@@ -94,47 +74,48 @@ class NetworkRelayBot(commands.Bot):
             self.settings,
             self.db,
             network_repo,
-            profile_repo,
+            client_repo,
             relay_record_repo,
             routing_service,
-            profile_cache,
-            profile_sync,
-            profile_cleanup,
-            network_cleanup,
+            client_cache,
             relay_service,
             bot_settings,
             settings_repo,
             server_request_repo,
         )
         self.bot_context.network_count = routing_service.network_count
-        self.bot_context.profile_count = profile_cache.profile_count
-        self.bot_context.enabled_profile_count = profile_cache.enabled_profile_count
+        self.bot_context.client_count = client_cache.client_count
+        self.bot_context.enabled_client_count = client_cache.enabled_client_count
 
-        await self.load_extension("bot.cogs.network")
         await self.load_extension("bot.cogs.servers")
         await self.load_extension("bot.cogs.relay")
+
+        from bot.messages import validate_all_templates
+
+        validate_all_templates()
 
         await self._register_persistent_views()
 
         guild = discord.Object(id=self.settings.guild_id)
         self.tree.copy_global_to(guild=guild)
+
+    async def _sync_slash_commands(self) -> None:
+        guild = discord.Object(id=self.settings.guild_id)
         try:
-            synced = await self.tree.sync(guild=guild)
+            synced = await asyncio.wait_for(
+                self.tree.sync(guild=guild),
+                timeout=30.0,
+            )
             logger.info(
                 "Slash commands synced to guild",
                 extra={"guild_id": self.settings.guild_id, "command_count": len(synced)},
             )
+        except TimeoutError:
+            logger.error("Slash command sync timed out after 30s")
         except discord.Forbidden:
-            logger.warning(
-                "Could not sync slash commands — bot may not be in the guild or lacks "
-                "applications.commands scope. Re-invite the bot, then restart.",
-                extra={"guild_id": self.settings.guild_id},
-            )
+            logger.warning("Could not sync slash commands — re-invite the bot")
         except discord.HTTPException as exc:
-            logger.warning(
-                "Slash command sync failed",
-                extra={"guild_id": self.settings.guild_id, "error": str(exc)},
-            )
+            logger.warning("Slash command sync failed", extra={"error": str(exc)})
 
     async def on_ready(self) -> None:
         guild = self.get_guild(self.settings.guild_id)
@@ -145,6 +126,10 @@ class NetworkRelayBot(commands.Bot):
             )
             return
 
+        if not self._slash_sync_started:
+            self._slash_sync_started = True
+            asyncio.create_task(self._sync_slash_commands())
+
         context = self.bot_context
         logger.info(
             "Bot ready",
@@ -154,7 +139,7 @@ class NetworkRelayBot(commands.Bot):
                 "user": str(self.user),
                 "schema_version": self.schema_version,
                 "network_count": context.network_count if context else 0,
-                "profile_count": context.profile_count if context else 0,
+                "client_count": context.client_count if context else 0,
                 "latency_ms": round(self.latency * 1000),
             },
         )
@@ -163,64 +148,30 @@ class NetworkRelayBot(commands.Bot):
             self._topgg = TopggService(self, self.settings.topgg_token)
             await self._topgg.start()
 
-        asyncio.create_task(self._sync_profile_stickies_on_startup(guild))
-
-    async def _sync_profile_stickies_on_startup(self, guild: discord.Guild) -> None:
-        context = self.bot_context
-        if context is None:
-            return
-
-        from bot.services.profile_sticky import sync_all_profile_stickies
-        from bot.ui.profile_views import EditProfileView
-
-        async def resolve_network_key(network_id: int) -> str | None:
-            network = await context.network_repo.get_by_id(network_id)
-            return network.key if network is not None else None
-
-        async def update_starter_message_id(thread_id: int, message_id: int) -> None:
-            await context.profile_repo.update_starter_message_id(thread_id, message_id)
-
-        try:
-            summary = await sync_all_profile_stickies(
-                guild,
-                await context.profile_repo.list_all(),
-                resolve_network_key=resolve_network_key,
-                update_starter_message_id=update_starter_message_id,
-                edit_view_factory=lambda thread_id: EditProfileView(self, thread_id),
-            )
-        except Exception:
-            logger.exception("Profile sticky startup sync failed")
-            return
-
-        if summary.updated:
-            await context.profile_cache.load_cache()
-
-        logger.info(
-            "Profile sticky startup sync complete",
-            extra={
-                "checked": summary.checked,
-                "updated": summary.updated,
-                "skipped": summary.skipped,
-                "failed": summary.failed,
-            },
-        )
-
     async def _register_persistent_views(self) -> None:
         context = self.bot_context
         if context is None:
             return
 
-        from bot.ui.join_views import JoinServerView, ModeratorReviewView
-        from bot.ui.profile_views import EditProfileView
+        from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
+        from bot.ui.network_admin_views import NetworkAdminView
+        from bot.ui.network_views import NetworkProfileView, SubscriptionModerationView
 
-        for network in await context.network_repo.list_all():
-            self.add_view(JoinServerView(self, network.key))
+        self.add_view(JoinNetworkView(self))
+        self.add_view(NetworkAdminView(self))
 
         for request in await context.server_request_repo.list_pending():
             self.add_view(ModeratorReviewView(self, request.id))
 
-        for profile in await context.profile_repo.list_all():
-            self.add_view(EditProfileView(self, profile.profile_thread_id))
+        networks = await context.network_repo.list_all()
+        network_keys = [n.key for n in networks]
+        for client in await context.client_repo.list_all():
+            self.add_view(NetworkProfileView(self, client.id, network_keys))
+
+        for sub in await context.client_repo.list_all_subscriptions():
+            network = await context.network_repo.get_by_id(sub.network_id)
+            network_key = network.key if network is not None else "network"
+            self.add_view(SubscriptionModerationView(self, sub.id, network_key))
 
     async def close(self) -> None:
         if self._topgg is not None:

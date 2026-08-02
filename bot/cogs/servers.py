@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import discord
@@ -7,407 +8,265 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.client import NetworkRelayBot
-from bot.cogs._autocomplete import network_key_autocomplete, server_name_autocomplete
 from bot.cogs._checks import require_manage_guild
-from bot.constants import DEGRADED_FALLBACK
 from bot.context import BotContext
-from bot.domain.errors import ProfileValidationError
-from bot.domain.network import Network
-from bot.domain.profile import ServerProfile
-from bot.ui.profile_views import EditProfileView
+from bot.domain.errors import NetworkValidationError
+from bot.messages import render_embed, render_text
+from bot.services.guild_init import GuildInitResult, initialize_guild
+from bot.services.guild_layout import resolve_join_the_network_channel
+from bot.services.guild_uninit import GuildUninitResult, uninitialize_guild
+from bot.services.hub_data_reset import reset_hub_layout_data
+from bot.services.join_requests_sticky import sync_hub_join_sticky
+from bot.ui.join_views import JoinNetworkView
 
 logger = logging.getLogger(__name__)
+
+_MAX_INIT_FIELD_ITEMS = 8
+_MAX_INIT_FIELD_CHARS = 900
+
+
+def _append_bullet_field(
+    embed: discord.Embed,
+    *,
+    name: str,
+    items: list[str],
+) -> None:
+    if not items:
+        return
+    embed.add_field(
+        name=name,
+        value="\n".join(f"• {item}" for item in items[:_MAX_INIT_FIELD_ITEMS]),
+        inline=False,
+    )
+
+
+def _server_init_embed(result: GuildInitResult) -> discord.Embed:
+    if not result.success:
+        return render_embed(
+            "server_init_failed",
+            description=result.reason or "Unknown error",
+        )
+
+    embed = render_embed("server_init_success")
+    _append_bullet_field(embed, name="Categories created", items=result.created_categories)
+    _append_bullet_field(embed, name="Channels created", items=result.created_channels)
+    _append_bullet_field(embed, name="Channels moved", items=result.moved_channels)
+    _append_bullet_field(embed, name="Roles", items=result.updated_roles)
+    if result.failed_steps:
+        embed.colour = discord.Colour.gold()
+        embed.add_field(
+            name="Permission warnings",
+            value="\n".join(f"• {step}" for step in result.failed_steps[:_MAX_INIT_FIELD_ITEMS])[
+                :_MAX_INIT_FIELD_CHARS
+            ],
+            inline=False,
+        )
+    if result.notes:
+        embed.add_field(
+            name="Notes",
+            value="\n".join(f"• {note}" for note in result.notes[:_MAX_INIT_FIELD_ITEMS])[
+                :_MAX_INIT_FIELD_CHARS
+            ],
+            inline=False,
+        )
+    return embed
+
+
+def _server_uninit_embed(result: GuildUninitResult) -> discord.Embed:
+    if not result.success:
+        return render_embed(
+            "server_uninit_failed",
+            description=result.reason or "Unknown error",
+        )
+    embed = render_embed("server_uninit_success")
+    for field_name, items in (
+        ("Categories deleted", result.deleted_categories),
+        ("Channels deleted", result.deleted_channels),
+        ("Roles deleted", result.deleted_roles),
+        ("Preserved", result.preserved_channels),
+    ):
+        _append_bullet_field(embed, name=field_name, items=items)
+    if result.notes:
+        embed.add_field(
+            name="Notes",
+            value="\n".join(f"• {note}" for note in result.notes[:_MAX_INIT_FIELD_ITEMS])[
+                :_MAX_INIT_FIELD_CHARS
+            ],
+            inline=False,
+        )
+    return embed
 
 
 @app_commands.default_permissions(manage_guild=True)
 class ServerCog(
     commands.GroupCog,
     group_name="server",
-    group_description="Manage participating servers on a network",
+    group_description="Initialize the Discord hub server layout",
 ):
     def __init__(self, bot: NetworkRelayBot) -> None:
         self.bot = bot
 
     @require_manage_guild()
     @app_commands.command(
-        name="create",
-        description="Create server feed channel, access role, and pinned profile post",
+        name="init",
+        description="Set up hub categories/channels and run permission smoke checks",
     )
-    @app_commands.describe(
-        key="Network key (nkey)",
-        server_name="Participating server name",
-        profile_image="Profile image used for the relay emoji",
-        display_name="Display label in relay headers",
-    )
-    @app_commands.autocomplete(key=network_key_autocomplete)
-    async def create(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        server_name: str,
-        profile_image: discord.Attachment,
-        display_name: str,
-    ) -> None:
+    async def init_server(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None or guild.id != self.bot.settings.guild_id:
-            await interaction.followup.send(
-                "This bot only operates in the configured central guild.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
             return
 
-        context = self._context()
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send("Bot member is not available in this guild.")
+            await interaction.followup.send(render_text("bot_member_unavailable"), ephemeral=True)
             return
 
-        try:
-            result = await context.profile_sync.create_profile(
-                guild,
-                bot_member,
-                server_name=server_name,
-                profile_image=profile_image,
-                display_name=display_name,
-                network_key=key,
-                enabled=True,
-            )
-        except Exception:
-            logger.exception(
-                "Server create failed",
-                extra={
-                    "network_key": key,
-                    "server_name": server_name,
-                    "user_id": interaction.user.id,
-                },
-            )
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Server Create Failed",
-                    description="An unexpected error occurred. Check bot logs.",
-                    colour=discord.Colour.red(),
-                ),
-                ephemeral=True,
-            )
-            return
+        await interaction.followup.send(render_text("server_init_started"), ephemeral=True)
 
-        if not result.success or result.feed_channel is None:
-            await interaction.followup.send(
-                embed=discord.Embed(
-                    title="Server Create Failed",
-                    description=result.error or "Unknown error",
-                    colour=discord.Colour.red(),
-                ),
-                ephemeral=True,
-            )
-            return
-
-        if result.starter_message is not None and result.profile_channel is not None:
-            profile_view = EditProfileView(self.bot, result.profile_channel.id)
-            self.bot.add_view(profile_view)
+        async def _run() -> None:
             try:
-                await result.starter_message.edit(view=profile_view)
-            except discord.HTTPException:
-                logger.warning(
-                    "Could not attach edit profile view after server create",
-                    extra={"profile_channel_id": result.profile_channel.id},
+                clients = None
+                if self.bot.bot_context is not None:
+                    clients = await self.bot.bot_context.client_repo.list_all()
+                result = await initialize_guild(
+                    guild,
+                    bot_member,
+                    access_role_name=self.bot.settings.network_access_role_name,
+                    operator_role_name=self.bot.settings.network_operator_role_name,
+                    clients=clients,
+                    bot=self.bot,
+                    context=self.bot.bot_context,
+                )
+                await interaction.followup.send(
+                    embed=_server_init_embed(result),
+                    ephemeral=True,
+                )
+            except NetworkValidationError as exc:
+                await interaction.followup.send(
+                    embed=render_embed("server_init_failed", description=str(exc)),
+                    ephemeral=True,
+                )
+            except Exception as exc:
+                logger.exception("Server init failed unexpectedly")
+                await interaction.followup.send(
+                    embed=render_embed(
+                        "server_init_failed",
+                        description=f"Unexpected error: {type(exc).__name__}: {exc}",
+                    ),
+                    ephemeral=True,
                 )
 
-        profile = result.profile
-        embed = discord.Embed(
-            title="Server Created",
-            description=f"Feed channel: {result.feed_channel.mention}",
-            colour=discord.Colour.green(),
-        )
-        embed.add_field(name="Network", value=f"`{key.strip().lower()}`", inline=True)
-        embed.add_field(name="Server", value=server_name, inline=True)
-        embed.add_field(name="Display name", value=display_name, inline=True)
-        if result.server_role is not None:
-            embed.add_field(
-                name="Server role",
-                value=result.server_role.mention,
-                inline=False,
-            )
-        if profile is not None:
-            embed.add_field(name="Emoji", value=self._emoji_label(profile), inline=False)
-        if result.sync_result and result.sync_result.warnings:
-            embed.add_field(
-                name="Warnings",
-                value="\n".join(f"• {warning}" for warning in result.sync_result.warnings),
-                inline=False,
-            )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        asyncio.create_task(_run())
 
     @require_manage_guild()
     @app_commands.command(
-        name="delete",
-        description="Delete a server and its feed, forum, role, and profile",
+        name="uninit",
+        description="Remove hub categories/channels/roles (keeps #rules and #moderator-only)",
     )
-    @app_commands.describe(
-        key="Network key (nkey)",
-        server_name="Participating server name",
-    )
-    @app_commands.autocomplete(key=network_key_autocomplete, server_name=server_name_autocomplete)
-    async def delete(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        server_name: str,
-    ) -> None:
+    async def uninit_server(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if guild is None or guild.id != self.bot.settings.guild_id:
-            await interaction.followup.send(
-                "This bot only operates in the configured central guild.",
-                ephemeral=True,
-            )
+            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
             return
 
-        context = self._context()
-        try:
-            profile = await self._require_server(context, key, server_name)
-        except ProfileValidationError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send(render_text("bot_member_unavailable"), ephemeral=True)
             return
 
-        try:
-            result = await context.profile_cleanup.cleanup_server(guild, profile)
-        except Exception:
-            logger.exception(
-                "Server delete cleanup failed",
-                extra={"server_name": server_name, "network_key": key},
-            )
-            await interaction.followup.send(
-                "Server cleanup failed. Check bot logs.",
-                ephemeral=True,
-            )
-            return
+        await interaction.followup.send(render_text("server_uninit_started"), ephemeral=True)
 
-        if result is None:
-            await interaction.followup.send(
-                "Server was not found or cleanup is already in progress.",
-                ephemeral=True,
-            )
-            return
-
-        await context.refresh_profile_counts()
-        await interaction.followup.send(
-            f"Server **{profile.server_name}** was deleted from network `{key.strip().lower()}`.",
-            ephemeral=True,
-        )
-
-    @require_manage_guild()
-    @app_commands.command(name="enable", description="Enable relaying for a server")
-    @app_commands.describe(
-        key="Network key (nkey)",
-        server_name="Participating server name",
-    )
-    @app_commands.autocomplete(key=network_key_autocomplete, server_name=server_name_autocomplete)
-    async def enable(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        server_name: str,
-    ) -> None:
-        await self._set_enabled(interaction, key, server_name, enabled=True)
-
-    @require_manage_guild()
-    @app_commands.command(name="disable", description="Disable relaying for a server")
-    @app_commands.describe(
-        key="Network key (nkey)",
-        server_name="Participating server name",
-    )
-    @app_commands.autocomplete(key=network_key_autocomplete, server_name=server_name_autocomplete)
-    async def disable(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        server_name: str,
-    ) -> None:
-        await self._set_enabled(interaction, key, server_name, enabled=False)
-
-    @require_manage_guild()
-    @app_commands.command(name="status", description="Show server status for a network")
-    @app_commands.describe(key="Network key (nkey)")
-    @app_commands.autocomplete(key=network_key_autocomplete)
-    async def status(self, interaction: discord.Interaction, key: str) -> None:
-        await interaction.response.defer(ephemeral=True)
-        context = self._context()
-        network = await context.network_repo.get_by_key(key)
-        if network is None:
-            await interaction.followup.send(
-                f"Network `{key.strip().lower()}` was not found.",
-                ephemeral=True,
-            )
-            return
-
-        profiles = await context.profile_repo.list_by_network_id(network.id)
-        if not profiles:
-            await interaction.followup.send(
-                f"No servers registered on network `{network.key}` yet.",
-                ephemeral=True,
-            )
-            return
-
-        enabled_count = sum(1 for profile in profiles if profile.enabled)
-        embed = discord.Embed(
-            title=f"Server Status — {network.display_name}",
-            description=f"Network `{network.key}`",
-            colour=discord.Colour.blurple(),
-        )
-        embed.add_field(name="Registered", value=str(len(profiles)), inline=True)
-        embed.add_field(name="Enabled", value=str(enabled_count), inline=True)
-        embed.add_field(name="Disabled", value=str(len(profiles) - enabled_count), inline=True)
-
-        for profile in profiles[:25]:
-            status = "enabled" if profile.enabled else "disabled"
-            embed.add_field(
-                name=profile.server_name,
-                value=(
-                    f"Status: **{status}**\n"
-                    f"Display: {profile.display_name}\n"
-                    f"Feed: <#{profile.source_channel_id}>\n"
-                    f"Emoji: {self._emoji_label(profile)}"
-                ),
-                inline=False,
-            )
-        if len(profiles) > 25:
-            embed.set_footer(text=f"Showing 25 of {len(profiles)} servers.")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @require_manage_guild()
-    @app_commands.command(name="list", description="List servers on one network or all networks")
-    @app_commands.describe(key="Optional network key (nkey)")
-    @app_commands.autocomplete(key=network_key_autocomplete)
-    async def list_servers(
-        self,
-        interaction: discord.Interaction,
-        key: str | None = None,
-    ) -> None:
-        await interaction.response.defer(ephemeral=True)
-        context = self._context()
-        networks = {
-            network.id: network for network in await context.network_repo.list_all()
-        }
-
-        if key is not None:
-            network = await context.network_repo.get_by_key(key)
-            if network is None:
+        async def _run() -> None:
+            try:
+                result = await uninitialize_guild(
+                    guild,
+                    bot_member,
+                    access_role_name=self.bot.settings.network_access_role_name,
+                    operator_role_name=self.bot.settings.network_operator_role_name,
+                )
+                context = self.bot.bot_context
+                if context is not None:
+                    try:
+                        data_result = await reset_hub_layout_data(context, guild.id)
+                        note = data_result.summary_note()
+                        if note is not None:
+                            result.notes.append(note)
+                    except Exception:
+                        logger.exception("Hub database reset failed during server uninit")
+                        result.notes.append(
+                            "Could not clear hub database (networks/clients) — check bot logs."
+                        )
                 await interaction.followup.send(
-                    f"Network `{key.strip().lower()}` was not found.",
+                    embed=_server_uninit_embed(result),
                     ephemeral=True,
                 )
-                return
-            profiles = await context.profile_repo.list_by_network_id(network.id)
-            title = f"Servers — {network.display_name}"
-        else:
-            profiles = await context.profile_repo.list_all()
-            title = "Servers"
+            except Exception:
+                logger.exception("Server uninit failed unexpectedly")
+                await interaction.followup.send(
+                    embed=render_embed(
+                        "server_uninit_failed",
+                        description="An unexpected error occurred. Check bot logs.",
+                    ),
+                    ephemeral=True,
+                )
 
-        if not profiles:
-            await interaction.followup.send("No servers configured yet.", ephemeral=True)
-            return
+        asyncio.create_task(_run())
 
-        embed = discord.Embed(title=title, colour=discord.Colour.blurple())
-        for profile in profiles[:25]:
-            network = networks.get(profile.network_id)
-            network_key = network.key if network else str(profile.network_id)
-            status = "enabled" if profile.enabled else "disabled"
-            embed.add_field(
-                name=f"{profile.display_name} ({profile.server_name})",
-                value=(
-                    f"Status: **{status}**\n"
-                    f"Network: `{network_key}`\n"
-                    f"Feed: <#{profile.source_channel_id}>\n"
-                    f"Emoji: {self._emoji_label(profile)}"
-                ),
-                inline=False,
-            )
-        if len(profiles) > 25:
-            embed.set_footer(text=f"Showing 25 of {len(profiles)} servers.")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    async def _set_enabled(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        server_name: str,
-        *,
-        enabled: bool,
-    ) -> None:
+    @require_manage_guild()
+    @app_commands.command(
+        name="sync-join-guide",
+        description="Refresh the join guide in #join-the-network",
+    )
+    async def sync_join_guide(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        context = self._context()
-        try:
-            network = await self._require_network(context, key)
-            profile = await context.profile_repo.set_enabled_by_network_and_server_name(
-                network.id,
-                server_name,
-                enabled,
-            )
-            await context.refresh_profile_counts()
-        except ProfileValidationError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
+        guild = interaction.guild
+        if guild is None or guild.id != self.bot.settings.guild_id:
+            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
             return
 
-        state = "enabled" if profile.enabled else "disabled"
+        bot_member = guild.me
+        if bot_member is None:
+            await interaction.followup.send(render_text("bot_member_unavailable_short"), ephemeral=True)
+            return
+
+        context = self._context()
+        channel = resolve_join_the_network_channel(guild)
+        if channel is None:
+            await interaction.followup.send(render_text("join_channel_missing"), ephemeral=True)
+            return
+
+        result = await sync_hub_join_sticky(
+            guild,
+            bot_member,
+            self.bot,
+            channel,
+            get_setting=context.settings_repo.get,
+            set_setting=context.settings_repo.set,
+            wipe_channel=True,
+        )
+        if not result.success:
+            await interaction.followup.send(
+                embed=render_embed(
+                    "sync_join_guide_failed",
+                    description=result.reason or "Unknown error",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        self.bot.add_view(JoinNetworkView(self.bot))
+        message_url = result.message.jump_url if result.message is not None else ""
         await interaction.followup.send(
-            f"Server **{profile.server_name}** on `{network.key}` is now **{state}**.",
+            embed=render_embed(
+                "sync_join_guide_success",
+                channel_mention=channel.mention,
+                message_url=message_url,
+            ),
             ephemeral=True,
         )
-
-    async def _require_network(self, context: BotContext, key: str) -> Network:
-        network = await context.network_repo.get_by_key(key)
-        if network is None:
-            raise ProfileValidationError(f"Network `{key.strip().lower()}` was not found.")
-        return network
-
-    async def _require_server(
-        self,
-        context: BotContext,
-        key: str,
-        server_name: str,
-    ) -> ServerProfile:
-        network = await self._require_network(context, key)
-        profile = await context.profile_repo.get_by_network_and_server_name(
-            network.id,
-            server_name,
-        )
-        if profile is None:
-            raise ProfileValidationError(
-                f"No server {server_name!r} found on network `{network.key}`."
-            )
-        return profile
-
-    def _emoji_label(self, profile: ServerProfile) -> str:
-        if profile.degraded_reason:
-            return f"{DEGRADED_FALLBACK} degraded — {profile.degraded_reason}"
-        if profile.emoji_id and profile.emoji_name:
-            return f"<:{profile.emoji_name}:{profile.emoji_id}>"
-        return "not set"
-
-    @commands.Cog.listener()
-    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
-        if channel.guild.id != self.bot.settings.guild_id:
-            return
-        context = self.bot.bot_context
-        if context is None:
-            return
-        try:
-            cleanup = context.profile_cleanup
-            if isinstance(channel, discord.CategoryChannel):
-                await cleanup.cleanup_by_profile_category_id(channel.guild, channel.id)
-                return
-            profile = await context.profile_repo.get_by_source_channel(channel.id)
-            if profile is not None:
-                await cleanup.cleanup_by_feed_channel_id(channel.guild, channel.id)
-                return
-            await cleanup.cleanup_by_profile_channel_id(channel.guild, channel.id)
-        except Exception:
-            logger.exception(
-                "Server cleanup failed after channel delete",
-                extra={"channel_id": channel.id},
-            )
 
     def _context(self) -> BotContext:
         if self.bot.bot_context is None:

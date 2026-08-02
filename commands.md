@@ -1,17 +1,5 @@
-network create <nkey> <name> <announcement channel>
-network init
-network delete <nkey>
-network status
-network list
+server init
+server uninit
+server sync-join-guide
 
-server create <nkey> <server name> <profile image> <display name>
-server delete <nkey> <server name> 
-server enable <nkey> <server name>
-server disable <nkey> <server name>
-server status <nkey>
-server list <nkey>
-server list
-
-profile update <display name> <profile image>  (partner role, in profile thread only)
-
-On a blank guild, run `/network init` first to create hub categories (**Subscribe To Me!**, **The Network**, **Moderation**), move/create rules and moderator channels, and sync role permissions. Then `/network create` provisions feed categories and join channels.
+On a blank guild, run `/server init` first to create hub categories (**Moderation** at top with **commands**, **join-requests**, **moderator-only**; **The Network** with **rules** and **join-the-network**). Use **Create Network** / **Delete Network** in `#commands` to register networks. Clients join via **Join Network** in `#join-the-network`, get a category with **network-profile**, and subscribe to networks with buttons there. Moderators review join requests with **Accept** / **Deny** in `#join-requests`.

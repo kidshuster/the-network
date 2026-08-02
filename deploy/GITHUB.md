@@ -75,11 +75,33 @@ cp .env.example .env   # fill in DISCORD_TOKEN and GUILD_ID
 
 `deploy.sh` pulls latest changes, installs Python deps, writes `/etc/systemd/system/the-network.service`, and enables the service. It calls `bin/start.sh` / `bin/stop.sh` for process management.
 
-### Docker on any server
+### Docker on any server (deploy repo — recommended)
+
+Publish from your dev machine:
 
 ```bash
-git clone ...
-docker compose up -d --build
+docker login ghcr.io
+./bin/publish.sh
+```
+
+On the host (Pi, VPS, etc.):
+
+```bash
+git clone git@github.com:YOU/the-network-run.git
+cd the-network-run
+cp .env.example .env
+./scripts/enable.sh
+```
+
+See [`deploy/RASPBERRY_PI.md`](RASPBERRY_PI.md).
+
+### Docker from source clone
+
+```bash
+git clone git@github.com:YOU/the-network.git
+cd the-network
+./bin/package.sh
+cd publish && cp .env.example .env && ./scripts/start.sh
 ```
 
 ## 4. top.gg vs GitHub
@@ -102,17 +124,9 @@ Hosts can deploy from tags or from `main`.
 
 ## Releases & Raspberry Pi
 
-Tagged releases (`v1.0.0`, …) trigger a GitHub Action that:
+Two ways to publish:
 
-1. Builds a multi-arch Docker image (`amd64`, `arm64`, `arm/v7`)
-2. Pushes to `ghcr.io/<owner>/the-network`
-3. Creates a GitHub Release page with pull instructions
+1. **`./bin/publish.sh`** — builds multi-arch image, pushes to GHCR, updates **the-network-run** deploy repo
+2. **Git tag** (`git push origin v1.1.0`) — GitHub Actions builds and pushes to GHCR (use `./bin/publish.sh --via-ci` to sync deploy repo only)
 
-On a Pi:
-
-```bash
-export IMAGE_TAG=1.0.0
-docker compose -f docker-compose.release.yml pull && docker compose -f docker-compose.release.yml up -d
-```
-
-See [`deploy/RASPBERRY_PI.md`](deploy/RASPBERRY_PI.md).
+On a Pi, clone **the-network-run** and run `./scripts/enable.sh`. See [`deploy/RASPBERRY_PI.md`](RASPBERRY_PI.md).

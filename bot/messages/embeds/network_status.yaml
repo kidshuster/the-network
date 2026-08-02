@@ -1,0 +1,19 @@
+kind: embed
+title: "Network Status"
+colour: "{colour}"
+fields:
+  - name: Guild
+    value: "{guild_label}"
+    inline: false
+  - name: Database
+    value: "Schema v{schema_version}"
+    inline: false
+  - name: Networks
+    value: "Configured: {network_count} · Enabled: {enabled_network_count}"
+    inline: false
+  - name: Clients
+    value: |
+      Registered: {client_count} · Enabled: {enabled_client_count} ·
+      Subscriptions: {subscription_count}
+    inline: false
+footer: "Uptime {uptime}"

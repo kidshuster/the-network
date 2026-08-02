@@ -1,0 +1,12 @@
+kind: embed
+title: "Profile Updated"
+colour: green
+description: "Your client profile was updated."
+fields:
+  - name: Display name
+    value: "{display_name}"
+    inline: true
+  - name: Warnings
+    value: "{warnings}"
+    inline: false
+    when: "{warnings}"

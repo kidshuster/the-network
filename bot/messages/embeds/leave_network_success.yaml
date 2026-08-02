@@ -1,0 +1,6 @@
+kind: embed
+title: Left network
+colour: green
+description: |
+  You left network **`{network_key}`**. Its publish and subscribe channels were removed.
+  You can subscribe again from your profile channel.

@@ -1,48 +1,17 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import discord
 import pytest
 
 from bot.domain.errors import NetworkValidationError
 from bot.services.network_provision import (
-    category_name_for,
-    create_announcement_channel,
+    format_operator_setup_instructions,
     resolve_access_role,
     validate_hub_permissions,
     validate_provision_permissions,
 )
-
-
-def test_category_name_for() -> None:
-    assert category_name_for("Stingers") == "Stingers Feed"
-
-
-@pytest.mark.asyncio
-async def test_create_announcement_channel_uses_news_flag() -> None:
-    guild = MagicMock(spec=discord.Guild)
-    category = MagicMock(spec=discord.CategoryChannel)
-    channel = MagicMock()
-    channel.type = discord.ChannelType.news
-    guild.create_text_channel = AsyncMock(return_value=channel)
-
-    result = await create_announcement_channel(
-        guild,
-        name="stingers-announcements",
-        category=category,
-        overwrites={},
-        reason="test",
-    )
-
-    assert result is channel
-    guild.create_text_channel.assert_awaited_once_with(
-        name="stingers-announcements",
-        category=category,
-        overwrites={},
-        news=True,
-        reason="test",
-    )
 
 
 def test_resolve_access_role_explicit() -> None:
@@ -70,53 +39,107 @@ def test_resolve_access_role_missing() -> None:
         resolve_access_role(guild, role_name="Missing Role")
 
 
-def test_forum_overwrites_removed_from_network_provision() -> None:
-    import bot.services.network_provision as module
+def test_format_operator_setup_instructions_lists_permissions() -> None:
+    text = format_operator_setup_instructions("The Network+", "The Network")
+    assert "The Network+" in text
+    assert "Manage Channels" in text
+    assert "Manage Roles" in text
 
-    assert not hasattr(module, "build_forum_overwrites")
 
-
-def test_base_overwrites_omit_manage_threads_for_bot() -> None:
+def test_base_overwrites_include_access_role() -> None:
     from bot.services.network_provision import build_base_overwrites
 
     guild = MagicMock(spec=discord.Guild)
     guild.default_role = MagicMock(spec=discord.Role)
-    bot = MagicMock(spec=discord.Member)
     access = MagicMock(spec=discord.Role)
+    bot = MagicMock(spec=discord.Member)
     overwrites = dict(build_base_overwrites(guild, bot, access))
-    assert overwrites[bot].manage_threads is None
+    assert overwrites[access].view_channel is True
+    assert overwrites[bot].manage_channels is True
+
+
+def _dual_role_bot() -> tuple[MagicMock, MagicMock, MagicMock]:
+    access = MagicMock(spec=discord.Role, name="The Network", position=5, id=42)
+    access.is_default.return_value = False
+    operator = MagicMock(spec=discord.Role, name="The Network+", position=10, id=43)
+    operator.is_default.return_value = False
+    operator.permissions.manage_channels = True
+    operator.permissions.manage_roles = True
+    operator.permissions.manage_webhooks = True
+    operator.permissions.send_messages = True
+    operator.permissions.embed_links = True
+    operator.permissions.attach_files = True
+    operator.permissions.read_message_history = True
+    operator.permissions.manage_messages = True
+    operator.permissions.manage_emojis_and_stickers = True
+
+    bot = MagicMock(spec=discord.Member)
+    bot.guild_permissions.manage_channels = True
+    bot.guild_permissions.manage_roles = True
+    bot.guild_permissions.manage_webhooks = True
+    bot.top_role = operator
+    bot.roles = [access, operator]
+    return bot, access, operator
 
 
 def test_validate_provision_permissions_requires_manage_roles() -> None:
-    bot = MagicMock(spec=discord.Member)
-    bot.guild_permissions.manage_channels = True
+    bot, access, operator = _dual_role_bot()
     bot.guild_permissions.manage_roles = False
-    bot.guild_permissions.manage_webhooks = True
-    bot.top_role = MagicMock(spec=discord.Role, name="Bot", position=5)
-    access = MagicMock(spec=discord.Role, name="The Network", position=1)
     with pytest.raises(NetworkValidationError, match="Manage Roles"):
-        validate_provision_permissions(bot, access)
+        validate_provision_permissions(
+            bot,
+            access,
+            operator_role=operator,
+            operator_role_name="The Network+",
+        )
 
 
-def test_validate_provision_permissions_same_role_is_clear() -> None:
-    bot = MagicMock(spec=discord.Member)
-    bot.display_name = "The-Network"
-    bot.guild_permissions.manage_channels = True
-    bot.guild_permissions.manage_roles = True
-    bot.guild_permissions.manage_webhooks = True
-    bot.top_role = MagicMock(spec=discord.Role, name="The Network", position=1, id=42)
-    access = MagicMock(spec=discord.Role, name="The Network", position=1, id=42)
-    with pytest.raises(NetworkValidationError, match="network \\*\\*access role\\*\\*"):
-        validate_provision_permissions(bot, access)
+def test_validate_provision_permissions_accepts_network_plus_as_top_role() -> None:
+    bot, access, operator = _dual_role_bot()
+    operator.name = "The Network+"
+    bot.top_role = operator
+    validate_provision_permissions(
+        bot,
+        access,
+        operator_role=operator,
+        operator_role_name="The Network+",
+    )
+
+
+def test_validate_provision_permissions_requires_operator_role() -> None:
+    bot, access, _operator = _dual_role_bot()
+    with pytest.raises(NetworkValidationError, match="The Network+"):
+        validate_provision_permissions(
+            bot,
+            access,
+            operator_role=None,
+            operator_role_name="The Network+",
+        )
+
+
+def test_validate_provision_permissions_requires_operator_as_top_role() -> None:
+    bot, access, operator = _dual_role_bot()
+    bot.top_role = access
+    with pytest.raises(NetworkValidationError, match="highest role"):
+        validate_provision_permissions(
+            bot,
+            access,
+            operator_role=operator,
+            operator_role_name="The Network+",
+        )
 
 
 def test_validate_hub_permissions_requires_role_above_moderator() -> None:
-    bot = MagicMock(spec=discord.Member)
-    bot.guild_permissions.manage_channels = True
-    bot.guild_permissions.manage_roles = True
-    bot.guild_permissions.manage_webhooks = True
-    bot.top_role = MagicMock(spec=discord.Role, name="Network Bot", position=2, id=1)
-    access = MagicMock(spec=discord.Role, name="Partner Access", position=1, id=2)
-    moderator = MagicMock(spec=discord.Role, name="Moderator", position=3, id=3)
+    bot, access, operator = _dual_role_bot()
+    access.position = 1
+    operator.position = 10
+    bot.top_role = operator
+    human_moderator = MagicMock(spec=discord.Role, name="Moderator", position=15, id=3)
     with pytest.raises(NetworkValidationError, match="Moderator"):
-        validate_hub_permissions(bot, access, moderator_role=moderator)
+        validate_hub_permissions(
+            bot,
+            access,
+            operator_role=operator,
+            operator_role_name="The Network+",
+            human_moderator_role=human_moderator,
+        )

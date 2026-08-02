@@ -81,11 +81,28 @@ pytest
 
 ## Docker
 
+### Local development
+
 ```bash
 ./bin/package.sh
 docker compose up -d
 docker compose logs -f
 ```
+
+### Production publish (Docker + deploy repo)
+
+Build a multi-arch image, push to GHCR, and publish the minimal **the-network-run** deploy repo:
+
+```bash
+docker login ghcr.io
+./bin/publish.sh
+```
+
+Options: `--via-ci` (image already on GHCR from git tag), `--skip-image`, `--skip-deploy-repo`.
+
+`./bin/package.sh` alone builds the image and writes a runnable bundle to `./publish/` (gitignored). Use `PUBLISH_LOCAL=1 ./bin/package.sh` to include a local-image compose override for testing without a registry.
+
+On any host (including Raspberry Pi): clone the deploy repo, configure `.env`, and run `./scripts/enable.sh` for systemd + Docker. See [`deploy/RASPBERRY_PI.md`](deploy/RASPBERRY_PI.md).
 
 Or manually:
 
@@ -104,18 +121,28 @@ Set `TOPGG_TOKEN` in `.env` after creating your bot page so server count stays u
 
 GitHub stores code and runs CI — it does **not** host the live bot. See [`deploy/GITHUB.md`](deploy/GITHUB.md) for the repo workflow.
 
-## Raspberry Pi (Docker from GitHub Releases)
+## Raspberry Pi (deploy repo — recommended)
 
-Pre-built multi-arch images (including **arm64** for Pi 4/5) are published on each release:
+The **the-network-run** deploy repo contains only what you need to run the bot: compose file, env template, lifecycle scripts, and systemd integration. Images are **arm64**-ready (Pi 4/5, 64-bit Raspberry Pi OS).
 
 ```bash
-export GITHUB_USER=kidshuster
-export IMAGE_TAG=1.0.0
-docker compose -f docker-compose.release.yml pull
-docker compose -f docker-compose.release.yml up -d
+git clone git@github.com:YOUR_USER/the-network-run.git ~/the-network-run
+cd ~/the-network-run
+cp .env.example .env   # DISCORD_TOKEN, GUILD_ID
+chmod +x scripts/*.sh
+./scripts/enable.sh
 ```
 
 Full guide: [`deploy/RASPBERRY_PI.md`](deploy/RASPBERRY_PI.md)
+
+### Alternative: pull from GHCR manually
+
+```bash
+export GITHUB_USER=kidshuster
+export IMAGE_TAG=1.1.0
+docker compose -f docker-compose.release.yml pull
+docker compose -f docker-compose.release.yml up -d
+```
 
 ## Project docs
 

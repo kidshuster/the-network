@@ -1,0 +1,24 @@
+kind: embed
+colour: "{colour}"
+description: |
+  Your client profile on **The Network** hub.
+  Subscribe to networks with the buttons below, then connect your
+  announcement channel to each **publish** channel via Channel Follow.
+author_name: "{author_name}"
+author_icon_url: "{author_icon_url}"
+fields:
+  - name: Server name
+    value: "{server_name}"
+    inline: true
+  - name: Status
+    value: "{status}"
+    inline: true
+  - name: Subscribed networks
+    value: "{networks_value}"
+    inline: false
+    when: "{has_subscriptions}"
+  - name: Networks
+    value: "Click a network button below to subscribe."
+    inline: false
+    when: "{no_subscriptions}"
+footer: "The Network • client profile • use Edit Profile or network buttons below"
