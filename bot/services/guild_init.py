@@ -452,37 +452,24 @@ async def _sync_hub_public_channels(
             result.notes.append(f"Synced hub permissions on #{channel.name}")
 
 
-async def _ensure_guild_notification_defaults(
+async def _sync_hub_notification_defaults(
     guild: discord.Guild,
     bot_member: discord.Member,
     *,
     result: GuildInitResult,
+    step: str,
 ) -> None:
-    if not bot_member.guild_permissions.manage_guild:
-        result.notes.append(
-            "Could not set server default notifications to Only @mentions "
-            "(bot needs **Manage Server**)."
-        )
-        return
-    if guild.default_notifications == discord.NotificationLevel.only_mentions:
-        result.notes.append(
-            "Server default notifications already set to **Only @mentions**."
-        )
-        return
+    from bot.services.guild_notifications import sync_guild_notification_policy
 
-    async def _edit() -> None:
-        await guild.edit(
-            default_notifications=discord.NotificationLevel.only_mentions,
+    async def _run() -> None:
+        await sync_guild_notification_policy(
+            guild,
+            bot_member,
             reason="The Network guild init",
+            result=result,
         )
 
-    edited = await _run_init_step(result, "set server default notifications", _edit)
-    if edited is not None:
-        result.notes.append(
-            "Server default notifications set to **Only @mentions**. "
-            "Bot channel posts are silent except new join requests in "
-            f"**#{CHANNEL_JOIN_REQUESTS}**, which ping **Moderator**."
-        )
+    await _run_init_step(result, step, _run)
 
 
 async def initialize_guild(
@@ -532,10 +519,11 @@ async def initialize_guild(
             + "."
         )
 
-        await _ensure_guild_notification_defaults(
+        await _sync_hub_notification_defaults(
             guild,
             bot_member,
             result=result,
+            step="set server notification defaults",
         )
 
         human_moderator_role = await _ensure_human_moderator_role(
@@ -767,6 +755,13 @@ async def initialize_guild(
                 ) from exc
             if smoke_note is not None:
                 result.notes.append(smoke_note)
+
+        await _sync_hub_notification_defaults(
+            guild,
+            bot_member,
+            result=result,
+            step="refresh server notification defaults",
+        )
 
         result.notes.append(
             "Hub ready. Use **#commands** under Moderation to create networks; "

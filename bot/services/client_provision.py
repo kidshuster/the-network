@@ -96,6 +96,13 @@ class ClientProvisionService:
                 human_moderator_role,
             ),
         )
+        from bot.services.guild_notifications import ensure_guild_only_mention_notifications
+
+        await ensure_guild_only_mention_notifications(
+            guild,
+            bot_member,
+            reason=f"Client provision for {server_name}",
+        )
         category = await guild.create_category(
             name=server_name.strip()[:100],
             overwrites=category_overwrites,

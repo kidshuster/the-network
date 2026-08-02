@@ -564,6 +564,13 @@ async def create_text_channel_with_overwrites(
     news: bool = False,
 ) -> discord.TextChannel:
     """Create a text channel, then apply overwrites (required for restricted categories)."""
+    from bot.services.guild_notifications import ensure_guild_only_mention_notifications
+
+    await ensure_guild_only_mention_notifications(
+        guild,
+        bot_member,
+        reason=reason,
+    )
     kwargs: dict[str, object] = {"name": name, "reason": reason}
     if category is not None:
         kwargs["category"] = category
