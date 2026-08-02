@@ -43,5 +43,4 @@ def test_leaders_channel_overwrites_hide_everyone_and_grant_client_roles() -> No
     assert overwrites[client_a].view_channel is True
     assert overwrites[client_a].send_messages is True
     assert overwrites[client_b].send_messages is True
-    assert overwrites[access].view_channel is True
-    assert overwrites[access].send_messages is False
+    assert overwrites[access].view_channel is False

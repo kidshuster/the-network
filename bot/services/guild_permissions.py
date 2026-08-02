@@ -327,7 +327,7 @@ def build_leaders_channel_overwrites(
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
 ) -> OverwriteMap:
-    """Hidden from @everyone; each client role can view and send."""
+    """Hidden from @everyone and hub access role; visible only to client roles."""
     base: dict[
         discord.Role | discord.Member | discord.Object,
         discord.PermissionOverwrite,
@@ -338,21 +338,10 @@ def build_leaders_channel_overwrites(
         if _can_configure_role(bot_member, role):
             base[role] = build_client_leader_channel_overwrite()
     if _can_configure_role(bot_member, access_role):
-        base[access_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            read_message_history=True,
-            send_messages=False,
-        )
-    overwrites = _with_access_overwrite(base, bot_member, access_role)
-    if _can_configure_role(bot_member, access_role):
-        overwrites[access_role] = discord.PermissionOverwrite(
-            view_channel=True,
-            read_message_history=True,
-            send_messages=False,
-        )
+        base[access_role] = build_everyone_hidden_overwrite()
     return cast(
         OverwriteMap,
-        _with_moderator_overwrite(overwrites, bot_member, human_moderator_role),
+        _with_moderator_overwrite(base, bot_member, human_moderator_role),
     )
 
 

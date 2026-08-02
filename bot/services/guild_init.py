@@ -17,6 +17,7 @@ from bot.services.guild_layout import (
     CHANNEL_COMMANDS,
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_JOIN_THE_NETWORK,
+    CHANNEL_LEADERS,
     CHANNEL_MODERATOR_ONLY,
     CHANNEL_RULES,
     resolve_category,
@@ -440,6 +441,8 @@ async def _sync_hub_public_channels(
         if not isinstance(channel, discord.TextChannel):
             continue
         if rules_channel_id is not None and channel.id == rules_channel_id:
+            continue
+        if channel.name.casefold() == CHANNEL_LEADERS.casefold():
             continue
         if await _edit_overwrites(
             bot_member,
