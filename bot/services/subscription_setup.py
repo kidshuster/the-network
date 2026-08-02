@@ -39,7 +39,7 @@ async def is_publish_configured(publish_channel: discord.TextChannel) -> bool:
     except discord.HTTPException:
         return False
     for webhook in webhooks:
-        if webhook.is_channel_follower():
+        if webhook.type is discord.WebhookType.channel_follower:
             return True
     return False
 

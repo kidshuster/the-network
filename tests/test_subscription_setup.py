@@ -17,7 +17,7 @@ from bot.services.subscription_setup import (
 async def test_is_publish_configured_true_when_channel_follower_webhook() -> None:
     channel = MagicMock(spec=discord.TextChannel)
     follower = MagicMock()
-    follower.is_channel_follower.return_value = True
+    follower.type = discord.WebhookType.channel_follower
     channel.webhooks = AsyncMock(return_value=[follower])
 
     assert await is_publish_configured(channel) is True
@@ -27,7 +27,7 @@ async def test_is_publish_configured_true_when_channel_follower_webhook() -> Non
 async def test_is_publish_configured_false_without_follower_webhooks() -> None:
     channel = MagicMock(spec=discord.TextChannel)
     incoming = MagicMock()
-    incoming.is_channel_follower.return_value = False
+    incoming.type = discord.WebhookType.incoming
     channel.webhooks = AsyncMock(return_value=[incoming])
 
     assert await is_publish_configured(channel) is False
