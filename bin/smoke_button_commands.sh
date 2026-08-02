@@ -49,7 +49,6 @@ for fn in (
 embed = build_moderator_request_embed(
     requester=type("User", (), {"mention": "<@1>"})(),
     server_name="Smoke Server",
-    display_name="Smoke",
     request_id=1,
 )
 if embed.title != "Client join request":

@@ -9,10 +9,7 @@ fields:
   - name: Request ID
     value: "`{request_id}`"
     inline: true
-  - name: Server name
-    value: "{server_name}"
-    inline: false
-  - name: Display name
-    value: "{display_name}"
+  - name: Name
+    value: "{client_name}"
     inline: false
 footer: "The Network • moderator review"

@@ -49,11 +49,11 @@ class JoinNetworkModal(discord.ui.Modal):
         from bot.services.server_request_service import ServerRequestService
 
         service = ServerRequestService(context, self._bot)
+        name = self._fields["name"].component.value.strip()
         result = await service.submit_request(
             guild,
             requester=user,
-            server_name=self._fields["server_name"].component.value.strip(),
-            display_name=self._fields["display_name"].component.value.strip(),
+            server_name=name,
             profile_image=attachments[0],
         )
         if not result.success:
@@ -69,8 +69,7 @@ class JoinNetworkModal(discord.ui.Modal):
         await interaction.followup.send(
             embed=render_embed(
                 "join_request_submitted",
-                server_name=result.server_name or "—",
-                display_name=result.display_name or "—",
+                client_name=result.server_name or "—",
             ),
             ephemeral=True,
         )

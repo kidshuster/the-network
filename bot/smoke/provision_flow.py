@@ -47,7 +47,7 @@ def _is_smoke_join_request_message(
         return False
     embed = message.embeds[0]
     for field in embed.fields:
-        if field.name.casefold() != "server name":
+        if field.name.casefold() != "name":
             continue
         return _is_smoke_server_name(field.value.strip())
     return False

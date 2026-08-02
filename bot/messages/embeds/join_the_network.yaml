@@ -17,8 +17,7 @@ fields:
     inline: false
   - name: "3. Request hub access"
     value: |
-      Click **Join Network** below and submit your server name, display name, and
-      a profile image.
+      Click **Join Network** below and submit your name and a profile image.
     inline: false
   - name: "4. Subscribe to networks (after approval)"
     value: |

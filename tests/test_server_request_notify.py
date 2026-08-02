@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.db.repositories import ServerRequestRepository
 from bot.services.server_request_service import ServerRequestService
 
 
@@ -13,6 +14,73 @@ def _service(*, bot_user_id: int = 999) -> ServerRequestService:
     bot.user = MagicMock(id=bot_user_id)
     context = MagicMock()
     return ServerRequestService(context, bot)
+
+
+@pytest.mark.asyncio
+async def test_submit_request_defaults_display_name_to_server_name(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = MagicMock()
+    context.server_request_repo = ServerRequestRepository(db)
+    context.client_repo = MagicMock()
+    context.client_repo.get_by_server_name = AsyncMock(return_value=None)
+
+    bot = MagicMock()
+    bot.settings.guild_id = 100
+    bot.add_view = MagicMock()
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.me = MagicMock()
+
+    requester = MagicMock()
+    requester.id = 1
+
+    profile_image = MagicMock(spec=discord.Attachment)
+    profile_image.url = "https://example.com/p.png"
+
+    monkeypatch.setattr(
+        "bot.services.server_request_service.read_profile_image_attachment",
+        AsyncMock(return_value=MagicMock(data=b"fake-png")),
+    )
+
+    channel = MagicMock()
+    channel.permissions_for.return_value = MagicMock(
+        view_channel=True,
+        send_messages=True,
+        embed_links=True,
+    )
+    channel.send = AsyncMock(return_value=MagicMock(id=9001))
+    monkeypatch.setattr(
+        "bot.services.guild_layout.resolve_join_requests_channel",
+        MagicMock(return_value=channel),
+    )
+    monkeypatch.setattr(
+        "bot.services.guild_layout.resolve_human_moderator_role",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "bot.services.message_delivery.build_moderator_join_request_send_kwargs",
+        MagicMock(return_value={}),
+    )
+
+    service = ServerRequestService(context, bot)
+    result = await service.submit_request(
+        guild,
+        requester=requester,
+        server_name="Acme Community",
+        profile_image=profile_image,
+    )
+
+    assert result.success is True
+    assert result.server_name == "Acme Community"
+    assert result.display_name == "Acme Community"
+
+    stored = await context.server_request_repo.list_pending()
+    assert len(stored) == 1
+    assert stored[0].server_name == "Acme Community"
+    assert stored[0].display_name == "Acme Community"
 
 
 @pytest.mark.asyncio

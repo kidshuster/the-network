@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
+from bot.ui.join_views import JoinNetworkModal, JoinNetworkView, ModeratorReviewView
 from bot.ui.network_admin_views import CreateNetworkModal, DeleteNetworkModal, NetworkAdminView
 from bot.ui.network_views import SubscriptionModerationView
 
@@ -46,6 +46,15 @@ def test_join_network_view_has_join_button() -> None:
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
     assert labels == {"Join Network"}
 
+
+def test_join_network_modal_loads_single_name_field() -> None:
+    bot = MagicMock()
+    modal = JoinNetworkModal(bot)
+    assert modal.title == "Join the network"
+    assert "name" in modal._fields
+    assert "profile_image" in modal._fields
+    assert "display_name" not in modal._fields
+    assert "server_name" not in modal._fields
 
 def test_subscription_moderation_view_subscribe_connected_button() -> None:
     bot = MagicMock()

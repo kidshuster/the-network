@@ -68,14 +68,14 @@ async def test_cleanup_join_requests_smoke_artifacts_sweeps_channel_and_db(
     )
 
     smoke_embed = discord.Embed()
-    smoke_embed.add_field(name="Server name", value="Smoke Accept stale", inline=False)
+    smoke_embed.add_field(name="Name", value="Smoke Accept stale", inline=False)
     smoke_message = MagicMock(spec=discord.Message)
     smoke_message.author.id = 42
     smoke_message.embeds = [smoke_embed]
     smoke_message.delete = AsyncMock()
 
     real_embed = discord.Embed()
-    real_embed.add_field(name="Server name", value="Real Server", inline=False)
+    real_embed.add_field(name="Name", value="Real Server", inline=False)
     real_message = MagicMock(spec=discord.Message)
     real_message.author.id = 42
     real_message.embeds = [real_embed]

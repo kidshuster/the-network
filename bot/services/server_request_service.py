@@ -42,7 +42,6 @@ def build_moderator_request_embed(
     *,
     requester: discord.abc.User,
     server_name: str,
-    display_name: str,
     request_id: int,
 ) -> discord.Embed:
     from bot.messages import render_embed
@@ -51,8 +50,7 @@ def build_moderator_request_embed(
         "join_request_moderator",
         requester_mention=requester.mention,
         request_id=request_id,
-        server_name=server_name,
-        display_name=display_name,
+        client_name=server_name,
     )
 
 
@@ -92,13 +90,15 @@ class ServerRequestService:
         *,
         requester: discord.abc.User,
         server_name: str,
-        display_name: str,
         profile_image: discord.Attachment,
+        display_name: str | None = None,
     ) -> SubmitRequestResult:
-        if not server_name.strip():
-            return SubmitRequestResult(success=False, error="Server name cannot be empty.")
-        if not display_name.strip():
-            return SubmitRequestResult(success=False, error="Display name cannot be empty.")
+        name = server_name.strip()
+        if not name:
+            return SubmitRequestResult(success=False, error="Name cannot be empty.")
+        label = (display_name or name).strip()
+        if not label:
+            return SubmitRequestResult(success=False, error="Name cannot be empty.")
 
         existing_pending = await self._context.server_request_repo.get_pending_for_requester(
             requester.id,
@@ -111,12 +111,12 @@ class ServerRequestService:
 
         existing_client = await self._context.client_repo.get_by_server_name(
             guild.id,
-            server_name,
+            name,
         )
         if existing_client is not None:
             return SubmitRequestResult(
                 success=False,
-                error=f"A client named {server_name!r} already exists on this hub.",
+                error=f"A client named {name!r} already exists on this hub.",
             )
 
         try:
@@ -128,8 +128,8 @@ class ServerRequestService:
             guild_id=guild.id,
             network_id=None,
             requester_user_id=requester.id,
-            server_name=server_name,
-            display_name=display_name,
+            server_name=name,
+            display_name=label,
             profile_image_url=profile_image.url,
             profile_image_data=image.data,
         )
@@ -160,7 +160,6 @@ class ServerRequestService:
         embed = build_moderator_request_embed(
             requester=requester,
             server_name=request.server_name,
-            display_name=request.display_name,
             request_id=request.id,
         )
         try:
