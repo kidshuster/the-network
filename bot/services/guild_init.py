@@ -702,7 +702,7 @@ async def initialize_guild(
                     join_channel,
                     get_setting=context.settings_repo.get,
                     set_setting=context.settings_repo.set,
-                    wipe_channel=False,
+                    wipe_channel=True,
                 )
                 if join_result.message is not None:
                     result.notes.append(
@@ -734,6 +734,7 @@ async def initialize_guild(
                     context,
                     get_setting=context.settings_repo.get,
                     set_setting=context.settings_repo.set,
+                    wipe_channel=True,
                 )
                 if admin_result.message is not None:
                     result.notes.append(
@@ -751,8 +752,13 @@ async def initialize_guild(
             try:
                 if not skip_join_smoke:
                     smoke_note = await run_post_init_join_smoke(guild, bot, context)
+                    from bot.smoke.provision_flow import cleanup_join_requests_smoke_artifacts
+
+                    await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
                 else:
                     smoke_note = None
+            except NetworkValidationError:
+                raise
             except RuntimeError as exc:
                 raise NetworkValidationError(
                     "Join-approval smoke failed:\n"

@@ -118,6 +118,14 @@ async def sync_hub_join_sticky(
 
     desired_embed = build_how_to_join_embed()
     desired_signature = embed_content_signature(desired_embed)
+    view = JoinNetworkView(bot)
+    bot.add_view(view)
+
+    if wipe_channel:
+        message = await channel.send(embed=desired_embed, view=view, silent=True)
+        await set_setting(HOW_TO_JOIN_SETTINGS_KEY, f"{channel.id}:{message.id}")
+        return HowToJoinStickyResult(success=True, message=message, updated=True)
+
     stored_raw = await get_setting(HOW_TO_JOIN_SETTINGS_KEY)
     existing: discord.Message | None = None
     if stored_raw:
@@ -126,9 +134,6 @@ async def sync_hub_join_sticky(
             existing = await channel.fetch_message(message_id)
         except (ValueError, discord.HTTPException):
             existing = None
-
-    view = JoinNetworkView(bot)
-    bot.add_view(view)
 
     if existing is not None and existing.author.id == bot_member.id and existing.embeds:
         existing_signature = embed_content_signature(existing.embeds[0])

@@ -14,7 +14,7 @@ def build_client_profile_embed(
     display_name: str,
     enabled: bool,
     emoji_id: int | None = None,
-    subscribed_networks: tuple[str, ...] = (),
+    subscribed_networks: tuple[tuple[str, str], ...] = (),
 ) -> discord.Embed:
     author_name = sanitize_author(display_name.strip() or server_name)
     author_icon_url = ""
@@ -22,7 +22,9 @@ def build_client_profile_embed(
         author_icon_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png?size=128"
 
     has_subscriptions = bool(subscribed_networks)
-    networks_value = ", ".join(f"`{key}`" for key in subscribed_networks)
+    networks_value = "\n".join(
+        f"`{key}` — {status}" for key, status in subscribed_networks
+    )
 
     return render_embed(
         "client_profile",

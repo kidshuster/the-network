@@ -32,6 +32,46 @@ logger = logging.getLogger(__name__)
 
 _PROBE_REASON = "The Network smoke cleanup (auto-deleted)"
 
+_SMOKE_JOIN_REQUEST_PREFIXES = ("Smoke Accept ", "Smoke Deny ", "Smoke Rebuild ")
+
+
+def _is_smoke_server_name(server_name: str) -> bool:
+    return server_name.startswith(_SMOKE_JOIN_REQUEST_PREFIXES)
+
+
+def _is_smoke_join_request_message(
+    message: discord.Message,
+    bot_member: discord.Member,
+) -> bool:
+    if message.author.id != bot_member.id or not message.embeds:
+        return False
+    embed = message.embeds[0]
+    for field in embed.fields:
+        if field.name.casefold() != "server name":
+            continue
+        return _is_smoke_server_name(field.value.strip())
+    return False
+
+
+async def _delete_join_request_message(
+    channel: discord.TextChannel,
+    message: discord.Message,
+) -> None:
+    try:
+        await message.delete()
+        return
+    except discord.NotFound:
+        return
+    except discord.HTTPException:
+        pass
+    try:
+        await channel.delete_messages([message])
+    except discord.HTTPException:
+        logger.warning(
+            "Smoke cleanup: could not delete join-request message",
+            extra={"channel_id": channel.id, "message_id": message.id},
+        )
+
 
 async def _delete_smoke_channel_object(
     channel: discord.abc.GuildChannel,
@@ -337,18 +377,44 @@ async def cleanup_smoke_join_request_messages(
         if channel is not None and request.moderator_message_id is not None:
             try:
                 message = await channel.fetch_message(request.moderator_message_id)
-                await message.delete()
+                await _delete_join_request_message(channel, message)
             except discord.NotFound:
                 pass
             except discord.HTTPException:
                 logger.warning(
-                    "Smoke cleanup: could not delete join-request message",
+                    "Smoke cleanup: could not fetch join-request message",
                     extra={
                         "request_id": request_id,
                         "message_id": request.moderator_message_id,
                     },
                 )
         await context.server_request_repo.delete_by_id(request_id)
+
+
+async def cleanup_join_requests_smoke_artifacts(
+    guild: discord.Guild,
+    context: BotContext,
+    bot_member: discord.Member,
+) -> None:
+    """Remove smoke join-request messages and DB rows from `#join-requests`."""
+    from bot.services.guild_layout import resolve_join_requests_channel
+
+    channel = resolve_join_requests_channel(guild)
+    if channel is not None:
+        try:
+            async for message in channel.history(limit=200):
+                if not _is_smoke_join_request_message(message, bot_member):
+                    continue
+                await _delete_join_request_message(channel, message)
+        except discord.HTTPException as exc:
+            logger.warning(
+                "Smoke cleanup: could not scan join-requests channel",
+                extra={"channel_id": channel.id, "error": str(exc)},
+            )
+
+    for prefix in _SMOKE_JOIN_REQUEST_PREFIXES:
+        for request in await context.server_request_repo.list_by_server_name_prefix(prefix):
+            await context.server_request_repo.delete_by_id(request.id)
 
 
 async def cleanup_all_hub_rebuild_smoke_clients(
@@ -389,6 +455,7 @@ async def run_join_approval_smoke_flow(
         raise RuntimeError("Bot member is unavailable in the configured guild.")
 
     async with guild_test_resource_guard(guild, bot_member=bot_member):
+        await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
         service = ServerRequestService(context, bot)
         suffix = secrets.token_hex(3)
         accept_server_name = f"Smoke Accept {suffix}"
@@ -530,6 +597,7 @@ async def run_join_approval_smoke_flow(
                 context,
                 request_ids_for_cleanup,
             )
+            await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
 
 
 def resolve_smoke_network_key(context: BotContext) -> str:

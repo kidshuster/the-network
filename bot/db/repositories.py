@@ -679,6 +679,19 @@ class ServerRequestRepository:
             (request_id,),
         )
 
+    async def list_by_server_name_prefix(self, prefix: str) -> list[ServerRequest]:
+        cursor = await self._db.connection.execute(
+            """
+            SELECT * FROM server_requests
+            WHERE server_name LIKE ?
+            ORDER BY id ASC
+            """,
+            (f"{prefix}%",),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [ServerRequestRow.from_row(row) for row in rows]
+
 
 class SettingsRepository:
     def __init__(self, db: Database) -> None:

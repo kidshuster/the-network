@@ -124,6 +124,7 @@ async def sync_network_admin_sticky(
     *,
     get_setting: Callable[[str], Awaitable[str | None]],
     set_setting: Callable[[str, str], Awaitable[None]],
+    wipe_channel: bool = False,
 ) -> NetworkAdminStickyResult:
     from bot.ui.network_admin_views import NetworkAdminView
 
@@ -138,10 +139,25 @@ async def sync_network_admin_sticky(
             ),
         )
 
+    if wipe_channel:
+        from bot.services.discord_cleanup import wipe_text_channel
+
+        _deleted, wipe_error = await wipe_text_channel(channel, bot_member)
+        if wipe_error is not None:
+            return NetworkAdminStickyResult(success=False, reason=wipe_error)
+
     desired_embed = await build_network_admin_embed(context)
     footer = build_network_admin_footer()
     if desired_embed.footer and desired_embed.footer.text:
         footer = desired_embed.footer.text
+
+    view = NetworkAdminView(bot)
+    bot.add_view(view)
+
+    if wipe_channel:
+        message = await channel.send(embed=desired_embed, view=view, silent=True)
+        await set_setting(NETWORK_ADMIN_SETTINGS_KEY, f"{channel.id}:{message.id}")
+        return NetworkAdminStickyResult(success=True, message=message, updated=True)
 
     stored_raw = await get_setting(NETWORK_ADMIN_SETTINGS_KEY)
     existing: discord.Message | None = None
@@ -151,9 +167,6 @@ async def sync_network_admin_sticky(
             existing = await channel.fetch_message(message_id)
         except (ValueError, discord.HTTPException):
             existing = None
-
-    view = NetworkAdminView(bot)
-    bot.add_view(view)
 
     if existing is not None and existing.author.id == bot_member.id and existing.embeds:
         existing_footer = existing.embeds[0].footer.text if existing.embeds[0].footer else ""

@@ -29,15 +29,20 @@ class NetworkProfileView(discord.ui.View):
         bot: NetworkRelayBot,
         client_id: int,
         network_keys: list[str],
+        *,
+        subscribed_keys: set[str] | None = None,
     ) -> None:
         super().__init__(timeout=None)
         self._bot = bot
         self._client_id = client_id
+        subscribed = subscribed_keys or set()
         for key in network_keys[:MAX_PROFILE_NETWORK_BUTTONS]:
+            already_subscribed = key in subscribed
             button = discord.ui.Button(
                 label=f"Join {key}",
                 style=discord.ButtonStyle.primary,
                 custom_id=subscribe_network_button(client_id, key),
+                disabled=already_subscribed,
             )
             button.callback = self._make_subscribe_callback(key)
             self.add_item(button)

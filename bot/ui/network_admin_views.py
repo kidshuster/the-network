@@ -81,6 +81,7 @@ class CreateNetworkModal(discord.ui.Modal):
                 key=result.network.key,
                 display_name=result.network.display_name,
                 updated_count=result.updated_profile_count if result.updated_profile_count else "",
+                reenabled="1" if result.reenabled else "",
             ),
             ephemeral=True,
         )
@@ -146,7 +147,7 @@ class NetworkAdminView(discord.ui.View):
         self.add_item(create)
 
         delete = discord.ui.Button(
-            label="Delete Network",
+            label="Disable Network",
             style=discord.ButtonStyle.danger,
             custom_id=network_delete_button(),
         )

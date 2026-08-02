@@ -59,11 +59,32 @@ def test_hub_rules_embed() -> None:
 
 
 def test_network_created_optional_field() -> None:
-    without = render_embed("network_created", key="a", display_name="A", updated_count="")
+    without = render_embed(
+        "network_created",
+        key="a",
+        display_name="A",
+        updated_count="",
+        reenabled="",
+    )
     assert len(without.fields) == 3
 
-    with_update = render_embed("network_created", key="a", display_name="A", updated_count=2)
+    with_update = render_embed(
+        "network_created",
+        key="a",
+        display_name="A",
+        updated_count=2,
+        reenabled="",
+    )
     assert len(with_update.fields) == 4
+
+    reenabled = render_embed(
+        "network_created",
+        key="a",
+        display_name="A",
+        updated_count="",
+        reenabled="1",
+    )
+    assert len(reenabled.fields) == 4
 
 
 def test_unknown_template_raises() -> None:
@@ -75,3 +96,4 @@ def test_unknown_template_raises() -> None:
 def test_placeholder_substitution() -> None:
     text = render_text("network_deleted", key="my-net")
     assert "`my-net`" in text
+    assert "disabled" in text.lower()

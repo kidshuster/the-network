@@ -29,17 +29,22 @@ async def refresh_client_profile_message(
         return
 
     subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
-    network_keys: list[str] = []
+    network_entries: list[tuple[str, str]] = []
+    subscribed_keys: set[str] = set()
     for sub in subscriptions:
         network = await context.network_repo.get_by_id(sub.network_id)
-        if network is not None:
-            network_keys.append(network.key)
+        if network is None:
+            continue
+        subscribed_keys.add(network.key)
+        status = "Active" if network.enabled else "Disabled"
+        network_entries.append((network.key, status))
 
     all_networks = await context.network_repo.list_all()
     view = NetworkProfileView(
         bot,
         client.id,
         [n.key for n in all_networks],
+        subscribed_keys=subscribed_keys,
     )
     bot.add_view(view)
 
@@ -48,7 +53,7 @@ async def refresh_client_profile_message(
         display_name=client.display_name,
         enabled=client.enabled,
         emoji_id=client.emoji_id,
-        subscribed_networks=tuple(network_keys),
+        subscribed_networks=tuple(network_entries),
     )
 
     try:
