@@ -527,6 +527,14 @@ async def resync_subscriptions_for_network(
                 subscription=existing,
                 access_role_name=access_role_name,
             )
+            await sync_subscription_setup(
+                bot,
+                context,
+                guild,
+                client=client,
+                subscription=existing,
+                network=network,
+            )
             await reorder_client_category_channels(
                 category,
                 client=client,

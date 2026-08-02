@@ -6,10 +6,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.domain.client import Client
-from bot.services.client_profile_sync import (
-    post_subscription_moderation_embed,
-    refresh_client_profile_message,
-)
+from bot.services.client_profile_sync import refresh_client_profile_message
 from bot.services.client_subscription import (
     reorder_client_category_channels,
     resync_subscriptions_for_network,
@@ -18,7 +15,8 @@ from bot.services.client_subscription import (
     sync_subscription_channel_permissions,
 )
 from bot.services.guild_permissions import sync_client_category_permissions
-from bot.ui.network_views import NetworkProfileView, SubscriptionModerationView
+from bot.services.subscription_setup_sticky import sync_subscription_setup
+from bot.ui.network_views import NetworkProfileView
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -98,31 +96,13 @@ async def reconnect_clients_on_init(
                     subscription=subscription,
                     access_role_name=role_name,
                 )
-                await post_subscription_moderation_embed(
+                await sync_subscription_setup(
                     bot,
                     context,
                     guild,
                     client=client,
-                    network=network,
                     subscription=subscription,
-                )
-                from bot.services.subscription_setup import resolve_setup_state
-
-                state = await resolve_setup_state(
-                    guild,
-                    subscription,
-                    network_active=network.enabled,
-                )
-                bot.add_view(
-                    SubscriptionModerationView(
-                        bot,
-                        subscription.id,
-                        network.key,
-                        show_subscribe_connected=(
-                            state.publish_configured and not state.subscribe_confirmed
-                        ),
-                        show_moderation_actions=state.fully_configured,
-                    )
+                    network=network,
                 )
 
             await reorder_client_category_channels(

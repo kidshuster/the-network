@@ -241,7 +241,7 @@ class SubscriptionModerationView(discord.ui.View):
         network_key: str,
         *,
         show_subscribe_connected: bool = False,
-        show_moderation_actions: bool = True,
+        show_blacklist: bool = False,
     ) -> None:
         super().__init__(timeout=None)
         self._bot = bot
@@ -257,7 +257,7 @@ class SubscriptionModerationView(discord.ui.View):
             connected.callback = self._subscribe_connected_callback
             self.add_item(connected)
 
-        if show_moderation_actions:
+        if show_blacklist:
             blacklist = discord.ui.Button(
                 label="Blacklist",
                 style=discord.ButtonStyle.danger,
@@ -265,13 +265,14 @@ class SubscriptionModerationView(discord.ui.View):
             )
             blacklist.callback = self._blacklist_callback
             self.add_item(blacklist)
-            leave = discord.ui.Button(
-                label=f"Leave {network_key}",
-                style=discord.ButtonStyle.secondary,
-                custom_id=leave_network_button(subscription_id),
-            )
-            leave.callback = self._leave_callback
-            self.add_item(leave)
+
+        leave = discord.ui.Button(
+            label=f"Leave {network_key}",
+            style=discord.ButtonStyle.secondary,
+            custom_id=leave_network_button(subscription_id),
+        )
+        leave.callback = self._leave_callback
+        self.add_item(leave)
 
     async def _subscribe_connected_callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)

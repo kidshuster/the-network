@@ -179,13 +179,13 @@ async def post_subscription_moderation_embed(
     show_subscribe_connected = (
         setup_state.publish_configured and not setup_state.subscribe_confirmed
     )
-    show_moderation_actions = setup_state.fully_configured
+    show_blacklist = setup_state.fully_configured
     view = SubscriptionModerationView(
         bot,
         subscription.id,
         network.key,
         show_subscribe_connected=show_subscribe_connected,
-        show_moderation_actions=show_moderation_actions,
+        show_blacklist=show_blacklist,
     )
     bot.add_view(view)
     embed = build_moderation_embed(

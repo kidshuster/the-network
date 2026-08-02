@@ -183,6 +183,35 @@ async def sync_subscription_setup(
     return state
 
 
+async def sync_all_subscription_setups(
+    bot: NetworkRelayBot,
+    context: BotContext,
+    guild: discord.Guild,
+) -> int:
+    """Ensure setup stickies and moderation cards exist for every subscription."""
+    synced = 0
+    for client in await context.client_repo.list_all():
+        if client.guild_id != guild.id:
+            continue
+        subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+        for subscription in subscriptions:
+            network = None
+            if subscription.network_id is not None:
+                network = await context.network_repo.get_by_id(subscription.network_id)
+            if network is None and subscription.network_key:
+                network = await context.network_repo.get_by_key(subscription.network_key)
+            await sync_subscription_setup(
+                bot,
+                context,
+                guild,
+                client=client,
+                subscription=subscription,
+                network=network,
+            )
+            synced += 1
+    return synced
+
+
 async def sync_subscription_setup_by_publish_channel(
     bot: NetworkRelayBot,
     context: BotContext,

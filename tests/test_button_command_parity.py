@@ -63,7 +63,20 @@ def test_subscription_moderation_view_subscribe_connected_button() -> None:
         subscription_id=3,
         network_key="stingers",
         show_subscribe_connected=True,
-        show_moderation_actions=False,
+        show_blacklist=False,
     )
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
-    assert labels == {"Subscribe connected"}
+    assert labels == {"Subscribe connected", "Leave stingers"}
+
+
+def test_subscription_moderation_view_not_configured_includes_leave() -> None:
+    bot = MagicMock()
+    view = SubscriptionModerationView(
+        bot,
+        subscription_id=3,
+        network_key="stingers",
+        show_subscribe_connected=False,
+        show_blacklist=False,
+    )
+    labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
+    assert labels == {"Leave stingers"}

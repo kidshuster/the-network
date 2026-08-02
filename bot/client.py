@@ -43,6 +43,7 @@ class NetworkRelayBot(commands.Bot):
         self.schema_version: int = 0
         self._topgg: TopggService | None = None
         self._slash_sync_started = False
+        self._subscription_setup_synced = False
 
     async def setup_hook(self) -> None:
         await self.db.connect()
@@ -148,6 +149,20 @@ class NetworkRelayBot(commands.Bot):
             self._topgg = TopggService(self, self.settings.topgg_token)
             await self._topgg.start()
 
+        if context is not None and not self._subscription_setup_synced:
+            from bot.services.subscription_setup_sticky import sync_all_subscription_setups
+
+            try:
+                synced = await sync_all_subscription_setups(self, context, guild)
+                self._subscription_setup_synced = True
+                if synced:
+                    logger.info(
+                        "Synced subscription setup stickies",
+                        extra={"subscription_count": synced},
+                    )
+            except Exception:
+                logger.exception("Subscription setup sync on ready failed")
+
     async def _register_persistent_views(self) -> None:
         context = self.bot_context
         if context is None:
@@ -182,7 +197,7 @@ class NetworkRelayBot(commands.Bot):
                     sub.id,
                     network_key,
                     show_subscribe_connected=not sub.subscribe_confirmed,
-                    show_moderation_actions=sub.subscribe_confirmed,
+                    show_blacklist=sub.subscribe_confirmed,
                 )
             )
 
