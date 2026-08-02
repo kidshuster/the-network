@@ -125,7 +125,7 @@ class NetworkProfileView(discord.ui.View):
             bot_member,
             client=client,
             network_id=network.id,
-            network_key=network.key,
+            network_key=network_key,
             client_repo=context.client_repo,
             network_repo=context.network_repo,
             access_role_name=self._bot.settings.network_access_role_name,
@@ -311,13 +311,14 @@ class SubscriptionModerationView(discord.ui.View):
             )
             return
 
-        network = await context.network_repo.get_by_id(subscription.network_id)
-        if network is None:
-            await interaction.followup.send(
-                render_text("network_not_found", network_key=self._network_key),
-                ephemeral=True,
-            )
-            return
+        network = (
+            await context.network_repo.get_by_id(subscription.network_id)
+            if subscription.network_id is not None
+            else None
+        )
+        network_key = self._network_key
+        if network is not None:
+            network_key = network.key
 
         bot_member = guild.me
         if bot_member is None:
@@ -336,7 +337,7 @@ class SubscriptionModerationView(discord.ui.View):
             bot_member,
             client=client,
             subscription=subscription,
-            network_key=network.key,
+            network_key=network_key,
             client_repo=context.client_repo,
             network_repo=context.network_repo,
         )
@@ -357,7 +358,7 @@ class SubscriptionModerationView(discord.ui.View):
         await interaction.followup.send(
             embed=render_embed(
                 "leave_network_success",
-                network_key=network.key,
+                network_key=network_key,
             ),
             ephemeral=True,
         )
@@ -402,6 +403,13 @@ class SubscriptionModerationView(discord.ui.View):
         ):
             await interaction.response.send_message(
                 render_text("client_role_required_blacklist"),
+                ephemeral=True,
+            )
+            return
+
+        if subscription.network_id is None:
+            await interaction.response.send_message(
+                render_text("network_not_found", network_key=self._network_key),
                 ephemeral=True,
             )
             return

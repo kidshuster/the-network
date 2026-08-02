@@ -71,12 +71,14 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
     subscription = await context.client_repo.create_subscription(
         client_id=client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=203,
         subscribe_channel_id=202,
     )
     other_subscription = await context.client_repo.create_subscription(
         client_id=other_client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=303,
         subscribe_channel_id=302,
     )

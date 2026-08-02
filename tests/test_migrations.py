@@ -16,7 +16,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
 
     version = await run_migrations(db)
 
-    assert version == 9
+    assert version == 10
     assert db_path.exists()
 
     cursor = await db.connection.execute(
@@ -54,12 +54,12 @@ async def test_run_migrations_is_idempotent(tmp_path: Path) -> None:
     first = await run_migrations(db)
     second = await run_migrations(db)
 
-    assert first == 9
-    assert second == 9
+    assert first == 10
+    assert second == 10
 
     cursor = await db.connection.execute("SELECT version FROM schema_migrations")
     migration_rows = await cursor.fetchall()
     await cursor.close()
-    assert len(migration_rows) == 9
+    assert len(migration_rows) == 10
 
     await db.close()

@@ -7,7 +7,8 @@ from dataclasses import dataclass
 class ClientSubscription:
     id: int
     client_id: int
-    network_id: int
+    network_id: int | None
+    network_key: str
     publish_channel_id: int
     subscribe_channel_id: int
     moderation_message_id: int | None

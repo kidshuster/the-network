@@ -280,6 +280,7 @@ class ClientSubscriptionService:
                     id=0,
                     client_id=client.id,
                     network_id=network_id,
+                    network_key=network_key,
                     publish_channel_id=publish_channel.id,
                     subscribe_channel_id=subscribe_channel.id,
                     moderation_message_id=None,
@@ -294,6 +295,7 @@ class ClientSubscriptionService:
         subscription = await client_repo.create_subscription(
             client_id=client.id,
             network_id=network_id,
+            network_key=network_key,
             publish_channel_id=publish_channel.id,
             subscribe_channel_id=subscribe_channel.id,
         )
@@ -402,15 +404,19 @@ async def sync_client_channel_names(
                 )
 
     for subscription in await client_repo.list_subscriptions_by_client(client.id):
-        network = await network_repo.get_by_id(subscription.network_id)
-        if network is None:
+        key = subscription.network_key
+        if not key and subscription.network_id is not None:
+            network = await network_repo.get_by_id(subscription.network_id)
+            if network is not None:
+                key = network.key
+        if not key:
             continue
         publish = guild.get_channel(subscription.publish_channel_id)
         subscribe = guild.get_channel(subscription.subscribe_channel_id)
-        publish_target = build_client_publish_channel_base(client.server_name, network.key)
+        publish_target = build_client_publish_channel_base(client.server_name, key)
         subscribe_target = build_client_subscribe_channel_base(
             client.server_name,
-            network.key,
+            key,
         )
         if publish is not None and publish.name.casefold() != publish_target.casefold():
             try:
@@ -456,9 +462,13 @@ async def reorder_client_category_channels(
 
     subs_by_network_key: dict[str, ClientSubscription] = {}
     for sub in subscriptions:
-        network = await network_repo.get_by_id(sub.network_id)
-        if network is not None:
-            subs_by_network_key[network.key] = sub
+        key = sub.network_key
+        if not key and sub.network_id is not None:
+            network = await network_repo.get_by_id(sub.network_id)
+            if network is not None:
+                key = network.key
+        if key:
+            subs_by_network_key[key] = sub
 
     for key in sorted(subs_by_network_key):
         sub = subs_by_network_key[key]
@@ -526,6 +536,41 @@ async def resync_subscriptions_for_network(
             )
             continue
 
+        orphan = await context.client_repo.get_subscription_by_client_and_key(
+            client.id,
+            network.key,
+        )
+        if orphan is not None and orphan.network_id is None:
+            subscription = await context.client_repo.relink_subscription(
+                orphan.id,
+                network.id,
+            )
+            await sync_subscription_channel_permissions(
+                guild,
+                bot_member,
+                client=client,
+                subscription=subscription,
+                access_role_name=access_role_name,
+            )
+            await reorder_client_category_channels(
+                category,
+                client=client,
+                client_repo=context.client_repo,
+                network_repo=context.network_repo,
+            )
+            await post_subscription_moderation_embed(
+                bot,
+                context,
+                guild,
+                client=client,
+                network=network,
+                subscription=subscription,
+            )
+            bot.add_view(SubscriptionModerationView(bot, subscription.id, network.key))
+            await refresh_client_profile_message(bot, context, guild, client)
+            relinked += 1
+            continue
+
         publish_channel, subscribe_channel = find_network_subscription_channels(
             category,
             network.key,
@@ -537,6 +582,7 @@ async def resync_subscriptions_for_network(
         subscription = await context.client_repo.create_subscription(
             client_id=client.id,
             network_id=network.id,
+            network_key=network.key,
             publish_channel_id=publish_channel.id,
             subscribe_channel_id=subscribe_channel.id,
         )

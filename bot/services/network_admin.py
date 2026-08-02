@@ -11,7 +11,7 @@ class CreateNetworkResult:
     success: bool
     network: Network | None = None
     updated_profile_count: int = 0
-    reenabled: bool = False
+    relinked_subscription_count: int = 0
     error: str | None = None
 
 
@@ -36,27 +36,9 @@ async def create_network(
     try:
         existing = await context.network_repo.get_by_key(key)
         if existing is not None:
-            if existing.enabled:
-                return CreateNetworkResult(
-                    success=False,
-                    error=f"Network `{existing.key}` already exists and is active.",
-                )
-            network = await context.network_repo.set_enabled(key, True)
-            await context.routing_service.load_cache()
-            await context.refresh_network_counts()
-            await resync_subscriptions_for_network(
-                guild,
-                bot,
-                context,
-                network,
-                access_role_name=bot.settings.network_access_role_name,
-            )
-            updated = await refresh_all_client_profiles(bot, context, guild)
             return CreateNetworkResult(
-                success=True,
-                network=network,
-                updated_profile_count=updated,
-                reenabled=True,
+                success=False,
+                error=f"Network `{existing.key}` already exists.",
             )
 
         network = await context.network_repo.create(
@@ -66,7 +48,7 @@ async def create_network(
         )
         await context.routing_service.load_cache()
         await context.refresh_network_counts()
-        await resync_subscriptions_for_network(
+        relinked = await resync_subscriptions_for_network(
             guild,
             bot,
             context,
@@ -78,6 +60,7 @@ async def create_network(
             success=True,
             network=network,
             updated_profile_count=updated,
+            relinked_subscription_count=relinked,
         )
     except NetworkValidationError as exc:
         return CreateNetworkResult(success=False, error=str(exc))
@@ -102,15 +85,16 @@ async def delete_network(
         if network is None:
             raise NetworkValidationError(f"Network `{key.strip().lower()}` was not found.")
 
-        if not network.enabled:
-            return DeleteNetworkResult(success=True, network_key=network.key)
-
-        await context.network_repo.set_enabled(key, False)
+        await context.client_repo.detach_subscriptions_from_network(network.id, network.key)
+        await context.relay_record_repo.delete_by_network_id(network.id)
+        await context.server_request_repo.delete_by_network_id(network.id)
+        await context.network_repo.delete(key)
         await context.routing_service.load_cache()
+        await context.client_cache.load_cache()
         await context.refresh_network_counts()
         await refresh_all_client_profiles(bot, context, guild)
         return DeleteNetworkResult(success=True, network_key=network.key)
     except NetworkValidationError as exc:
         return DeleteNetworkResult(success=False, error=str(exc))
     except Exception:
-        return DeleteNetworkResult(success=False, error="Network disable failed. Check bot logs.")
+        return DeleteNetworkResult(success=False, error="Network delete failed. Check bot logs.")

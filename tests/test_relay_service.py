@@ -71,6 +71,7 @@ async def _seed_client_subscription(
     sub_pub = await client_repo.create_subscription(
         client_id=client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=201,
         subscribe_channel_id=500,
         enabled=subscription_enabled,
@@ -78,6 +79,7 @@ async def _seed_client_subscription(
     await client_repo.create_subscription(
         client_id=subscriber.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=202,
         subscribe_channel_id=501,
     )
@@ -192,6 +194,7 @@ async def test_self_relay_to_own_subscribe_channel(
     await client_repo.create_subscription(
         client_id=client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=201,
         subscribe_channel_id=500,
     )

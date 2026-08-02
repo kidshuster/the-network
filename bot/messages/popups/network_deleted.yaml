@@ -1,2 +1,2 @@
 kind: text
-content: "Network `{key}` was disabled. Client profiles were refreshed."
+content: "Network `{key}` was deleted. Client profiles were refreshed."

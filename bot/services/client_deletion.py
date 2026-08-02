@@ -95,8 +95,7 @@ class ClientDeletionService:
         subscriptions = await client_repo.list_subscriptions_by_client(client.id)
         sub_service = ClientSubscriptionService()
         for subscription in subscriptions:
-            network = await network_repo.get_by_id(subscription.network_id)
-            network_key = network.key if network is not None else "network"
+            network_key = subscription.network_key or "network"
             result = await sub_service.unsubscribe_client(
                 guild,
                 bot_member,

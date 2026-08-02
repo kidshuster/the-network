@@ -3,6 +3,6 @@ title: "Network Administration"
 colour: blurple
 description: |
   Register and manage relay networks from this channel.
-  Use **Create Network** to add or re-enable a network key, then **Disable Network** to pause relaying.
+  Use **Create Network** to register a network key, then **Delete Network** to remove it from the hub.
   Clients subscribe from their **network-profile** channel after networks exist.
 footer: "The Network • network admin • v{version}"

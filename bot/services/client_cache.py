@@ -41,7 +41,8 @@ class ClientCache:
         self._by_subscription_id = {sub.id: sub for sub in subscriptions}
         self._subscriptions_by_network = {}
         for sub in subscriptions:
-            self._subscriptions_by_network.setdefault(sub.network_id, []).append(sub)
+            if sub.network_id is not None:
+                self._subscriptions_by_network.setdefault(sub.network_id, []).append(sub)
         logger.info(
             "Client cache loaded",
             extra={

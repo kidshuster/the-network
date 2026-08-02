@@ -39,6 +39,7 @@ async def test_resolve_publish_subscription(db) -> None:
     await client_repo.create_subscription(
         client_id=client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=201,
         subscribe_channel_id=301,
     )

@@ -461,6 +461,56 @@ async def _migration_v9(db: Database) -> None:
     await _recreate_relay_records_with_client_id(db)
 
 
+async def _migration_v10(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "network_key" in columns:
+        return
+
+    await db.connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        await db.connection.executescript(
+            """
+            CREATE TABLE client_subscriptions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER NOT NULL,
+                network_id INTEGER,
+                network_key TEXT NOT NULL,
+                publish_channel_id INTEGER NOT NULL UNIQUE,
+                subscribe_channel_id INTEGER NOT NULL UNIQUE,
+                moderation_message_id INTEGER,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (client_id) REFERENCES clients(id),
+                FOREIGN KEY (network_id) REFERENCES networks(id),
+                UNIQUE(client_id, network_key)
+            );
+            INSERT INTO client_subscriptions_new (
+                id, client_id, network_id, network_key,
+                publish_channel_id, subscribe_channel_id,
+                moderation_message_id, enabled, created_at, updated_at
+            )
+            SELECT
+                cs.id, cs.client_id, cs.network_id, n.key,
+                cs.publish_channel_id, cs.subscribe_channel_id,
+                cs.moderation_message_id, cs.enabled, cs.created_at, cs.updated_at
+            FROM client_subscriptions cs
+            JOIN networks n ON n.id = cs.network_id;
+            DROP TABLE client_subscriptions;
+            ALTER TABLE client_subscriptions_new RENAME TO client_subscriptions;
+            CREATE INDEX IF NOT EXISTS idx_client_subscriptions_network
+                ON client_subscriptions(network_id);
+            CREATE INDEX IF NOT EXISTS idx_client_subscriptions_publish
+                ON client_subscriptions(publish_channel_id);
+            """
+        )
+    finally:
+        await db.connection.execute("PRAGMA foreign_keys = ON")
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -471,6 +521,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     7: _migration_v7,
     8: _migration_v8,
     9: _migration_v9,
+    10: _migration_v10,
 }
 
 

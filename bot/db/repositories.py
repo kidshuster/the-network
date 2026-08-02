@@ -878,24 +878,27 @@ class ClientRepository:
         *,
         client_id: int,
         network_id: int,
+        network_key: str,
         publish_channel_id: int,
         subscribe_channel_id: int,
         moderation_message_id: int | None = None,
         enabled: bool = True,
     ) -> ClientSubscription:
+        normalized_key = network_key.strip().lower()
         now = datetime.now(tz=UTC).isoformat()
         try:
             cursor = await self._db.connection.execute(
                 """
                 INSERT INTO client_subscriptions (
-                    client_id, network_id, publish_channel_id,
+                    client_id, network_id, network_key, publish_channel_id,
                     subscribe_channel_id, moderation_message_id,
                     enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     client_id,
                     network_id,
+                    normalized_key,
                     publish_channel_id,
                     subscribe_channel_id,
                     moderation_message_id,
@@ -926,6 +929,56 @@ class ClientRepository:
             (subscription_id,),
         )
         return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def get_subscription_by_client_and_key(
+        self,
+        client_id: int,
+        network_key: str,
+    ) -> ClientSubscription | None:
+        normalized_key = network_key.strip().lower()
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM client_subscriptions
+            WHERE client_id = ? AND network_key = ?
+            """,
+            (client_id, normalized_key),
+        )
+        return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def detach_subscriptions_from_network(
+        self,
+        network_id: int,
+        network_key: str,
+    ) -> None:
+        normalized_key = network_key.strip().lower()
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_id = NULL, network_key = ?, updated_at = ?
+            WHERE network_id = ?
+            """,
+            (normalized_key, now, network_id),
+        )
+
+    async def relink_subscription(
+        self,
+        subscription_id: int,
+        network_id: int,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (network_id, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after relink")
+        return updated
 
     async def get_subscription(
         self,

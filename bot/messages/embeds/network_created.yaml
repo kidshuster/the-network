@@ -13,10 +13,10 @@ fields:
       Clients subscribe from their **network-profile** channel.
       Each subscription creates **publish** and **subscribe** channels.
     inline: false
-  - name: Re-enabled
-    value: "Existing subscriptions were relinked and forwarding resumed."
+  - name: Relinked subscriptions
+    value: "Existing client subscriptions were relinked and forwarding resumed."
     inline: false
-    when: "{reenabled}"
+    when: "{relinked}"
   - name: Client profiles
     value: "Refreshed buttons on **{updated_count}** client profile(s)."
     inline: false

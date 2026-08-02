@@ -30,7 +30,7 @@ def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
         )
     )
     context.network_repo.get_by_key = AsyncMock(return_value=None)
-    context.network_repo.set_enabled = AsyncMock(
+    context.network_repo.delete = AsyncMock(
         return_value=Network(
             id=1,
             key="stingers",
@@ -43,11 +43,12 @@ def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
             enabled=True,
         )
     )
-    context.network_repo.delete = AsyncMock()
-    context.client_repo.delete_subscriptions_by_network = AsyncMock()
+    context.client_repo.detach_subscriptions_from_network = AsyncMock()
+    context.relay_record_repo.delete_by_network_id = AsyncMock()
+    context.server_request_repo.delete_by_network_id = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
-    context.refresh_network_counts = AsyncMock()
     context.client_cache.load_cache = AsyncMock()
+    context.refresh_network_counts = AsyncMock()
     return context
 
 
@@ -87,23 +88,8 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_network_reenables_disabled_network(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import bot.services.client_subscription as client_subscription
-
-    disabled = Network(
-        id=1,
-        key="stingers",
-        display_name="Stingers",
-        feed_category_id=None,
-        output_channel_id=None,
-        concat_channel_id=None,
-        profile_forum_channel_id=None,
-        join_channel_id=None,
-        enabled=False,
-    )
-    enabled = Network(
+async def test_create_network_rejects_duplicate_key() -> None:
+    existing = Network(
         id=1,
         key="stingers",
         display_name="Stingers",
@@ -115,23 +101,10 @@ async def test_create_network_reenables_disabled_network(
         enabled=True,
     )
     context = _mock_context()
-    context.network_repo.get_by_key = AsyncMock(return_value=disabled)
-    context.network_repo.set_enabled = AsyncMock(return_value=enabled)
-    context.client_repo.list_all = AsyncMock(return_value=[])
+    context.network_repo.get_by_key = AsyncMock(return_value=existing)
     bot = MagicMock()
-    bot.settings.network_access_role_name = "The Network"
     guild = MagicMock(spec=discord.Guild)
     guild.id = 100
-    guild.me = MagicMock()
-    monkeypatch.setattr(
-        "bot.services.client_profile_sync.refresh_all_client_profiles",
-        AsyncMock(return_value=1),
-    )
-    monkeypatch.setattr(
-        client_subscription,
-        "resync_subscriptions_for_network",
-        AsyncMock(return_value=2),
-    )
 
     result = await create_network(
         context,
@@ -141,14 +114,15 @@ async def test_create_network_reenables_disabled_network(
         display_name="Stingers",
     )
 
-    assert result.success is True
-    assert result.reenabled is True
+    assert result.success is False
+    assert "already exists" in (result.error or "")
     context.network_repo.create.assert_not_called()
-    context.network_repo.set_enabled.assert_awaited_once_with("stingers", True)
 
 
 @pytest.mark.asyncio
-async def test_delete_network_soft_disables(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_delete_network_hard_deletes_and_detaches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     network = Network(
         id=1,
         key="stingers",
@@ -162,19 +136,6 @@ async def test_delete_network_soft_disables(monkeypatch: pytest.MonkeyPatch) -> 
     )
     context = _mock_context(networks=[network])
     context.network_repo.get_by_key = AsyncMock(return_value=network)
-    context.network_repo.set_enabled = AsyncMock(
-        return_value=Network(
-            id=1,
-            key="stingers",
-            display_name="Stingers",
-            feed_category_id=None,
-            output_channel_id=None,
-            concat_channel_id=None,
-            profile_forum_channel_id=None,
-            join_channel_id=None,
-            enabled=False,
-        )
-    )
     bot = MagicMock()
     guild = MagicMock(spec=discord.Guild)
     monkeypatch.setattr(
@@ -185,9 +146,13 @@ async def test_delete_network_soft_disables(monkeypatch: pytest.MonkeyPatch) -> 
     result = await delete_network(context, bot, guild, key="stingers")
 
     assert result.success is True
-    context.network_repo.set_enabled.assert_awaited_once_with("stingers", False)
-    context.client_repo.delete_subscriptions_by_network.assert_not_called()
-    context.network_repo.delete.assert_not_called()
+    context.client_repo.detach_subscriptions_from_network.assert_awaited_once_with(
+        1,
+        "stingers",
+    )
+    context.relay_record_repo.delete_by_network_id.assert_awaited_once_with(1)
+    context.server_request_repo.delete_by_network_id.assert_awaited_once_with(1)
+    context.network_repo.delete.assert_awaited_once_with("stingers")
 
 
 @pytest.mark.asyncio

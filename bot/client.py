@@ -169,8 +169,13 @@ class NetworkRelayBot(commands.Bot):
             self.add_view(NetworkProfileView(self, client.id, network_keys))
 
         for sub in await context.client_repo.list_all_subscriptions():
-            network = await context.network_repo.get_by_id(sub.network_id)
-            network_key = network.key if network is not None else "network"
+            network_key = sub.network_key
+            if not network_key and sub.network_id is not None:
+                network = await context.network_repo.get_by_id(sub.network_id)
+                if network is not None:
+                    network_key = network.key
+            if not network_key:
+                network_key = "network"
             self.add_view(SubscriptionModerationView(self, sub.id, network_key))
 
     async def close(self) -> None:

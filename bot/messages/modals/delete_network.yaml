@@ -1,10 +1,10 @@
 kind: modal
-title: "Disable network"
+title: "Delete network"
 fields:
   - id: key
     type: text
     label: "Network key (nkey)"
-    description: "Key of the network to disable (stops relay; subscriptions are kept)"
+    description: "Key of the network to remove from the registry (client subscriptions are kept)"
     placeholder: "my-network"
     max_length: 50
     required: true

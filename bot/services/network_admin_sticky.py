@@ -46,10 +46,9 @@ async def build_network_admin_embed(context: BotContext) -> discord.Embed:
 
     for network in networks[:25]:
         subs = await context.client_repo.list_subscriptions_by_network(network.id)
-        status = "enabled" if network.enabled else "disabled"
         embed.add_field(
             name=f"{network.display_name} (`{network.key}`)",
-            value=f"Status: **{status}** · Subscriptions: **{len(subs)}**",
+            value=f"Subscriptions: **{len(subs)}**",
             inline=False,
         )
     if len(networks) > 25:

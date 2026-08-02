@@ -34,6 +34,7 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
     await context.client_repo.create_subscription(
         client_id=client.id,
         network_id=network.id,
+        network_key=network.key,
         publish_channel_id=201,
         subscribe_channel_id=301,
     )

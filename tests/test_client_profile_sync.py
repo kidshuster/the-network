@@ -34,6 +34,7 @@ def _subscription(*, moderation_message_id: int | None = None) -> ClientSubscrip
         id=5,
         client_id=1,
         network_id=2,
+        network_key="stingers",
         publish_channel_id=201,
         subscribe_channel_id=501,
         moderation_message_id=moderation_message_id,
@@ -125,3 +126,54 @@ async def test_moderation_embed_deletes_prior_message_in_profile() -> None:
     profile_channel.fetch_message.assert_awaited_once_with(888)
     prior.delete.assert_awaited_once()
     profile_channel.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deleted_network_shows_disabled_without_join_button(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bot.services.client_profile_sync import refresh_client_profile_message
+
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.id = 30
+    message = MagicMock(spec=discord.Message)
+    message.edit = AsyncMock()
+    profile_channel.fetch_message = AsyncMock(return_value=message)
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.get_channel = MagicMock(return_value=profile_channel)
+
+    detached = ClientSubscription(
+        id=5,
+        client_id=1,
+        network_id=None,
+        network_key="stingers",
+        publish_channel_id=201,
+        subscribe_channel_id=501,
+        moderation_message_id=None,
+        enabled=True,
+    )
+
+    context = MagicMock()
+    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[detached])
+    context.network_repo.get_by_id = AsyncMock(return_value=None)
+    context.network_repo.list_all = AsyncMock(return_value=[])
+    context.client_repo.get_by_id = AsyncMock(return_value=_client())
+
+    bot = MagicMock()
+    bot.add_view = MagicMock()
+
+    await refresh_client_profile_message(bot, context, guild, _client())
+
+    message.edit.assert_awaited_once()
+    embed = message.edit.await_args.kwargs["embed"]
+    view = message.edit.await_args.kwargs["view"]
+    networks_field = next(f for f in embed.fields if f.name == "Subscribed networks")
+    assert "`stingers` — Disabled" in networks_field.value
+    join_labels = {
+        child.label
+        for child in view.children
+        if isinstance(child, discord.ui.Button) and child.label.startswith("Join ")
+    }
+    assert join_labels == set()

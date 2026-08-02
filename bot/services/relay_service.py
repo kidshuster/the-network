@@ -66,7 +66,11 @@ class RelayService:
         if subscription is None:
             return "publish channel not registered"
 
-        network = self._routing.get_by_id(subscription.network_id)
+        network = (
+            self._routing.get_by_id(subscription.network_id)
+            if subscription.network_id is not None
+            else None
+        )
         if network is None:
             return "network not found"
         if not network.enabled:
@@ -122,7 +126,11 @@ class RelayService:
         if publisher is None:
             return None
 
-        network = self._routing.get_by_id(publisher_sub.network_id)
+        network = (
+            self._routing.get_by_id(publisher_sub.network_id)
+            if publisher_sub.network_id is not None
+            else None
+        )
         if network is None or not network.enabled:
             return None
 

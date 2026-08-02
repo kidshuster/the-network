@@ -32,12 +32,22 @@ async def refresh_client_profile_message(
     network_entries: list[tuple[str, str]] = []
     subscribed_keys: set[str] = set()
     for sub in subscriptions:
-        network = await context.network_repo.get_by_id(sub.network_id)
-        if network is None:
+        key = sub.network_key
+        network = (
+            await context.network_repo.get_by_id(sub.network_id)
+            if sub.network_id is not None
+            else None
+        )
+        if not key and network is not None:
+            key = network.key
+        if not key:
             continue
-        subscribed_keys.add(network.key)
-        status = "Active" if network.enabled else "Disabled"
-        network_entries.append((network.key, status))
+        subscribed_keys.add(key)
+        if network is not None and network.enabled:
+            status = "Active"
+        else:
+            status = "Disabled"
+        network_entries.append((key, status))
 
     all_networks = await context.network_repo.list_all()
     view = NetworkProfileView(

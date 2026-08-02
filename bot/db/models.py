@@ -166,10 +166,12 @@ class ClientRow:
 class ClientSubscriptionRow:
     @staticmethod
     def from_row(row: Any) -> ClientSubscription:
+        network_id_raw = row["network_id"]
         return ClientSubscription(
             id=int(row["id"]),
             client_id=int(row["client_id"]),
-            network_id=int(row["network_id"]),
+            network_id=int(network_id_raw) if network_id_raw is not None else None,
+            network_key=str(row["network_key"]),
             publish_channel_id=int(row["publish_channel_id"]),
             subscribe_channel_id=int(row["subscribe_channel_id"]),
             moderation_message_id=(
