@@ -176,7 +176,15 @@ class NetworkRelayBot(commands.Bot):
                     network_key = network.key
             if not network_key:
                 network_key = "network"
-            self.add_view(SubscriptionModerationView(self, sub.id, network_key))
+            self.add_view(
+                SubscriptionModerationView(
+                    self,
+                    sub.id,
+                    network_key,
+                    show_subscribe_connected=not sub.subscribe_confirmed,
+                    show_moderation_actions=sub.subscribe_confirmed,
+                )
+            )
 
     async def close(self) -> None:
         if self._topgg is not None:

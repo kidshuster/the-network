@@ -42,6 +42,20 @@ def parse_subscribe_network_button(custom_id: str) -> tuple[int, str] | None:
         return None
 
 
+def subscribe_connected_button(subscription_id: int) -> str:
+    return f"{_PREFIX}:sub_connected:{subscription_id}"
+
+
+def parse_subscribe_connected_button(custom_id: str) -> int | None:
+    prefix = f"{_PREFIX}:sub_connected:"
+    if not custom_id.startswith(prefix):
+        return None
+    try:
+        return int(custom_id.removeprefix(prefix))
+    except ValueError:
+        return None
+
+
 def blacklist_button(subscription_id: int) -> str:
     return f"{_PREFIX}:blacklist:{subscription_id}"
 

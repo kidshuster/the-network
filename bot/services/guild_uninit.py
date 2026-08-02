@@ -17,6 +17,7 @@ from bot.services.guild_layout import (
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
     CATEGORY_SUBSCRIBE,
+    CHANNEL_LEADERS,
     CHANNEL_MODERATOR_ONLY,
     CHANNEL_RULES,
     CHANNEL_WELCOME_SINK,
@@ -29,6 +30,7 @@ _STEP_TIMEOUT_SECONDS = 45.0
 _PRESERVED_CHANNEL_NAMES = frozenset(
     {
         CHANNEL_RULES.casefold(),
+        CHANNEL_LEADERS.casefold(),
         CHANNEL_MODERATOR_ONLY.casefold(),
         "mod-only",
         "staff-only",

@@ -13,6 +13,7 @@ CATEGORY_MODERATION = "Moderation"
 
 CHANNEL_RULES = "rules"
 CHANNEL_JOIN_THE_NETWORK = "join-the-network"
+CHANNEL_LEADERS = "leaders"
 CHANNEL_JOIN_REQUESTS = "join-requests"
 CHANNEL_MODERATOR_ONLY = "moderator-only"
 CHANNEL_COMMANDS = "commands"
@@ -71,6 +72,19 @@ def resolve_join_the_network_channel(guild: discord.Guild) -> discord.TextChanne
         if match is not None:
             return match
     return resolve_text_channel_in_category(guild, name=CHANNEL_JOIN_THE_NETWORK)
+
+
+def resolve_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    hub = resolve_network_hub_category(guild)
+    if hub is not None:
+        match = resolve_text_channel_in_category(
+            guild,
+            name=CHANNEL_LEADERS,
+            category_id=hub.id,
+        )
+        if match is not None:
+            return match
+    return resolve_text_channel_in_category(guild, name=CHANNEL_LEADERS)
 
 
 def resolve_join_requests_channel(guild: discord.Guild) -> discord.TextChannel | None:

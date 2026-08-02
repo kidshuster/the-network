@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import cast
 
 import discord
@@ -306,6 +306,54 @@ def build_everyone_hidden_category_overwrite() -> discord.PermissionOverwrite:
 def build_moderator_overwrite() -> discord.PermissionOverwrite:
     """Alias for channel overwrites."""
     return build_moderator_channel_overwrite()
+
+
+def build_client_leader_channel_overwrite() -> discord.PermissionOverwrite:
+    """Client server leaders — view and post in #leaders."""
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        send_messages=True,
+        embed_links=True,
+        attach_files=True,
+        add_reactions=True,
+    )
+
+
+def build_leaders_channel_overwrites(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    client_roles: Iterable[discord.Role],
+    access_role: discord.Role,
+    human_moderator_role: discord.Role | None,
+) -> OverwriteMap:
+    """Hidden from @everyone; each client role can view and send."""
+    base: dict[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ] = {
+        guild.default_role: build_everyone_hidden_overwrite(),
+    }
+    for role in client_roles:
+        if _can_configure_role(bot_member, role):
+            base[role] = build_client_leader_channel_overwrite()
+    if _can_configure_role(bot_member, access_role):
+        base[access_role] = discord.PermissionOverwrite(
+            view_channel=True,
+            read_message_history=True,
+            send_messages=False,
+        )
+    overwrites = _with_access_overwrite(base, bot_member, access_role)
+    if _can_configure_role(bot_member, access_role):
+        overwrites[access_role] = discord.PermissionOverwrite(
+            view_channel=True,
+            read_message_history=True,
+            send_messages=False,
+        )
+    return cast(
+        OverwriteMap,
+        _with_moderator_overwrite(overwrites, bot_member, human_moderator_role),
+    )
 
 
 def build_hub_public_category_overwrites(

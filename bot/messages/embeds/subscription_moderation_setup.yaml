@@ -1,0 +1,27 @@
+kind: embed
+title: "Moderation — {network_display_name}"
+colour: dark_grey
+description: |
+  Finish connecting **`{network_key}`** before relays can flow.
+fields:
+  - name: Publish channel
+    value: "{publish_mention} — **not connected**"
+    inline: false
+    when: "{needs_publish}"
+  - name: Publish setup
+    value: |
+      On **your server**, open your **announcement channel** → **Follow** → select {publish_mention}.
+      See the instruction card in {publish_mention} for details.
+    inline: false
+    when: "{needs_publish}"
+  - name: Subscribe channel
+    value: "{subscribe_mention} — **not connected**"
+    inline: false
+    when: "{needs_subscribe}"
+  - name: Subscribe setup
+    value: |
+      On **your server**, open the channel that should receive relays → **Follow** → select {subscribe_mention}.
+      Then click **Subscribe connected** below.
+    inline: false
+    when: "{needs_subscribe}"
+footer: "The Network • subscription setup"

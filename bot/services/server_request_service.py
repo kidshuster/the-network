@@ -250,6 +250,16 @@ class ServerRequestService:
             resolved_by_user_id=moderator.id,
         )
         await self._context.client_cache.load_cache()
+        if result.client_role is not None:
+            from bot.services.leaders_channel import grant_leaders_channel_access
+
+            await grant_leaders_channel_access(
+                guild,
+                bot_member,
+                self._context,
+                result.client_role,
+                access_role_name=self._bot.settings.network_access_role_name,
+            )
         await self._finalize_review_message(guild, request, moderator, ServerRequestStatus.APPROVED)
 
         summary = "Client category created."

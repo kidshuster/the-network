@@ -9,6 +9,10 @@ from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 from bot.services.client_profile_post import build_client_profile_embed
+from bot.services.subscription_setup import (
+    SubscriptionSetupState,
+    resolve_setup_state,
+)
 from bot.ui.network_views import NetworkProfileView, SubscriptionModerationView
 
 if TYPE_CHECKING:
@@ -16,6 +20,23 @@ if TYPE_CHECKING:
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
+
+
+async def _network_link_status_for_subscription(
+    guild: discord.Guild,
+    subscription: ClientSubscription,
+    *,
+    network: Network | None,
+) -> str:
+    network_active = network is not None and network.enabled
+    if not network_active:
+        return "Disabled"
+    state = await resolve_setup_state(
+        guild,
+        subscription,
+        network_active=network_active,
+    )
+    return state.link_status
 
 
 async def refresh_client_profile_message(
@@ -43,10 +64,11 @@ async def refresh_client_profile_message(
         if not key:
             continue
         subscribed_keys.add(key)
-        if network is not None and network.enabled:
-            status = "Active"
-        else:
-            status = "Disabled"
+        status = await _network_link_status_for_subscription(
+            guild,
+            sub,
+            network=network,
+        )
         network_entries.append((key, status))
 
     all_networks = await context.network_repo.list_all()
@@ -93,11 +115,24 @@ def build_moderation_embed(
     network_display_name: str,
     network_key: str,
     client_server_name: str,
+    setup_state: SubscriptionSetupState | None = None,
+    publish_mention: str = "",
+    subscribe_mention: str = "",
 ) -> discord.Embed:
     from bot.messages import render_embed
     from bot.services.channel_names import slugify_client_name
 
     client_slug = slugify_client_name(client_server_name)
+    if setup_state is not None and not setup_state.fully_configured:
+        return render_embed(
+            "subscription_moderation_setup",
+            network_display_name=network_display_name,
+            network_key=network_key,
+            publish_mention=publish_mention,
+            subscribe_mention=subscribe_mention,
+            needs_publish="1" if not setup_state.publish_configured else "",
+            needs_subscribe="1" if not setup_state.subscribe_confirmed else "",
+        )
     return render_embed(
         "subscription_moderation",
         network_display_name=network_display_name,
@@ -114,10 +149,25 @@ async def post_subscription_moderation_embed(
     client: Client,
     network: Network,
     subscription: ClientSubscription,
+    setup_state: SubscriptionSetupState | None = None,
 ) -> None:
     channel = guild.get_channel(client.profile_channel_id)
     if not isinstance(channel, discord.TextChannel):
         return
+
+    if setup_state is None:
+        setup_state = await resolve_setup_state(
+            guild,
+            subscription,
+            network_active=network.enabled,
+        )
+
+    publish_channel = guild.get_channel(subscription.publish_channel_id)
+    subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
+    publish_mention = publish_channel.mention if publish_channel is not None else "#publish"
+    subscribe_mention = (
+        subscribe_channel.mention if subscribe_channel is not None else "#subscribe"
+    )
 
     if subscription.moderation_message_id is not None:
         try:
@@ -126,12 +176,25 @@ async def post_subscription_moderation_embed(
         except discord.HTTPException:
             pass
 
-    view = SubscriptionModerationView(bot, subscription.id, network.key)
+    show_subscribe_connected = (
+        setup_state.publish_configured and not setup_state.subscribe_confirmed
+    )
+    show_moderation_actions = setup_state.fully_configured
+    view = SubscriptionModerationView(
+        bot,
+        subscription.id,
+        network.key,
+        show_subscribe_connected=show_subscribe_connected,
+        show_moderation_actions=show_moderation_actions,
+    )
     bot.add_view(view)
     embed = build_moderation_embed(
         network_display_name=network.display_name,
         network_key=network.key,
         client_server_name=client.server_name,
+        setup_state=setup_state,
+        publish_mention=publish_mention,
+        subscribe_mention=subscribe_mention,
     )
     try:
         message = await channel.send(embed=embed, view=view, silent=True)

@@ -17,6 +17,31 @@ class RelayCog(commands.Cog):
         self.bot = bot
 
     @commands.Cog.listener()
+    async def on_webhooks_update(self, channel: discord.abc.GuildChannel) -> None:
+        context = self.bot.bot_context
+        guild = channel.guild if hasattr(channel, "guild") else None
+        if context is None or guild is None or guild.id != self.bot.settings.guild_id:
+            return
+        if not isinstance(channel, discord.TextChannel):
+            return
+        from bot.services.subscription_setup_sticky import (
+            sync_subscription_setup_by_publish_channel,
+        )
+
+        try:
+            await sync_subscription_setup_by_publish_channel(
+                self.bot,
+                context,
+                guild,
+                channel.id,
+            )
+        except Exception:
+            logger.exception(
+                "Subscription setup sync failed after webhooks update",
+                extra={"channel_id": channel.id},
+            )
+
+    @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         context = self.bot.bot_context
         if context is None:

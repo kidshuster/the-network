@@ -31,4 +31,9 @@ fields:
       Subscribed **subscribe** channels relay announcements from other clients.
       Use **Blacklist** on the moderation embed to hide specific publishers.
     inline: false
+  - name: "6. Leaders lounge"
+    value: |
+      After approval, your client role can access **#leaders** under **The Network**
+      to coordinate with other participating server leaders.
+    inline: false
 footer: "The Network • join the network • v{version}"

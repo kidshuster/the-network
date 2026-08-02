@@ -1061,6 +1061,63 @@ class ClientRepository:
             raise RuntimeError("Subscription disappeared after moderation message update")
         return updated
 
+    async def set_subscribe_confirmed(
+        self,
+        subscription_id: int,
+        confirmed: bool = True,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET subscribe_confirmed = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (1 if confirmed else 0, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after subscribe confirm update")
+        return updated
+
+    async def update_publish_setup_message_id(
+        self,
+        subscription_id: int,
+        message_id: int | None,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET publish_setup_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after publish setup message update")
+        return updated
+
+    async def update_subscribe_setup_message_id(
+        self,
+        subscription_id: int,
+        message_id: int | None,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET subscribe_setup_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after subscribe setup message update")
+        return updated
+
     async def set_subscription_enabled(
         self,
         subscription_id: int,

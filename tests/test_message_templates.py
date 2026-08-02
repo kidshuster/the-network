@@ -47,7 +47,7 @@ def test_all_yaml_files_load() -> None:
 def test_join_the_network_embed() -> None:
     embed = render_embed("join_the_network", version=HOW_TO_JOIN_VERSION)
     assert embed.title == "Join The Network"
-    assert len(embed.fields) == 5
+    assert len(embed.fields) == 6
     assert embed.footer
     assert f"v{HOW_TO_JOIN_VERSION}" in embed.footer.text
 

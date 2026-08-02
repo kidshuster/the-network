@@ -595,6 +595,19 @@ async def initialize_guild(
             result=result,
             sync_from_category=True,
         )
+        if context is not None:
+            from bot.services.leaders_channel import ensure_leaders_channel
+
+            leaders = await ensure_leaders_channel(
+                guild,
+                bot_member,
+                context,
+                network_category=network_cat,
+                access_role=access_role,
+                human_moderator_role=human_moderator_role,
+            )
+            if leaders is not None:
+                result.notes.append(f"Leaders channel synced at {leaders.mention}.")
         await _sync_hub_public_channels(
             guild, bot_member, network_cat, hub_public, result=result
         )

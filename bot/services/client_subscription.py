@@ -284,6 +284,9 @@ class ClientSubscriptionService:
                     publish_channel_id=publish_channel.id,
                     subscribe_channel_id=subscribe_channel.id,
                     moderation_message_id=None,
+                    publish_setup_message_id=None,
+                    subscribe_setup_message_id=None,
+                    subscribe_confirmed=False,
                     enabled=True,
                 ),
                 access_role_name=access_role_name,
@@ -501,11 +504,7 @@ async def resync_subscriptions_for_network(
     *,
     access_role_name: str,
 ) -> int:
-    from bot.services.client_profile_sync import (
-        post_subscription_moderation_embed,
-        refresh_client_profile_message,
-    )
-    from bot.ui.network_views import SubscriptionModerationView
+    from bot.services.subscription_setup_sticky import sync_subscription_setup
 
     bot_member = guild.me
     if bot_member is None:
@@ -558,16 +557,14 @@ async def resync_subscriptions_for_network(
                 client_repo=context.client_repo,
                 network_repo=context.network_repo,
             )
-            await post_subscription_moderation_embed(
+            await sync_subscription_setup(
                 bot,
                 context,
                 guild,
                 client=client,
-                network=network,
                 subscription=subscription,
+                network=network,
             )
-            bot.add_view(SubscriptionModerationView(bot, subscription.id, network.key))
-            await refresh_client_profile_message(bot, context, guild, client)
             relinked += 1
             continue
 
@@ -599,16 +596,14 @@ async def resync_subscriptions_for_network(
             client_repo=context.client_repo,
             network_repo=context.network_repo,
         )
-        await post_subscription_moderation_embed(
+        await sync_subscription_setup(
             bot,
             context,
             guild,
             client=client,
-            network=network,
             subscription=subscription,
+            network=network,
         )
-        bot.add_view(SubscriptionModerationView(bot, subscription.id, network.key))
-        await refresh_client_profile_message(bot, context, guild, client)
         relinked += 1
 
     if relinked:

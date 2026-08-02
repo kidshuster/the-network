@@ -7,6 +7,7 @@ import pytest
 
 from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
 from bot.ui.network_admin_views import CreateNetworkModal, DeleteNetworkModal, NetworkAdminView
+from bot.ui.network_views import SubscriptionModerationView
 
 
 def test_network_admin_view_has_create_and_delete_buttons() -> None:
@@ -44,3 +45,16 @@ def test_join_network_view_has_join_button() -> None:
     view = JoinNetworkView(bot)
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
     assert labels == {"Join Network"}
+
+
+def test_subscription_moderation_view_subscribe_connected_button() -> None:
+    bot = MagicMock()
+    view = SubscriptionModerationView(
+        bot,
+        subscription_id=3,
+        network_key="stingers",
+        show_subscribe_connected=True,
+        show_moderation_actions=False,
+    )
+    labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
+    assert labels == {"Subscribe connected"}

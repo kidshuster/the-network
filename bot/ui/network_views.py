@@ -11,6 +11,7 @@ from bot.ui.custom_ids import (
     delete_client_button,
     leave_network_button,
     profile_edit_button,
+    subscribe_connected_button,
     subscribe_network_button,
 )
 
@@ -114,10 +115,7 @@ class NetworkProfileView(discord.ui.View):
             return
 
         from bot.services.client_subscription import ClientSubscriptionService
-        from bot.services.client_profile_sync import (
-            post_subscription_moderation_embed,
-            refresh_client_profile_message,
-        )
+        from bot.services.subscription_setup_sticky import sync_subscription_setup
 
         service = ClientSubscriptionService()
         result = await service.subscribe_client(
@@ -144,23 +142,18 @@ class NetworkProfileView(discord.ui.View):
         await context.routing_service.load_cache()
 
         if result.created:
-            await post_subscription_moderation_embed(
+            await sync_subscription_setup(
                 self._bot,
                 context,
                 guild,
                 client=client,
-                network=network,
                 subscription=result.subscription,
+                network=network,
             )
+        else:
+            from bot.services.client_profile_sync import refresh_client_profile_message
 
-        await refresh_client_profile_message(self._bot, context, guild, client)
-        self._bot.add_view(
-            SubscriptionModerationView(
-                self._bot,
-                result.subscription.id,
-                network.key,
-            ),
-        )
+            await refresh_client_profile_message(self._bot, context, guild, client)
 
         label = "Subscribed" if result.created else "Already subscribed"
         sub = result.subscription
@@ -246,25 +239,117 @@ class SubscriptionModerationView(discord.ui.View):
         bot: NetworkRelayBot,
         subscription_id: int,
         network_key: str,
+        *,
+        show_subscribe_connected: bool = False,
+        show_moderation_actions: bool = True,
     ) -> None:
         super().__init__(timeout=None)
         self._bot = bot
         self._subscription_id = subscription_id
         self._network_key = network_key
-        blacklist = discord.ui.Button(
-            label="Blacklist",
-            style=discord.ButtonStyle.danger,
-            custom_id=blacklist_button(subscription_id),
+
+        if show_subscribe_connected:
+            connected = discord.ui.Button(
+                label="Subscribe connected",
+                style=discord.ButtonStyle.success,
+                custom_id=subscribe_connected_button(subscription_id),
+            )
+            connected.callback = self._subscribe_connected_callback
+            self.add_item(connected)
+
+        if show_moderation_actions:
+            blacklist = discord.ui.Button(
+                label="Blacklist",
+                style=discord.ButtonStyle.danger,
+                custom_id=blacklist_button(subscription_id),
+            )
+            blacklist.callback = self._blacklist_callback
+            self.add_item(blacklist)
+            leave = discord.ui.Button(
+                label=f"Leave {network_key}",
+                style=discord.ButtonStyle.secondary,
+                custom_id=leave_network_button(subscription_id),
+            )
+            leave.callback = self._leave_callback
+            self.add_item(leave)
+
+    async def _subscribe_connected_callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        context = self._bot.bot_context
+        guild = interaction.guild
+        if context is None or guild is None:
+            await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+            return
+
+        subscription = await context.client_repo.get_subscription_by_id(
+            self._subscription_id,
         )
-        blacklist.callback = self._blacklist_callback
-        self.add_item(blacklist)
-        leave = discord.ui.Button(
-            label=f"Leave {network_key}",
-            style=discord.ButtonStyle.secondary,
-            custom_id=leave_network_button(subscription_id),
+        if subscription is None:
+            await interaction.followup.send(
+                render_text("subscription_not_found"),
+                ephemeral=True,
+            )
+            return
+
+        client = await context.client_repo.get_by_id(subscription.client_id)
+        if client is None:
+            await interaction.followup.send(
+                render_text("client_was_not_found"),
+                ephemeral=True,
+            )
+            return
+
+        network = await context.network_repo.get_by_id(subscription.network_id or 0)
+        if network is None:
+            await interaction.followup.send(
+                render_text("network_not_found", network_key=self._network_key),
+                ephemeral=True,
+            )
+            return
+
+        from bot.services.subscription_setup import resolve_setup_state
+        from bot.services.subscription_setup_sticky import sync_subscription_setup
+
+        state = await resolve_setup_state(
+            guild,
+            subscription,
+            network_active=network.enabled,
         )
-        leave.callback = self._leave_callback
-        self.add_item(leave)
+        if not state.publish_configured:
+            await interaction.followup.send(
+                embed=render_embed(
+                    "command_failure",
+                    title="Publish not connected",
+                    description=(
+                        "Connect your announcement channel to the **publish** channel "
+                        "via Channel Follow first."
+                    ),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        subscription = await context.client_repo.set_subscribe_confirmed(
+            subscription.id,
+            True,
+        )
+        await sync_subscription_setup(
+            self._bot,
+            context,
+            guild,
+            client=client,
+            subscription=subscription,
+            network=network,
+        )
+        await interaction.followup.send(
+            embed=render_embed(
+                "review_success",
+                label="Confirmed",
+                colour="green",
+                description="Subscribe channel marked as connected. Relays can flow once both links are active.",
+            ),
+            ephemeral=True,
+        )
 
     async def _leave_callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)

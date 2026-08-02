@@ -12,4 +12,7 @@ class ClientSubscription:
     publish_channel_id: int
     subscribe_channel_id: int
     moderation_message_id: int | None
+    publish_setup_message_id: int | None
+    subscribe_setup_message_id: int | None
+    subscribe_confirmed: bool
     enabled: bool

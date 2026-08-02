@@ -139,10 +139,13 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
     publish.id = 201
     publish.name = "stingers-publish"
     publish.edit = AsyncMock()
+    publish.webhooks = AsyncMock(return_value=[])
+    publish.send = AsyncMock(return_value=MagicMock(id=9001))
     subscribe = MagicMock(spec=discord.TextChannel)
     subscribe.id = 301
     subscribe.name = "stingers-subscribe"
     subscribe.edit = AsyncMock()
+    subscribe.send = AsyncMock(return_value=MagicMock(id=9002))
     profile = MagicMock(spec=discord.TextChannel)
     profile.id = 30
     profile.name = "network-profile"

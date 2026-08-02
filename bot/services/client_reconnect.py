@@ -106,7 +106,24 @@ async def reconnect_clients_on_init(
                     network=network,
                     subscription=subscription,
                 )
-                bot.add_view(SubscriptionModerationView(bot, subscription.id, network.key))
+                from bot.services.subscription_setup import resolve_setup_state
+
+                state = await resolve_setup_state(
+                    guild,
+                    subscription,
+                    network_active=network.enabled,
+                )
+                bot.add_view(
+                    SubscriptionModerationView(
+                        bot,
+                        subscription.id,
+                        network.key,
+                        show_subscribe_connected=(
+                            state.publish_configured and not state.subscribe_confirmed
+                        ),
+                        show_moderation_actions=state.fully_configured,
+                    )
+                )
 
             await reorder_client_category_channels(
                 category,
