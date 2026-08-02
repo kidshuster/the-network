@@ -599,6 +599,7 @@ async def create_text_channel_with_overwrites(
     category: discord.CategoryChannel | None = None,
     topic: str | None = None,
     news: bool = False,
+    sync_permissions: bool | None = None,
 ) -> discord.TextChannel:
     """Create a text channel, then apply overwrites (required for restricted categories)."""
     from bot.services.guild_notifications import ensure_guild_only_mention_notifications
@@ -615,10 +616,19 @@ async def create_text_channel_with_overwrites(
         kwargs["topic"] = topic
     if news:
         kwargs["news"] = True
+    if category is not None and sync_permissions is not None:
+        kwargs["sync_permissions"] = sync_permissions
     channel = await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
     safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
-    for target, overwrite in safe.items():
-        await channel.set_permissions(target, overwrite=overwrite, reason=reason)
+    if sync_permissions is False:
+        await channel.edit(
+            sync_permissions=False,
+            overwrites=safe,
+            reason=reason,
+        )
+    else:
+        for target, overwrite in safe.items():
+            await channel.set_permissions(target, overwrite=overwrite, reason=reason)
     return channel
 
 

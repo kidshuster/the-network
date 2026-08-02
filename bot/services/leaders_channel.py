@@ -7,6 +7,7 @@ import discord
 
 from bot.services.guild_layout import CHANNEL_LEADERS, resolve_leaders_channel
 from bot.services.guild_permissions import (
+    OverwriteMap,
     build_leaders_channel_overwrites,
     filter_configurable_overwrites,
 )
@@ -18,6 +19,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 LEADERS_CHANNEL_SETTINGS_KEY = "hub_leaders_channel"
+
+
+async def apply_leaders_channel_permissions(
+    channel: discord.TextChannel,
+    overwrites: OverwriteMap,
+    *,
+    reason: str,
+    category: discord.CategoryChannel | None = None,
+) -> None:
+    """Apply #leaders overwrites without inheriting the parent category."""
+    edit_kwargs: dict[str, object] = {
+        "sync_permissions": False,
+        "overwrites": overwrites,
+        "reason": reason,
+    }
+    if category is not None:
+        edit_kwargs["category"] = category
+    await channel.edit(**edit_kwargs)  # type: ignore[arg-type]
 
 
 async def ensure_leaders_channel(
@@ -66,18 +85,21 @@ async def ensure_leaders_channel(
                 overwrites=overwrites,
                 topic="Private channel for participating server leaders",
                 reason="The Network guild init",
+                sync_permissions=False,
             )
         except discord.HTTPException:
             logger.warning("Could not create #leaders channel")
             return None
     else:
-        if channel.category_id != network_category.id:
-            try:
-                await channel.edit(category=network_category, reason="The Network guild init")
-            except discord.HTTPException:
-                pass
         try:
-            await channel.edit(overwrites=overwrites, reason="The Network leaders channel sync")
+            await apply_leaders_channel_permissions(
+                channel,
+                overwrites,
+                reason="The Network leaders channel sync",
+                category=network_category
+                if channel.category_id != network_category.id
+                else None,
+            )
         except discord.HTTPException:
             logger.warning(
                 "Could not sync #leaders overwrites",
@@ -143,7 +165,11 @@ async def grant_leaders_channel_access(
         for_channel=True,
     )
     try:
-        await channel.edit(overwrites=overwrites, reason="The Network client approved")
+        await apply_leaders_channel_permissions(
+            channel,
+            overwrites,
+            reason="The Network client approved",
+        )
     except discord.HTTPException:
         logger.warning(
             "Could not grant #leaders access for new client role",
