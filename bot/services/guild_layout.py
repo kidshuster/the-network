@@ -10,10 +10,12 @@ from bot.constants import (
 
 CATEGORY_NETWORK = "The Network"
 CATEGORY_MODERATION = "Moderation"
+CATEGORY_LEADERS = "Leaders"
 
 CHANNEL_RULES = "rules"
 CHANNEL_JOIN_THE_NETWORK = "join-the-network"
-CHANNEL_LEADERS = "leaders"
+CHANNEL_LEADERS = "leaders-channel"
+LEGACY_CHANNEL_LEADERS = "leaders"
 CHANNEL_JOIN_REQUESTS = "join-requests"
 CHANNEL_MODERATOR_ONLY = "moderator-only"
 CHANNEL_COMMANDS = "commands"
@@ -74,17 +76,35 @@ def resolve_join_the_network_channel(guild: discord.Guild) -> discord.TextChanne
     return resolve_text_channel_in_category(guild, name=CHANNEL_JOIN_THE_NETWORK)
 
 
+def resolve_leaders_category(guild: discord.Guild) -> discord.CategoryChannel | None:
+    return resolve_category(guild, CATEGORY_LEADERS)
+
+
 def resolve_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
-    hub = resolve_network_hub_category(guild)
-    if hub is not None:
+    leaders_category = resolve_leaders_category(guild)
+    if leaders_category is not None:
         match = resolve_text_channel_in_category(
             guild,
             name=CHANNEL_LEADERS,
-            category_id=hub.id,
+            category_id=leaders_category.id,
         )
         if match is not None:
             return match
-    return resolve_text_channel_in_category(guild, name=CHANNEL_LEADERS)
+
+    for name in (CHANNEL_LEADERS, LEGACY_CHANNEL_LEADERS):
+        hub = resolve_network_hub_category(guild)
+        if hub is not None:
+            match = resolve_text_channel_in_category(
+                guild,
+                name=name,
+                category_id=hub.id,
+            )
+            if match is not None:
+                return match
+        match = resolve_text_channel_in_category(guild, name=name)
+        if match is not None:
+            return match
+    return None
 
 
 def resolve_join_requests_channel(guild: discord.Guild) -> discord.TextChannel | None:

@@ -20,9 +20,11 @@ from bot.services.guild_layout import (
     CHANNEL_LEADERS,
     CHANNEL_MODERATOR_ONLY,
     CHANNEL_RULES,
+    LEGACY_CHANNEL_LEADERS,
     resolve_category,
     resolve_human_moderator_role,
     resolve_join_the_network_channel,
+    resolve_leaders_category,
 )
 from bot.services.guild_permissions import (
     build_hub_public_category_overwrites,
@@ -407,13 +409,20 @@ async def _reorder_moderation_channels(
         await _run_init_step(result, f"order #{name}", _move)
 
 
-async def _reorder_hub_categories(
+async def _reorder_guild_categories(
     moderation: discord.CategoryChannel,
     network_category: discord.CategoryChannel,
     *,
+    leaders_category: discord.CategoryChannel | None = None,
+    client_categories: list[discord.CategoryChannel] | None = None,
     result: GuildInitResult,
 ) -> None:
-    for index, category in enumerate((moderation, network_category)):
+    """Hub order: Moderation, The Network, Leaders — then client categories."""
+    ordered_hub = [moderation, network_category]
+    if leaders_category is not None:
+        ordered_hub.append(leaders_category)
+
+    for index, category in enumerate(ordered_hub):
 
         async def _move(
             cat: discord.CategoryChannel = category,
@@ -421,7 +430,43 @@ async def _reorder_hub_categories(
         ) -> None:
             await cat.edit(position=pos, reason="The Network server init")
 
-        await _run_init_step(result, f"order hub category {category.name}", _move)
+        await _run_init_step(
+            result,
+            f"order hub category {category.name}",
+            _move,
+        )
+
+    if not client_categories:
+        return
+
+    start = len(ordered_hub)
+    for offset, category in enumerate(client_categories):
+        pos = start + offset
+
+        async def _move_client(
+            cat: discord.CategoryChannel = category,
+            position: int = pos,
+        ) -> None:
+            await cat.edit(position=position, reason="The Network server init")
+
+        await _run_init_step(
+            result,
+            f"order client category {category.name}",
+            _move_client,
+        )
+
+
+async def _reorder_hub_categories(
+    moderation: discord.CategoryChannel,
+    network_category: discord.CategoryChannel,
+    *,
+    result: GuildInitResult,
+) -> None:
+    await _reorder_guild_categories(
+        moderation,
+        network_category,
+        result=result,
+    )
 
 
 async def _sync_hub_public_channels(
@@ -442,7 +487,10 @@ async def _sync_hub_public_channels(
             continue
         if rules_channel_id is not None and channel.id == rules_channel_id:
             continue
-        if channel.name.casefold() == CHANNEL_LEADERS.casefold():
+        if channel.name.casefold() in {
+            CHANNEL_LEADERS.casefold(),
+            LEGACY_CHANNEL_LEADERS.casefold(),
+        }:
             continue
         if await _edit_overwrites(
             bot_member,
@@ -598,6 +646,9 @@ async def initialize_guild(
             result=result,
             sync_from_category=True,
         )
+        await _sync_hub_public_channels(
+            guild, bot_member, network_cat, hub_public, result=result
+        )
         if context is not None:
             from bot.services.leaders_channel import ensure_leaders_channel
 
@@ -605,15 +656,11 @@ async def initialize_guild(
                 guild,
                 bot_member,
                 context,
-                network_category=network_cat,
                 access_role=access_role,
                 human_moderator_role=human_moderator_role,
             )
             if leaders is not None:
                 result.notes.append(f"Leaders channel synced at {leaders.mention}.")
-        await _sync_hub_public_channels(
-            guild, bot_member, network_cat, hub_public, result=result
-        )
 
         mod_only_overwrites = dict(
             build_moderation_staff_overwrites(guild, bot_member, human_moderator_role)
@@ -668,6 +715,9 @@ async def initialize_guild(
 
         await _reorder_moderation_channels(moderation, result=result)
 
+        guild_clients = [
+            client for client in (clients or []) if client.guild_id == guild.id
+        ]
         if clients and bot is not None and context is not None:
             from bot.services.client_reconnect import reconnect_clients_on_init
 
@@ -692,6 +742,21 @@ async def initialize_guild(
                 clients,
                 result=result,
             )
+
+        client_categories: list[discord.CategoryChannel] = []
+        for client in guild_clients:
+            category = guild.get_channel(client.category_id)
+            if isinstance(category, discord.CategoryChannel):
+                client_categories.append(category)
+        client_categories.sort(key=lambda cat: cat.name.casefold())
+
+        await _reorder_guild_categories(
+            moderation,
+            network_cat,
+            leaders_category=resolve_leaders_category(guild),
+            client_categories=client_categories,
+            result=result,
+        )
 
         if bot is not None and context is not None:
             from bot.services.join_requests_sticky import sync_hub_join_sticky

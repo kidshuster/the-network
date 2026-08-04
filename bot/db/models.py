@@ -179,6 +179,12 @@ class ClientSubscriptionRow:
             if "subscribe_setup_message_id" in keys and row["subscribe_setup_message_id"] is not None
             else None
         )
+        activation_welcome_message_id = (
+            int(row["activation_welcome_message_id"])
+            if "activation_welcome_message_id" in keys
+            and row["activation_welcome_message_id"] is not None
+            else None
+        )
         return ClientSubscription(
             id=int(row["id"]),
             client_id=int(row["client_id"]),
@@ -193,6 +199,7 @@ class ClientSubscriptionRow:
             ),
             publish_setup_message_id=publish_setup_message_id,
             subscribe_setup_message_id=subscribe_setup_message_id,
+            activation_welcome_message_id=activation_welcome_message_id,
             subscribe_confirmed=subscribe_confirmed,
             enabled=bool(row["enabled"]),
         )

@@ -1,0 +1,8 @@
+kind: embed
+title: "Welcome to {network_display_name}"
+colour: green
+description: |
+  **`{network_key}`** is now active for **{client_server_name}**.
+
+  Network announcements will appear in this subscribe channel and in any server channels that follow it.
+footer: "The Network • activation welcome"

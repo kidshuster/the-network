@@ -8,6 +8,6 @@ fields:
     value: |
       1. On **your Discord server**, pick or create a channel for incoming relays.
       2. In **that channel**, use **Follow** and select this hub's subscribe channel: {subscribe_mention}.
-      3. Return to your **network-profile** channel and click **Subscribe connected** on the moderation card.
+      3. Click **Subscribe connected** below (also available on your **network-profile** moderation card).
     inline: false
-footer: "The Network • subscribe setup • removed after you confirm on your profile"
+footer: "The Network • subscribe setup • removed after you confirm"

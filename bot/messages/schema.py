@@ -31,8 +31,8 @@ class TextTemplateSpec(BaseModel):
 class ModalFieldSpec(BaseModel):
     id: str
     type: Literal["text", "file_upload"] = "text"
-    label: str
-    description: str | None = None
+    label: str = Field(max_length=45)
+    description: str | None = Field(default=None, max_length=100)
     placeholder: str | None = None
     max_length: int = 100
     required: bool = True

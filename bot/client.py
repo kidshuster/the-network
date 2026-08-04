@@ -170,7 +170,11 @@ class NetworkRelayBot(commands.Bot):
 
         from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
         from bot.ui.network_admin_views import NetworkAdminView
-        from bot.ui.network_views import NetworkProfileView, SubscriptionModerationView
+        from bot.ui.network_views import (
+            NetworkProfileView,
+            SubscribeSetupView,
+            SubscriptionModerationView,
+        )
 
         self.add_view(JoinNetworkView(self))
         self.add_view(NetworkAdminView(self))
@@ -200,6 +204,8 @@ class NetworkRelayBot(commands.Bot):
                     show_blacklist=sub.subscribe_confirmed,
                 )
             )
+            if not sub.subscribe_confirmed:
+                self.add_view(SubscribeSetupView(self, sub.id, network_key))
 
     async def close(self) -> None:
         if self._topgg is not None:

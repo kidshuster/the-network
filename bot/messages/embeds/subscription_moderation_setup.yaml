@@ -1,8 +1,7 @@
 kind: embed
 title: "Moderation — {network_display_name}"
 colour: dark_grey
-description: |
-  Finish connecting **`{network_key}`** before relays can flow.
+description: "{setup_description}"
 fields:
   - name: Publish channel
     value: "{publish_mention} — **not connected**"
@@ -21,7 +20,7 @@ fields:
   - name: Subscribe setup
     value: |
       On **your server**, open the channel that should receive relays → **Follow** → select {subscribe_mention}.
-      Then click **Subscribe connected** below.
+      Then click **Subscribe connected** on {subscribe_mention} or below — publish and subscribe can be connected in either order.
     inline: false
     when: "{needs_subscribe}"
 footer: "The Network • subscription setup"

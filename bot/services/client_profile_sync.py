@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import discord
 
@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
+
+SetupMode = Literal["create", "reconcile"]
 
 
 async def _network_link_status_for_subscription(
@@ -110,6 +112,27 @@ async def refresh_all_client_profiles(
     return updated
 
 
+def _setup_description(
+    network_key: str,
+    setup_state: SubscriptionSetupState,
+) -> str:
+    needs_publish = not setup_state.publish_configured
+    needs_subscribe = not setup_state.subscribe_confirmed
+    if needs_publish and needs_subscribe:
+        return f"Finish connecting **`{network_key}`** before relays can flow."
+    if needs_publish:
+        return (
+            f"Connect your **publish** channel for **`{network_key}`** "
+            "to finish setup."
+        )
+    if needs_subscribe:
+        return (
+            f"Connect your **subscribe** channel for **`{network_key}`** "
+            "to finish setup."
+        )
+    return f"**`{network_key}`** is connected."
+
+
 def build_moderation_embed(
     *,
     network_display_name: str,
@@ -130,6 +153,7 @@ def build_moderation_embed(
             network_key=network_key,
             publish_mention=publish_mention,
             subscribe_mention=subscribe_mention,
+            setup_description=_setup_description(network_key, setup_state),
             needs_publish="1" if not setup_state.publish_configured else "",
             needs_subscribe="1" if not setup_state.subscribe_confirmed else "",
         )
@@ -141,6 +165,23 @@ def build_moderation_embed(
     )
 
 
+def _moderation_view(
+    bot: NetworkRelayBot,
+    subscription: ClientSubscription,
+    network: Network,
+    setup_state: SubscriptionSetupState,
+) -> SubscriptionModerationView:
+    view = SubscriptionModerationView(
+        bot,
+        subscription.id,
+        network.key,
+        show_subscribe_connected=not setup_state.subscribe_confirmed,
+        show_blacklist=setup_state.fully_configured,
+    )
+    bot.add_view(view)
+    return view
+
+
 async def post_subscription_moderation_embed(
     bot: NetworkRelayBot,
     context: BotContext,
@@ -150,6 +191,7 @@ async def post_subscription_moderation_embed(
     network: Network,
     subscription: ClientSubscription,
     setup_state: SubscriptionSetupState | None = None,
+    setup_mode: SetupMode = "create",
 ) -> None:
     channel = guild.get_channel(client.profile_channel_id)
     if not isinstance(channel, discord.TextChannel):
@@ -162,6 +204,9 @@ async def post_subscription_moderation_embed(
             network_active=network.enabled,
         )
 
+    if setup_mode == "reconcile" and setup_state.fully_configured:
+        return
+
     publish_channel = guild.get_channel(subscription.publish_channel_id)
     subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
     publish_mention = publish_channel.mention if publish_channel is not None else "#publish"
@@ -169,25 +214,7 @@ async def post_subscription_moderation_embed(
         subscribe_channel.mention if subscribe_channel is not None else "#subscribe"
     )
 
-    if subscription.moderation_message_id is not None:
-        try:
-            prior = await channel.fetch_message(subscription.moderation_message_id)
-            await prior.delete()
-        except discord.HTTPException:
-            pass
-
-    show_subscribe_connected = (
-        setup_state.publish_configured and not setup_state.subscribe_confirmed
-    )
-    show_blacklist = setup_state.fully_configured
-    view = SubscriptionModerationView(
-        bot,
-        subscription.id,
-        network.key,
-        show_subscribe_connected=show_subscribe_connected,
-        show_blacklist=show_blacklist,
-    )
-    bot.add_view(view)
+    view = _moderation_view(bot, subscription, network, setup_state)
     embed = build_moderation_embed(
         network_display_name=network.display_name,
         network_key=network.key,
@@ -196,6 +223,19 @@ async def post_subscription_moderation_embed(
         publish_mention=publish_mention,
         subscribe_mention=subscribe_mention,
     )
+
+    if subscription.moderation_message_id is not None:
+        try:
+            message = await channel.fetch_message(subscription.moderation_message_id)
+            await message.edit(embed=embed, view=view)
+            return
+        except discord.HTTPException:
+            if setup_mode == "reconcile":
+                return
+
+    if setup_mode == "reconcile":
+        return
+
     try:
         message = await channel.send(embed=embed, view=view, silent=True)
         await context.client_repo.update_moderation_message_id(

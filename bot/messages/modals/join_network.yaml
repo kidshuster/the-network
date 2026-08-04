@@ -4,7 +4,7 @@ fields:
   - id: name
     type: text
     label: "Name"
-    description: "Your community name on the hub (category label; shown on relayed messages — editable later via Edit Profile)"
+    description: "Your community name on the hub. Shown on relayed messages; editable via Edit Profile."
     placeholder: "My Community Server"
     max_length: 100
     required: true

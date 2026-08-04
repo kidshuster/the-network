@@ -5,11 +5,20 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
+from bot.domain.network import Network
 from bot.services.guild_permissions import build_leaders_channel_overwrites
 from bot.services.subscription_setup import (
     SubscriptionSetupState,
     derive_network_link_status,
     is_publish_configured,
+)
+from bot.services.subscription_setup_sticky import (
+    _find_setup_sticky_by_scan,
+    _maybe_post_activation_welcome,
+    _sync_publish_setup_sticky,
+    _sync_subscribe_setup_sticky,
 )
 
 
@@ -64,3 +73,261 @@ def test_subscription_setup_state_fully_configured() -> None:
     )
     assert state.fully_configured is True
     assert state.link_status == "Active"
+
+
+def _client() -> Client:
+    return Client(
+        id=1,
+        guild_id=100,
+        server_name="acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+
+def _subscription(**kwargs: object) -> ClientSubscription:
+    defaults = dict(
+        id=5,
+        client_id=1,
+        network_id=2,
+        network_key="stingers",
+        publish_channel_id=201,
+        subscribe_channel_id=501,
+        moderation_message_id=None,
+        publish_setup_message_id=None,
+        subscribe_setup_message_id=None,
+        activation_welcome_message_id=None,
+        subscribe_confirmed=False,
+        enabled=True,
+    )
+    defaults.update(kwargs)
+    return ClientSubscription(**defaults)  # type: ignore[arg-type]
+
+
+def _network() -> Network:
+    return Network(
+        id=2,
+        key="stingers",
+        display_name="Stingers",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        enabled=True,
+        join_channel_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_publish_sticky_creates_only_when_missing() -> None:
+    publish_channel = MagicMock(spec=discord.TextChannel)
+    publish_channel.id = 201
+    publish_channel.mention = "#publish"
+    publish_channel.send = AsyncMock(return_value=MagicMock(id=900))
+    publish_channel.fetch_message = AsyncMock(side_effect=discord.HTTPException(MagicMock(), ""))
+    publish_channel.history = MagicMock(return_value=_async_empty_history())
+
+    guild = MagicMock(spec=discord.Guild)
+    context = MagicMock()
+    context.client_repo.update_publish_setup_message_id = AsyncMock(
+        side_effect=lambda _sub_id, msg_id: _subscription(publish_setup_message_id=msg_id)
+    )
+
+    result = await _sync_publish_setup_sticky(
+        guild,
+        _subscription(),
+        publish_channel=publish_channel,
+        context=context,
+        bot_user_id=999,
+        configured=False,
+        allow_create=False,
+    )
+    publish_channel.send.assert_not_called()
+    assert result.publish_setup_message_id is None
+
+    await _sync_publish_setup_sticky(
+        guild,
+        _subscription(),
+        publish_channel=publish_channel,
+        context=context,
+        bot_user_id=999,
+        configured=False,
+        allow_create=True,
+    )
+    publish_channel.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_publish_sticky_refreshes_existing_message() -> None:
+    publish_channel = MagicMock(spec=discord.TextChannel)
+    publish_channel.id = 201
+    publish_channel.mention = "#publish"
+    publish_channel.send = AsyncMock()
+    existing = MagicMock(spec=discord.Message)
+    existing.id = 777
+    existing.edit = AsyncMock()
+    publish_channel.fetch_message = AsyncMock(return_value=existing)
+    publish_channel.history = MagicMock(return_value=_async_empty_history())
+
+    guild = MagicMock(spec=discord.Guild)
+    context = MagicMock()
+    context.client_repo.update_publish_setup_message_id = AsyncMock()
+
+    await _sync_publish_setup_sticky(
+        guild,
+        _subscription(publish_setup_message_id=777),
+        publish_channel=publish_channel,
+        context=context,
+        bot_user_id=999,
+        configured=False,
+        allow_create=False,
+    )
+
+    existing.edit.assert_awaited_once()
+    publish_channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_find_setup_sticky_by_scan_adopts_orphaned_message() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    embed = MagicMock()
+    embed.footer.text = "The Network • subscribe setup • removed after you confirm"
+    message = MagicMock(spec=discord.Message)
+    message.author.id = 42
+    message.embeds = [embed]
+
+    async def _history(**kwargs: object):
+        yield message
+
+    channel.history = MagicMock(return_value=_history())
+
+    found = await _find_setup_sticky_by_scan(
+        channel,
+        bot_user_id=42,
+        footer_marker="subscribe setup",
+    )
+    assert found is message
+
+
+@pytest.mark.asyncio
+async def test_reconcile_subscribe_sticky_does_not_create_new() -> None:
+    subscribe_channel = MagicMock(spec=discord.TextChannel)
+    subscribe_channel.id = 501
+    subscribe_channel.mention = "#subscribe"
+    subscribe_channel.send = AsyncMock()
+    subscribe_channel.fetch_message = AsyncMock(side_effect=discord.HTTPException(MagicMock(), ""))
+    subscribe_channel.history = MagicMock(return_value=_async_empty_history())
+
+    guild = MagicMock(spec=discord.Guild)
+    context = MagicMock()
+    bot = MagicMock()
+    bot.add_view = MagicMock()
+
+    result = await _sync_subscribe_setup_sticky(
+        bot,
+        guild,
+        _subscription(),
+        subscribe_channel=subscribe_channel,
+        context=context,
+        network=_network(),
+        bot_user_id=999,
+        confirmed=False,
+        allow_create=False,
+    )
+
+    subscribe_channel.send.assert_not_called()
+    assert result.subscribe_setup_message_id is None
+
+
+@pytest.mark.asyncio
+async def test_activation_welcome_posts_once_when_fully_configured() -> None:
+    subscribe_channel = MagicMock(spec=discord.TextChannel)
+    subscribe_channel.id = 501
+    subscribe_channel.send = AsyncMock(return_value=MagicMock(id=1001))
+
+    context = MagicMock()
+    context.client_repo.update_activation_welcome_message_id = AsyncMock(
+        side_effect=lambda _sub_id, msg_id: _subscription(activation_welcome_message_id=msg_id)
+    )
+
+    active_state = SubscriptionSetupState(
+        publish_configured=True,
+        subscribe_confirmed=True,
+        network_active=True,
+    )
+
+    result = await _maybe_post_activation_welcome(
+        _subscription(),
+        subscribe_channel=subscribe_channel,
+        context=context,
+        network=_network(),
+        client=_client(),
+        setup_state=active_state,
+    )
+
+    subscribe_channel.send.assert_awaited_once()
+    sent_embed = subscribe_channel.send.await_args.kwargs["embed"]
+    assert sent_embed.title == "Welcome to Stingers"
+    assert result.activation_welcome_message_id == 1001
+
+
+@pytest.mark.asyncio
+async def test_activation_welcome_skips_when_not_fully_configured() -> None:
+    subscribe_channel = MagicMock(spec=discord.TextChannel)
+    subscribe_channel.send = AsyncMock()
+
+    partial_state = SubscriptionSetupState(
+        publish_configured=True,
+        subscribe_confirmed=False,
+        network_active=True,
+    )
+
+    await _maybe_post_activation_welcome(
+        _subscription(),
+        subscribe_channel=subscribe_channel,
+        context=MagicMock(),
+        network=_network(),
+        client=_client(),
+        setup_state=partial_state,
+    )
+
+    subscribe_channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_activation_welcome_skips_when_already_sent() -> None:
+    subscribe_channel = MagicMock(spec=discord.TextChannel)
+    subscribe_channel.send = AsyncMock()
+
+    active_state = SubscriptionSetupState(
+        publish_configured=True,
+        subscribe_confirmed=True,
+        network_active=True,
+    )
+
+    await _maybe_post_activation_welcome(
+        _subscription(activation_welcome_message_id=999),
+        subscribe_channel=subscribe_channel,
+        context=MagicMock(),
+        network=_network(),
+        client=_client(),
+        setup_state=active_state,
+    )
+
+    subscribe_channel.send.assert_not_called()
+
+
+def _async_empty_history():
+    async def _history(**kwargs: object):
+        if False:
+            yield  # pragma: no cover
+
+    return _history()

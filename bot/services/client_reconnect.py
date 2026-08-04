@@ -103,6 +103,7 @@ async def reconnect_clients_on_init(
                     client=client,
                     subscription=subscription,
                     network=network,
+                    setup_mode="reconcile",
                 )
 
             await reorder_client_category_channels(

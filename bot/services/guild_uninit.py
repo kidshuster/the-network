@@ -14,6 +14,7 @@ from bot.constants import (
 )
 from bot.services.discord_cleanup import delete_channel, delete_role
 from bot.services.guild_layout import (
+    CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
     CATEGORY_SUBSCRIBE,
@@ -21,6 +22,7 @@ from bot.services.guild_layout import (
     CHANNEL_MODERATOR_ONLY,
     CHANNEL_RULES,
     CHANNEL_WELCOME_SINK,
+    LEGACY_CHANNEL_LEADERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ _PRESERVED_CHANNEL_NAMES = frozenset(
     {
         CHANNEL_RULES.casefold(),
         CHANNEL_LEADERS.casefold(),
+        LEGACY_CHANNEL_LEADERS.casefold(),
         CHANNEL_MODERATOR_ONLY.casefold(),
         "mod-only",
         "staff-only",
@@ -42,6 +45,7 @@ _HUB_CATEGORY_NAMES = frozenset(
         CATEGORY_SUBSCRIBE.casefold(),
         CATEGORY_NETWORK.casefold(),
         CATEGORY_MODERATION.casefold(),
+        CATEGORY_LEADERS.casefold(),
     }
 )
 

@@ -1118,6 +1118,25 @@ class ClientRepository:
             raise RuntimeError("Subscription disappeared after subscribe setup message update")
         return updated
 
+    async def update_activation_welcome_message_id(
+        self,
+        subscription_id: int,
+        message_id: int | None,
+    ) -> ClientSubscription:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET activation_welcome_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        updated = await self.get_subscription_by_id(subscription_id)
+        if updated is None:
+            raise RuntimeError("Subscription disappeared after activation welcome update")
+        return updated
+
     async def set_subscription_enabled(
         self,
         subscription_id: int,

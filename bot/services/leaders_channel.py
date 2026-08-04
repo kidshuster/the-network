@@ -5,9 +5,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.services.guild_layout import CHANNEL_LEADERS, resolve_leaders_channel
+from bot.services.guild_layout import (
+    CATEGORY_LEADERS,
+    CHANNEL_LEADERS,
+    resolve_leaders_category,
+    resolve_leaders_channel,
+)
 from bot.services.guild_permissions import (
-    OverwriteMap,
+    build_leaders_category_overwrites,
     build_leaders_channel_overwrites,
     filter_configurable_overwrites,
 )
@@ -21,48 +26,53 @@ logger = logging.getLogger(__name__)
 LEADERS_CHANNEL_SETTINGS_KEY = "hub_leaders_channel"
 
 
-async def apply_leaders_channel_permissions(
-    channel: discord.TextChannel,
-    overwrites: OverwriteMap,
+async def _list_client_roles(
+    guild: discord.Guild,
+    context: BotContext,
     *,
-    reason: str,
-    category: discord.CategoryChannel | None = None,
-) -> None:
-    """Apply #leaders overwrites without inheriting the parent category."""
-    edit_kwargs: dict[str, object] = {
-        "sync_permissions": False,
-        "overwrites": overwrites,
-        "reason": reason,
-    }
-    if category is not None:
-        edit_kwargs["category"] = category
-    await channel.edit(**edit_kwargs)  # type: ignore[arg-type]
+    extra_role: discord.Role | None = None,
+) -> list[discord.Role]:
+    client_roles: list[discord.Role] = []
+    for client in await context.client_repo.list_all():
+        if client.guild_id != guild.id:
+            continue
+        role = guild.get_role(client.client_role_id)
+        if role is not None:
+            client_roles.append(role)
+    if extra_role is not None and extra_role not in client_roles:
+        client_roles.append(extra_role)
+    return client_roles
 
 
-async def ensure_leaders_channel(
+async def _sync_leaders_permissions(
     guild: discord.Guild,
     bot_member: discord.Member,
     context: BotContext,
     *,
-    network_category: discord.CategoryChannel,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
-) -> discord.TextChannel | None:
-    """Create or sync #leaders under The Network with all client roles."""
+    extra_client_role: discord.Role | None = None,
+    reason: str,
+) -> tuple[discord.CategoryChannel | None, discord.TextChannel | None]:
     from bot.services.guild_permissions import create_text_channel_with_overwrites
 
-    clients = [
-        client
-        for client in await context.client_repo.list_all()
-        if client.guild_id == guild.id
-    ]
-    client_roles: list[discord.Role] = []
-    for client in clients:
-        role = guild.get_role(client.client_role_id)
-        if role is not None:
-            client_roles.append(role)
+    client_roles = await _list_client_roles(
+        guild,
+        context,
+        extra_role=extra_client_role,
+    )
 
-    overwrites = filter_configurable_overwrites(
+    category_overwrites = filter_configurable_overwrites(
+        bot_member,
+        build_leaders_category_overwrites(
+            guild,
+            bot_member,
+            client_roles,
+            access_role,
+            human_moderator_role,
+        ),
+    )
+    channel_overwrites = filter_configurable_overwrites(
         bot_member,
         build_leaders_channel_overwrites(
             guild,
@@ -74,6 +84,26 @@ async def ensure_leaders_channel(
         for_channel=True,
     )
 
+    category = resolve_leaders_category(guild)
+    if category is None:
+        try:
+            category = await guild.create_category(
+                name=CATEGORY_LEADERS,
+                overwrites=category_overwrites,
+                reason=reason,
+            )
+        except discord.HTTPException:
+            logger.warning("Could not create Leaders category")
+            return None, None
+    else:
+        try:
+            await category.edit(overwrites=category_overwrites, reason=reason)
+        except discord.HTTPException:
+            logger.warning(
+                "Could not sync Leaders category permissions",
+                extra={"category_id": category.id},
+            )
+
     channel = resolve_leaders_channel(guild)
     if channel is None:
         try:
@@ -81,30 +111,53 @@ async def ensure_leaders_channel(
                 guild,
                 bot_member,
                 name=CHANNEL_LEADERS,
-                category=network_category,
-                overwrites=overwrites,
+                category=category,
+                overwrites=channel_overwrites,
                 topic="Private channel for participating server leaders",
-                reason="The Network guild init",
-                sync_permissions=False,
+                reason=reason,
             )
         except discord.HTTPException:
-            logger.warning("Could not create #leaders channel")
-            return None
+            logger.warning("Could not create leaders channel")
+            return category, None
     else:
+        edit_kwargs: dict[str, object] = {
+            "overwrites": channel_overwrites,
+            "sync_permissions": False,
+            "reason": reason,
+        }
+        if channel.category_id != category.id or channel.name != CHANNEL_LEADERS:
+            edit_kwargs["category"] = category
+            edit_kwargs["name"] = CHANNEL_LEADERS
         try:
-            await apply_leaders_channel_permissions(
-                channel,
-                overwrites,
-                reason="The Network leaders channel sync",
-                category=network_category
-                if channel.category_id != network_category.id
-                else None,
-            )
+            await channel.edit(**edit_kwargs)  # type: ignore[arg-type]
         except discord.HTTPException:
             logger.warning(
-                "Could not sync #leaders overwrites",
+                "Could not sync leaders channel permissions",
                 extra={"channel_id": channel.id},
             )
+
+    return category, channel
+
+
+async def ensure_leaders_channel(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    context: BotContext,
+    *,
+    access_role: discord.Role,
+    human_moderator_role: discord.Role | None,
+) -> discord.TextChannel | None:
+    """Create or sync the Leaders category and leaders channel for client roles."""
+    _category, channel = await _sync_leaders_permissions(
+        guild,
+        bot_member,
+        context,
+        access_role=access_role,
+        human_moderator_role=human_moderator_role,
+        reason="The Network guild init",
+    )
+    if channel is None:
+        return None
 
     await context.settings_repo.set(LEADERS_CHANNEL_SETTINGS_KEY, str(channel.id))
     return channel
@@ -118,60 +171,28 @@ async def grant_leaders_channel_access(
     *,
     access_role_name: str,
 ) -> None:
-    """Add a newly approved client role to #leaders."""
+    """Add a newly approved client role to the Leaders category and channel."""
     from bot.services.network_provision import resolve_access_role
-
-    channel = resolve_leaders_channel(guild)
-    if channel is None:
-        stored = await context.settings_repo.get(LEADERS_CHANNEL_SETTINGS_KEY)
-        if stored:
-            ch = guild.get_channel(int(stored))
-            if isinstance(ch, discord.TextChannel):
-                channel = ch
-    if channel is None:
-        return
 
     access_role = resolve_access_role(guild, role_name=access_role_name)
     if access_role is None:
         return
 
-    human_moderator_role = None
     from bot.services.guild_layout import resolve_human_moderator_role
 
     human_moderator_role = resolve_human_moderator_role(guild)
 
-    clients = [
-        client
-        for client in await context.client_repo.list_all()
-        if client.guild_id == guild.id
-    ]
-    client_roles: list[discord.Role] = []
-    for client in clients:
-        role = guild.get_role(client.client_role_id)
-        if role is not None:
-            client_roles.append(role)
-    if client_role not in client_roles:
-        client_roles.append(client_role)
-
-    overwrites = filter_configurable_overwrites(
+    _category, channel = await _sync_leaders_permissions(
+        guild,
         bot_member,
-        build_leaders_channel_overwrites(
-            guild,
-            bot_member,
-            client_roles,
-            access_role,
-            human_moderator_role,
-        ),
-        for_channel=True,
+        context,
+        access_role=access_role,
+        human_moderator_role=human_moderator_role,
+        extra_client_role=client_role,
+        reason="The Network client approved",
     )
-    try:
-        await apply_leaders_channel_permissions(
-            channel,
-            overwrites,
-            reason="The Network client approved",
-        )
-    except discord.HTTPException:
+    if channel is None:
         logger.warning(
-            "Could not grant #leaders access for new client role",
+            "Could not grant leaders access for new client role",
             extra={"role_id": client_role.id},
         )

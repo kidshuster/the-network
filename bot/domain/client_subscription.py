@@ -14,5 +14,6 @@ class ClientSubscription:
     moderation_message_id: int | None
     publish_setup_message_id: int | None
     subscribe_setup_message_id: int | None
+    activation_welcome_message_id: int | None
     subscribe_confirmed: bool
     enabled: bool

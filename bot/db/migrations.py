@@ -511,6 +511,19 @@ async def _migration_v10(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v12(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "activation_welcome_message_id" in columns:
+        return
+
+    await db.connection.execute(
+        "ALTER TABLE client_subscriptions ADD COLUMN activation_welcome_message_id INTEGER"
+    )
+    await db.connection.commit()
+
+
 async def _migration_v11(db: Database) -> None:
     cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
     columns = {str(row[1]) for row in await cursor.fetchall()}
@@ -542,6 +555,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     9: _migration_v9,
     10: _migration_v10,
     11: _migration_v11,
+    12: _migration_v12,
 }
 
 

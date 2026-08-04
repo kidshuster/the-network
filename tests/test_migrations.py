@@ -16,7 +16,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
 
     version = await run_migrations(db)
 
-    assert version == 11
+    assert version == 12
     assert db_path.exists()
 
     cursor = await db.connection.execute(
@@ -37,6 +37,11 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
         "client_blacklists",
     }.issubset(tables)
 
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    assert "activation_welcome_message_id" in columns
+
     assert await count_networks(db) == 0
     total, enabled = await count_profiles(db)
     assert total == 0
@@ -54,12 +59,12 @@ async def test_run_migrations_is_idempotent(tmp_path: Path) -> None:
     first = await run_migrations(db)
     second = await run_migrations(db)
 
-    assert first == 11
-    assert second == 11
+    assert first == 12
+    assert second == 12
 
     cursor = await db.connection.execute("SELECT version FROM schema_migrations")
     migration_rows = await cursor.fetchall()
     await cursor.close()
-    assert len(migration_rows) == 11
+    assert len(migration_rows) == 12
 
     await db.close()

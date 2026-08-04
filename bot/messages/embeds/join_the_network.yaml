@@ -32,7 +32,7 @@ fields:
     inline: false
   - name: "6. Leaders lounge"
     value: |
-      After approval, your client role can access **#leaders** under **The Network**
+      After approval, your client role can access **#leaders-channel** under **Leaders**
       to coordinate with other participating server leaders.
     inline: false
 footer: "The Network • join the network • v{version}"

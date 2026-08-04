@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import discord
-import pytest
 
-from bot.services.guild_permissions import build_leaders_channel_overwrites
-from bot.services.leaders_channel import apply_leaders_channel_permissions
+from bot.services.guild_permissions import (
+    build_leaders_category_overwrites,
+    build_leaders_channel_overwrites,
+)
 
 
 def test_leaders_channel_overwrites_hide_everyone_and_grant_client_roles() -> None:
@@ -48,44 +49,74 @@ def test_leaders_channel_overwrites_hide_everyone_and_grant_client_roles() -> No
     assert overwrites[access].view_channel is False
 
 
-@pytest.mark.asyncio
-async def test_apply_leaders_channel_permissions_disables_category_sync() -> None:
-    channel = MagicMock(spec=discord.TextChannel)
-    channel.edit = AsyncMock()
+def test_leaders_channel_overwrites_grant_moderator_role() -> None:
+    guild = MagicMock(spec=discord.Guild)
     everyone = MagicMock(spec=discord.Role)
-    overwrites = {everyone: discord.PermissionOverwrite(view_channel=False)}
+    everyone.is_default.return_value = True
+    guild.default_role = everyone
 
-    await apply_leaders_channel_permissions(
-        channel,
-        overwrites,
-        reason="test",
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+
+    client = MagicMock(spec=discord.Role)
+    client.id = 101
+    client.position = 1
+
+    access = MagicMock(spec=discord.Role)
+    access.id = 201
+    access.position = 3
+
+    moderator = MagicMock(spec=discord.Role)
+    moderator.id = 301
+    moderator.position = 5
+
+    overwrites = dict(
+        build_leaders_channel_overwrites(
+            guild,
+            bot_member,
+            [client],
+            access,
+            moderator,
+        )
     )
 
-    channel.edit.assert_awaited_once_with(
-        sync_permissions=False,
-        overwrites=overwrites,
-        reason="test",
-    )
+    assert overwrites[everyone].view_channel is False
+    assert overwrites[access].view_channel is False
+    assert overwrites[client].view_channel is True
+    assert overwrites[moderator].view_channel is True
+    assert len(overwrites) == 4
 
 
-@pytest.mark.asyncio
-async def test_apply_leaders_channel_permissions_can_move_category() -> None:
-    channel = MagicMock(spec=discord.TextChannel)
-    channel.edit = AsyncMock()
-    category = MagicMock(spec=discord.CategoryChannel)
+def test_leaders_category_overwrites_hide_everyone_and_access_role() -> None:
+    guild = MagicMock(spec=discord.Guild)
     everyone = MagicMock(spec=discord.Role)
-    overwrites = {everyone: discord.PermissionOverwrite(view_channel=False)}
+    everyone.is_default.return_value = True
+    guild.default_role = everyone
 
-    await apply_leaders_channel_permissions(
-        channel,
-        overwrites,
-        reason="test",
-        category=category,
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+
+    client = MagicMock(spec=discord.Role)
+    client.id = 101
+    client.position = 1
+
+    access = MagicMock(spec=discord.Role)
+    access.id = 201
+    access.position = 3
+
+    overwrites = dict(
+        build_leaders_category_overwrites(
+            guild,
+            bot_member,
+            [client],
+            access,
+            None,
+        )
     )
 
-    channel.edit.assert_awaited_once_with(
-        sync_permissions=False,
-        overwrites=overwrites,
-        reason="test",
-        category=category,
-    )
+    assert overwrites[everyone].view_channel is False
+    assert overwrites[access].view_channel is False
+    assert overwrites[client].view_channel is True
+    assert overwrites[client].send_messages is False

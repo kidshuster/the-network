@@ -87,6 +87,13 @@ def test_network_created_optional_field() -> None:
     assert len(relinked.fields) == 4
 
 
+def test_join_network_modal_field_descriptions_within_discord_limit() -> None:
+    spec = modal_spec("join_network")
+    for field in spec.fields:
+        if field.description is not None:
+            assert len(field.description) <= 100, field.id
+
+
 def test_unknown_template_raises() -> None:
     clear_template_cache()
     with pytest.raises(MessageTemplateError):
