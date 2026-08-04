@@ -8,9 +8,7 @@ fields:
     inline: false
     when: "{needs_publish}"
   - name: Publish setup
-    value: |
-      On **your server**, open your **announcement channel** → **Follow** → select {publish_mention}.
-      See the instruction card in {publish_mention} for details.
+    value: "Follow the instruction card in {publish_mention}."
     inline: false
     when: "{needs_publish}"
   - name: Subscribe channel
@@ -18,9 +16,7 @@ fields:
     inline: false
     when: "{needs_subscribe}"
   - name: Subscribe setup
-    value: |
-      On **your server**, open the channel that should receive relays → **Follow** → select {subscribe_mention}.
-      Then click **Subscribe connected** on {subscribe_mention} or below — publish and subscribe can be connected in either order.
+    value: "Follow the instruction card in {subscribe_mention}, then click **Subscribe connected** here or there."
     inline: false
     when: "{needs_subscribe}"
 footer: "The Network • subscription setup"

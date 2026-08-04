@@ -58,14 +58,13 @@ async def test_sync_hub_join_sticky_wipes_before_post(
     assert result.message is message
 
 
-def test_build_how_to_join_embed_covers_setup_and_subscribe() -> None:
+def test_build_how_to_join_embed_is_minimal_prejoin_cta() -> None:
     embed = build_how_to_join_embed()
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
-    assert "Enable Community" in body
-    assert "Announcement" in body
     assert "Join Network" in body
     assert "network-profile" in body
-    assert "Blacklist" in body
+    assert "Enable Community" not in body
+    assert "Blacklist" not in body
     assert embed.footer is not None
     assert embed.footer.text == build_how_to_join_footer()
 

@@ -168,6 +168,24 @@ async def test_moderation_embed_reconcile_skips_when_fully_configured() -> None:
     profile_channel.fetch_message.assert_not_called()
 
 
+def test_moderation_setup_embed_points_at_instruction_cards() -> None:
+    embed = build_moderation_embed(
+        network_display_name="Stingers",
+        network_key="stingers",
+        client_server_name="acme",
+        setup_state=SubscriptionSetupState(
+            publish_configured=False,
+            subscribe_confirmed=False,
+            network_active=True,
+        ),
+        publish_mention="#publish",
+        subscribe_mention="#subscribe",
+    )
+    setup_fields = {field.name: field.value for field in embed.fields}
+    assert setup_fields["Publish setup"] == "Follow the instruction card in #publish."
+    assert "instruction card in #subscribe" in setup_fields["Subscribe setup"]
+
+
 def test_moderation_setup_embed_shows_both_steps_when_unconfigured() -> None:
     embed = build_moderation_embed(
         network_display_name="Stingers",

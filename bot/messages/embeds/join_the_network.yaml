@@ -2,37 +2,12 @@ kind: embed
 title: "Join The Network"
 colour: green
 description: |
-  Set up **your Discord server**, then click **Join Network** below to
-  request hub access. Moderators review submissions in their private area.
+  Click **Join Network** below and submit your community name and a profile image.
+  Moderators review submissions in their private area.
 fields:
-  - name: "1. Enable Community on your server"
+  - name: What happens next
     value: |
-      On your server, open **Server Settings → Enable Community** and complete the
-      setup checklist (rules, verification, and a public updates channel).
-    inline: false
-  - name: "2. Create an announcement channel"
-    value: |
-      Still on your server: **Server Settings → Channels → Create Channel →
-      Announcement**. You will publish network-bound posts from this channel.
-    inline: false
-  - name: "3. Request hub access"
-    value: |
-      Click **Join Network** below and submit your name and a profile image.
-    inline: false
-  - name: "4. Subscribe to networks (after approval)"
-    value: |
-      You will receive a **network-profile** channel under your client category.
-      Click a network button to subscribe, then use **Channel Follow** on your
-      announcement channel to point at the matching **publish** channel.
-    inline: false
-  - name: "5. Receive relays"
-    value: |
-      Subscribed **subscribe** channels relay announcements from other clients.
-      Use **Blacklist** on the moderation embed to hide specific publishers.
-    inline: false
-  - name: "6. Leaders lounge"
-    value: |
-      After approval, your client role can access **#leaders-channel** under **Leaders**
-      to coordinate with other participating server leaders.
+      After approval you receive a client category with **network-profile** and
+      step-by-step setup cards in your **publish** and **subscribe** channels.
     inline: false
 footer: "The Network • join the network • v{version}"

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-HOW_TO_JOIN_VERSION = 9
+HOW_TO_JOIN_VERSION = 10
 HOW_TO_JOIN_SETTINGS_KEY = "hub_join_the_network_sticky"
 HOW_TO_JOIN_FOOTER_PREFIX = "The Network • join the network"
 
