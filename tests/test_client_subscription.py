@@ -8,6 +8,7 @@ import pytest
 from bot.db.repositories import ClientRepository, NetworkRepository
 from bot.domain.client import Client
 from bot.services.channel_names import (
+    LEGACY_CLIENT_PROFILE_CHANNEL,
     build_client_profile_channel_base,
     build_client_publish_channel_base,
     build_client_subscribe_channel_base,
@@ -20,7 +21,6 @@ from bot.services.client_subscription import (
     reorder_client_category_channels,
     resync_subscriptions_for_network,
 )
-from bot.services.channel_names import LEGACY_CLIENT_PROFILE_CHANNEL
 
 
 def _client(server_name: str = "acme") -> Client:

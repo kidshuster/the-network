@@ -158,7 +158,8 @@ async def sync_hub_join_sticky(
 
 
 # Legacy names for gradual migration
-how_to_join_sticky_settings_key = lambda _key: HOW_TO_JOIN_SETTINGS_KEY
+def how_to_join_sticky_settings_key(_key):
+    return HOW_TO_JOIN_SETTINGS_KEY
 sync_network_how_to_join_sticky = sync_hub_join_sticky
 sync_network_join_sticky = sync_hub_join_sticky
 build_join_requests_embed = build_how_to_join_embed

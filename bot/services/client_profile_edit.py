@@ -8,10 +8,8 @@ import discord
 
 from bot.domain.client import Client
 from bot.domain.errors import ProfileValidationError
-from bot.services.client_profile_post import build_client_profile_embed
 from bot.services.client_profile_sync import refresh_client_profile_message
 from bot.services.image_service import normalize_image_bytes, read_profile_image_attachment
-from bot.ui.network_views import NetworkProfileView
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

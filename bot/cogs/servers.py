@@ -229,7 +229,9 @@ class ServerCog(
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(render_text("bot_member_unavailable_short"), ephemeral=True)
+            await interaction.followup.send(
+                render_text("bot_member_unavailable_short"), ephemeral=True
+            )
             return
 
         context = self._context()

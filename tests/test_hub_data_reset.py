@@ -1,53 +1,18 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
+from context_helpers import make_test_context
 
-from bot.context import BotContext
-from bot.db.repositories import (
-    ClientRepository,
-    NetworkRepository,
-    RelayRecordRepository,
-    ServerRequestRepository,
-    SettingsRepository,
-)
-from bot.services.client_cache import ClientCache
 from bot.services.hub_data_reset import reset_hub_layout_data
 from bot.services.join_requests_sticky import HOW_TO_JOIN_SETTINGS_KEY
 from bot.services.network_admin_sticky import NETWORK_ADMIN_SETTINGS_KEY
-from bot.services.routing_service import RoutingService
-
-
-def _make_context(db) -> BotContext:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
-    relay_record_repo = RelayRecordRepository(db)
-    settings_repo = SettingsRepository(db)
-    server_request_repo = ServerRequestRepository(db)
-    routing = RoutingService(network_repo, client_repo)
-    client_cache = ClientCache(client_repo)
-    routing.attach_client_cache(client_cache)
-    return BotContext.create(
-        settings=MagicMock(),
-        db=db,
-        network_repo=network_repo,
-        client_repo=client_repo,
-        relay_record_repo=relay_record_repo,
-        routing_service=routing,
-        client_cache=client_cache,
-        relay_service=MagicMock(),
-        bot_settings=MagicMock(),
-        settings_repo=settings_repo,
-        server_request_repo=server_request_repo,
-    )
 
 
 @pytest.mark.asyncio
 async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -> None:
     guild_id = 100
     other_guild_id = 200
-    context = _make_context(db)
+    context = make_test_context(db)
 
     network = await context.network_repo.create(
         guild_id=guild_id,
@@ -127,7 +92,7 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
 
 @pytest.mark.asyncio
 async def test_reset_hub_layout_data_noop_when_guild_empty(db) -> None:
-    context = _make_context(db)
+    context = make_test_context(db)
     result = await reset_hub_layout_data(context, 999)
     assert result.summary_note() is None
     assert context.routing_service.network_count == 0

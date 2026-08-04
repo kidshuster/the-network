@@ -22,6 +22,7 @@ from bot.services.network_provision import (
     validate_provision_permissions,
 )
 
+
 def slugify_server_name(server_name: str) -> str:
     return slugify_client_name(server_name)
 

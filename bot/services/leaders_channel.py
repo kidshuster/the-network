@@ -18,7 +18,6 @@ from bot.services.guild_permissions import (
 )
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)

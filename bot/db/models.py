@@ -4,12 +4,12 @@ import json
 from typing import Any
 
 from bot.constants import RelayStatus
+from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
 from bot.domain.server_request import ServerRequest, ServerRequestStatus
-from bot.domain.client import Client
-from bot.domain.client_subscription import ClientSubscription
 
 
 class NetworkRow:
@@ -168,7 +168,9 @@ class ClientSubscriptionRow:
     def from_row(row: Any) -> ClientSubscription:
         network_id_raw = row["network_id"]
         keys = row.keys() if hasattr(row, "keys") else ()
-        subscribe_confirmed = bool(row["subscribe_confirmed"]) if "subscribe_confirmed" in keys else False
+        subscribe_confirmed = (
+            bool(row["subscribe_confirmed"]) if "subscribe_confirmed" in keys else False
+        )
         publish_setup_message_id = (
             int(row["publish_setup_message_id"])
             if "publish_setup_message_id" in keys and row["publish_setup_message_id"] is not None
@@ -176,7 +178,10 @@ class ClientSubscriptionRow:
         )
         subscribe_setup_message_id = (
             int(row["subscribe_setup_message_id"])
-            if "subscribe_setup_message_id" in keys and row["subscribe_setup_message_id"] is not None
+            if (
+                "subscribe_setup_message_id" in keys
+                and row["subscribe_setup_message_id"] is not None
+            )
             else None
         )
         activation_welcome_message_id = (

@@ -125,7 +125,9 @@ def test_collect_uninit_targets_preserves_rules_and_moderator_only() -> None:
     rules.name = CHANNEL_RULES
     mod = MagicMock(spec=discord.TextChannel, id=2, category_id=100)
     mod.name = CHANNEL_MODERATOR_ONLY
-    announce = MagicMock(spec=discord.TextChannel, id=3, name="stingers-announcements", category_id=100)
+    announce = MagicMock(
+        spec=discord.TextChannel, id=3, name="stingers-announcements", category_id=100
+    )
     announce.type = discord.ChannelType.news
     join = MagicMock(spec=discord.TextChannel, id=4, name="join-stingers", category_id=100)
     join.type = discord.ChannelType.text

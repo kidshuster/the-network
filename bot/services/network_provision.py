@@ -8,6 +8,8 @@ import discord
 from bot.domain.errors import NetworkValidationError
 from bot.services.guild_layout import (
     resolve_access_role as layout_resolve_access_role,
+)
+from bot.services.guild_layout import (
     resolve_operator_role as layout_resolve_operator_role,
 )
 

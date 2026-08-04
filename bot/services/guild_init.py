@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.constants import LEGACY_MODERATOR_ROLE_NAME
-from bot.domain.errors import NetworkValidationError
 from bot.domain.client import Client
+from bot.domain.errors import NetworkValidationError
 from bot.services.guild_layout import (
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
@@ -356,7 +356,11 @@ async def _sync_client_categories(
     *,
     result: GuildInitResult,
 ) -> None:
-    clients_by_category = {client.category_id: client for client in clients if client.guild_id == guild.id}
+    clients_by_category = {
+        client.category_id: client
+        for client in clients
+        if client.guild_id == guild.id
+    }
     if not clients_by_category:
         return
 

@@ -281,9 +281,9 @@ class ServerRequestService:
     ):
         from dataclasses import dataclass
 
-        from bot.services.client_provision import ClientProvisionService
         from bot.services.client_profile_post import build_client_profile_embed
         from bot.services.client_profile_sync import refresh_client_profile_message
+        from bot.services.client_provision import ClientProvisionService
         from bot.services.emoji_service import EmojiService
         from bot.ui.network_views import NetworkProfileView
 

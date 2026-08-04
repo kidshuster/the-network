@@ -8,8 +8,8 @@ from bot.domain.client import Client
 from bot.services.message_formatter import (
     MENTION_TOKEN_RE,
     build_relay_embed_from_client,
-    has_relayable_content,
     client_emoji_url,
+    has_relayable_content,
     sanitize_author,
     sender_name,
 )

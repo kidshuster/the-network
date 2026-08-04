@@ -8,7 +8,6 @@ import pytest
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
-from bot.services.guild_permissions import build_leaders_channel_overwrites
 from bot.services.subscription_setup import (
     SubscriptionSetupState,
     derive_network_link_status,

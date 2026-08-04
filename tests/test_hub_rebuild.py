@@ -4,17 +4,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from context_helpers import make_test_context
 
 from bot.services.client_subscription import resync_subscriptions_for_network
 from bot.services.hub_data_reset import reset_hub_layout_data
-from tests.test_hub_data_reset import _make_context
 
 
 @pytest.mark.asyncio
 async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeypatch) -> None:
     monkeypatch.setenv("DISCORD_TOKEN", "test-token")
     monkeypatch.setenv("GUILD_ID", "100")
-    context = _make_context(db)
+    context = make_test_context(db)
 
     guild_id = 100
     network = await context.network_repo.create(
@@ -57,10 +57,12 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
     publish.id = 201
     publish.name = "stingers-publish"
     publish.edit = AsyncMock()
+    publish.send = AsyncMock(return_value=MagicMock(id=888))
     subscribe = MagicMock(spec=discord.TextChannel)
     subscribe.id = 301
     subscribe.name = "stingers-subscribe"
     subscribe.edit = AsyncMock()
+    subscribe.send = AsyncMock(return_value=MagicMock(id=889))
     profile = MagicMock(spec=discord.TextChannel)
     profile.id = 30
     profile.name = "network-profile"

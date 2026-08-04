@@ -19,7 +19,6 @@ LEGACY_CHANNEL_LEADERS = "leaders"
 CHANNEL_JOIN_REQUESTS = "join-requests"
 CHANNEL_MODERATOR_ONLY = "moderator-only"
 CHANNEL_COMMANDS = "commands"
-from bot.services.channel_names import LEGACY_CLIENT_PROFILE_CHANNEL as CHANNEL_NETWORK_PROFILE
 
 # Legacy names kept for cleanup/migration
 CATEGORY_SUBSCRIBE = "Subscribe To Me!"

@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.messages import render_embed, render_text
-from bot.messages import modal_spec
+from bot.messages import modal_spec, render_embed, render_text
 from bot.messages.modals_builder import add_modal_fields
 from bot.services.network_admin import create_network, delete_network
 from bot.services.network_admin_sticky import refresh_network_admin_sticky_from_settings

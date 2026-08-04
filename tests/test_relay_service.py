@@ -6,7 +6,6 @@ import discord
 import pytest
 
 from bot.config import Settings
-from bot.constants import RelayStatus
 from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription

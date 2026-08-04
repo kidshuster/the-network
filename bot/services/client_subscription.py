@@ -326,7 +326,10 @@ class ClientSubscriptionService:
         network_repo: NetworkRepository,
     ) -> UnsubscribeResult:
         profile = guild.get_channel(client.profile_channel_id)
-        if isinstance(profile, discord.TextChannel) and subscription.moderation_message_id is not None:
+        if (
+            isinstance(profile, discord.TextChannel)
+            and subscription.moderation_message_id is not None
+        ):
             try:
                 message = await profile.fetch_message(subscription.moderation_message_id)
                 await message.delete()

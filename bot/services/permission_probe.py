@@ -8,13 +8,17 @@ import discord
 
 from bot.domain.errors import NetworkValidationError
 from bot.services.guild_permissions import build_network_access_overwrite
-from bot.smoke.resource_guard import PROBE_PREFIX, GuildTestResourceGuard, guild_test_resource_guard
+from bot.smoke.resource_guard import (
+    PROBE_PREFIX,
+    GuildTestResourceGuard,
+    cleanup_stale_probe_resources,  # noqa: F401
+    guild_test_resource_guard,
+)
+from bot.testing.png_fixtures import probe_png_bytes
 
 logger = logging.getLogger(__name__)
 
 _PROBE_REASON = "The Network permission probe (auto-deleted)"
-
-from bot.testing.png_fixtures import probe_png_bytes
 
 PROBE_PNG = probe_png_bytes()
 _PROBE_PNG = PROBE_PNG
@@ -300,10 +304,6 @@ async def verify_provision_permissions_live(
             raise _provision_probe_failure(step, guard.completed_steps, exc) from exc
 
         return list(guard.completed_steps)
-
-
-# Re-export for callers that already import from permission_probe.
-from bot.smoke.resource_guard import cleanup_guild_test_artifacts, cleanup_stale_probe_resources
 
 
 async def _run_probe_step[T](

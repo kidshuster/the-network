@@ -5,8 +5,12 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import discord
+
+if TYPE_CHECKING:
+    from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import discord
 import pytest
 
-from bot.domain.errors import NetworkValidationError
 from bot.domain.client import Client
 from bot.services.guild_init import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult

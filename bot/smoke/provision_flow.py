@@ -14,15 +14,14 @@ from bot.domain.errors import NetworkValidationError
 from bot.domain.server_request import ServerRequestStatus
 from bot.services.network_provision import (
     resolve_access_role,
-    resolve_operator_role_by_name,
 )
 from bot.services.permission_probe import (
     PROBE_PNG,
     verify_operator_permissions_live,
     verify_provision_permissions_live,
 )
-from bot.smoke.resource_guard import cleanup_guild_test_artifacts, guild_test_resource_guard
 from bot.services.server_request_service import ServerRequestService
+from bot.smoke.resource_guard import guild_test_resource_guard
 from bot.testing.context_factory import create_bot_context
 
 if TYPE_CHECKING:
@@ -561,7 +560,9 @@ async def run_join_approval_smoke_flow(
             if not submit_deny.success:
                 raise RuntimeError(f"Smoke submit (deny path) failed: {submit_deny.error}")
 
-            pending_deny = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+            pending_deny = await context.server_request_repo.get_pending_for_requester(
+                bot_member.id
+            )
             if pending_deny is None:
                 raise RuntimeError("Smoke deny-path submit did not create a pending request.")
             request_ids_for_cleanup.append(pending_deny.id)
@@ -719,10 +720,10 @@ async def run_hub_rebuild_smoke_flow(
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
     from bot.services.guild_init import initialize_guild
+    from bot.services.guild_layout import resolve_join_requests_channel
     from bot.services.guild_uninit import uninitialize_guild
     from bot.services.hub_data_reset import reset_hub_layout_data
     from bot.services.network_admin import create_network
-    from bot.services.guild_layout import resolve_join_requests_channel
 
     bot_member = guild.me
     if bot_member is None:
