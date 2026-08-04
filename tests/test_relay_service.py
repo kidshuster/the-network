@@ -27,7 +27,7 @@ async def _seed_client_subscription(
     network_enabled: bool = True,
     client_enabled: bool = True,
     subscription_enabled: bool = True,
-) -> tuple[Client, ClientSubscription, int]:
+) -> tuple[Client, ClientSubscription, Client, ClientSubscription]:
     network_repo = NetworkRepository(db)
     client_repo = ClientRepository(db)
     network = await network_repo.create(
@@ -75,14 +75,14 @@ async def _seed_client_subscription(
         subscribe_channel_id=500,
         enabled=subscription_enabled,
     )
-    await client_repo.create_subscription(
+    sub_sub = await client_repo.create_subscription(
         client_id=subscriber.id,
         network_id=network.id,
         network_key=network.key,
         publish_channel_id=202,
         subscribe_channel_id=501,
     )
-    return client, sub_pub, 501
+    return client, sub_pub, subscriber, sub_sub
 
 
 def _make_webhook_message(
@@ -135,7 +135,7 @@ async def _build_service(
 
 @pytest.mark.asyncio
 async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> None:
-    _client, _sub, subscribe_channel_id = await _seed_client_subscription(db)
+    _client, _sub, _subscriber, _sub_sub = await _seed_client_subscription(db)
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message()
 
@@ -259,3 +259,74 @@ async def test_non_webhook_ignored_without_manual_relay(
     service = await _build_service(db, monkeypatch)
     message = _make_webhook_message(webhook_id=0)
     assert service._passes_filters(message) is False
+
+
+def _relay_channel_mocks(
+    message: discord.Message,
+    *,
+    publisher_subscribe_id: int = 500,
+    subscriber_subscribe_id: int = 501,
+) -> tuple[MagicMock, MagicMock]:
+    publisher_channel = MagicMock(spec=discord.TextChannel)
+    publisher_sent = MagicMock(spec=discord.Message)
+    publisher_sent.id = 9000
+    publisher_sent.publish = AsyncMock()
+    publisher_channel.send = AsyncMock(return_value=publisher_sent)
+
+    subscriber_channel = MagicMock(spec=discord.TextChannel)
+    subscriber_sent = MagicMock(spec=discord.Message)
+    subscriber_sent.id = 9001
+    subscriber_sent.publish = AsyncMock()
+    subscriber_channel.send = AsyncMock(return_value=subscriber_sent)
+
+    def _get_channel(channel_id: int) -> discord.TextChannel | None:
+        if channel_id == publisher_subscribe_id:
+            return publisher_channel
+        if channel_id == subscriber_subscribe_id:
+            return subscriber_channel
+        return None
+
+    message.guild.get_channel = MagicMock(side_effect=_get_channel)
+    return publisher_channel, subscriber_channel
+
+
+@pytest.mark.asyncio
+async def test_blacklist_blocks_incoming_from_blocked_client(
+    db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When a subscriber blacklists the publisher, they do not receive relays."""
+    publisher, _pub_sub, _subscriber, sub_sub = await _seed_client_subscription(db)
+    client_repo = ClientRepository(db)
+    await client_repo.add_blacklist(sub_sub.id, publisher.id)
+
+    service = await _build_service(db, monkeypatch)
+    message = _make_webhook_message()
+    publisher_channel, subscriber_channel = _relay_channel_mocks(message)
+
+    result = await service.relay_message(message)
+    assert result is not None
+    assert result.success
+    assert result.destination_message_ids == (9000,)
+    publisher_channel.send.assert_awaited_once()
+    subscriber_channel.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blacklist_blocks_outgoing_to_blocked_client(
+    db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When a publisher blacklists a subscriber, that subscriber is skipped."""
+    publisher, pub_sub, subscriber, _sub_sub = await _seed_client_subscription(db)
+    client_repo = ClientRepository(db)
+    await client_repo.add_blacklist(pub_sub.id, subscriber.id)
+
+    service = await _build_service(db, monkeypatch)
+    message = _make_webhook_message()
+    publisher_channel, subscriber_channel = _relay_channel_mocks(message)
+
+    result = await service.relay_message(message)
+    assert result is not None
+    assert result.success
+    assert result.destination_message_ids == (9000,)
+    publisher_channel.send.assert_awaited_once()
+    subscriber_channel.send.assert_not_awaited()

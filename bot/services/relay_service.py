@@ -163,7 +163,12 @@ class RelayService:
             subscriber = self._clients.get_client(dest_sub.client_id)
             if subscriber is None or not subscriber.enabled:
                 continue
-            if await self._client_repo.is_blacklisted(dest_sub.id, publisher.id):
+            if await self._client_repo.is_relay_blocked(
+                publisher_subscription_id=publisher_sub.id,
+                publisher_client_id=publisher.id,
+                destination_subscription_id=dest_sub.id,
+                destination_client_id=dest_sub.client_id,
+            ):
                 continue
 
             output_channel = message.guild.get_channel(dest_sub.subscribe_channel_id)

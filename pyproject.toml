@@ -1,6 +1,6 @@
 [project]
 name = "the-network"
-version = "1.1.13"
+version = "1.1.14"
 description = "Discord announcement network relay bot"
 readme = "README.md"
 requires-python = ">=3.12"

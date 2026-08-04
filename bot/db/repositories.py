@@ -1216,6 +1216,31 @@ class ClientRepository:
         )
         return row is not None
 
+    async def is_relay_blocked(
+        self,
+        *,
+        publisher_subscription_id: int,
+        publisher_client_id: int,
+        destination_subscription_id: int,
+        destination_client_id: int,
+    ) -> bool:
+        """True when either party has blacklisted the other for relay delivery."""
+        row = await self._db.fetchone(
+            """
+            SELECT 1 FROM client_blacklists
+            WHERE (subscription_id = ? AND blocked_client_id = ?)
+               OR (subscription_id = ? AND blocked_client_id = ?)
+            LIMIT 1
+            """,
+            (
+                destination_subscription_id,
+                publisher_client_id,
+                publisher_subscription_id,
+                destination_client_id,
+            ),
+        )
+        return row is not None
+
     async def list_blacklisted_client_ids(self, subscription_id: int) -> list[int]:
         cursor = await self._db.connection.execute(
             """
