@@ -44,7 +44,9 @@ def test_leaders_channel_overwrites_hide_everyone_and_grant_client_roles() -> No
 
     assert overwrites[everyone].view_channel is False
     assert overwrites[client_a].view_channel is True
+    assert overwrites[client_a].read_message_history is True
     assert overwrites[client_a].send_messages is True
+    assert overwrites[client_b].read_message_history is True
     assert overwrites[client_b].send_messages is True
     assert overwrites[access].view_channel is False
 
@@ -119,4 +121,8 @@ def test_leaders_category_overwrites_hide_everyone_and_access_role() -> None:
     assert overwrites[everyone].view_channel is False
     assert overwrites[access].view_channel is False
     assert overwrites[client].view_channel is True
-    assert overwrites[client].send_messages is False
+    assert overwrites[client].read_message_history is True
+    assert overwrites[client].send_messages is True
+    assert overwrites[client].embed_links is True
+    assert overwrites[client].attach_files is True
+    assert overwrites[client].add_reactions is True

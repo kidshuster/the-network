@@ -308,8 +308,8 @@ def build_moderator_overwrite() -> discord.PermissionOverwrite:
     return build_moderator_channel_overwrite()
 
 
-def build_client_leader_channel_overwrite() -> discord.PermissionOverwrite:
-    """Client server leaders — view and post in #leaders."""
+def build_client_leader_category_overwrite() -> discord.PermissionOverwrite:
+    """Client server leaders — view, read history, and post in Leaders category."""
     return discord.PermissionOverwrite(
         view_channel=True,
         read_message_history=True,
@@ -320,6 +320,11 @@ def build_client_leader_channel_overwrite() -> discord.PermissionOverwrite:
     )
 
 
+def build_client_leader_channel_overwrite() -> discord.PermissionOverwrite:
+    """Client server leaders — view and post in #leaders."""
+    return build_client_leader_category_overwrite()
+
+
 def build_leaders_category_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -327,7 +332,7 @@ def build_leaders_category_overwrites(
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
 ) -> OverwriteMap:
-    """Leaders category — hidden from @everyone and hub access; client roles can view."""
+    """Leaders category — hidden from @everyone and hub access; client roles can post."""
     base: dict[
         discord.Role | discord.Member | discord.Object,
         discord.PermissionOverwrite,
@@ -339,11 +344,7 @@ def build_leaders_category_overwrites(
     )
     for role in client_roles:
         if _can_configure_role(bot_member, role):
-            base[role] = discord.PermissionOverwrite(
-                view_channel=True,
-                read_message_history=True,
-                **_category_post_lockdown(),
-            )
+            base[role] = build_client_leader_category_overwrite()
     if _can_configure_role(bot_member, access_role):
         base[access_role] = build_everyone_hidden_category_overwrite()
     return cast(
