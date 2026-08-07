@@ -1,0 +1,28 @@
+releases:
+  "1.1.20":
+    summary: "Leaders changelog channel and automatic release notes."
+    changes:
+      - "New #changelog channel in Leaders posts an embed when the bot updates."
+      - "Changelog is read-only for server leaders; moderators can post."
+  "1.1.19":
+    summary: "Server-connected welcome messages and clearer subscribe setup."
+    changes:
+      - "Publish a server-connected embed to new subscribe channels when a network activates."
+      - "Broadcast a network welcome to other members on the same network."
+      - "Rename the subscribe setup button to Subscribed channel connected."
+  "1.1.18":
+    summary: "Date/time parsing fixes and smoke tests."
+    changes:
+      - "Fix relative date matching so trailing commands are not swallowed."
+      - "Normalize tonight and next-weekday phrases for reliable timecodes."
+      - "Add comprehensive date parser smoke tests."
+  "1.1.17":
+    summary: "Relay startup fix for profile views with many networks."
+    changes:
+      - "Fix profile view component limit that could prevent the bot from starting."
+      - "Keep relay running if date parsing fails on a single message."
+  "1.1.16":
+    summary: "Discord timecodes on relayed announcements."
+    changes:
+      - "Convert dates and times in relayed messages to Discord timecodes."
+      - "Add a per-client timecode toggle on profile cards."

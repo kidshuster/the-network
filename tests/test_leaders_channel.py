@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import discord
 
 from bot.services.guild_permissions import (
+    build_changelog_channel_overwrites,
     build_leaders_category_overwrites,
     build_leaders_channel_overwrites,
 )
@@ -126,3 +127,45 @@ def test_leaders_category_overwrites_hide_everyone_and_access_role() -> None:
     assert overwrites[client].embed_links is True
     assert overwrites[client].attach_files is True
     assert overwrites[client].add_reactions is True
+
+
+def test_changelog_channel_overwrites_are_readonly_for_client_roles() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    everyone = MagicMock(spec=discord.Role)
+    everyone.is_default.return_value = True
+    guild.default_role = everyone
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+
+    client = MagicMock(spec=discord.Role)
+    client.id = 101
+    client.position = 1
+
+    access = MagicMock(spec=discord.Role)
+    access.id = 201
+    access.position = 3
+
+    moderator = MagicMock(spec=discord.Role)
+    moderator.id = 301
+    moderator.position = 5
+
+    overwrites = dict(
+        build_changelog_channel_overwrites(
+            guild,
+            bot_member,
+            [client],
+            access,
+            moderator,
+        )
+    )
+
+    assert overwrites[everyone].view_channel is False
+    assert overwrites[access].view_channel is False
+    assert overwrites[client].view_channel is True
+    assert overwrites[client].read_message_history is True
+    assert overwrites[client].send_messages is False
+    assert overwrites[client].add_reactions is False
+    assert overwrites[moderator].view_channel is True
+    assert overwrites[moderator].send_messages is True

@@ -16,6 +16,7 @@ CHANNEL_RULES = "rules"
 CHANNEL_JOIN_THE_NETWORK = "join-the-network"
 CHANNEL_LEADERS = "leaders-channel"
 LEGACY_CHANNEL_LEADERS = "leaders"
+CHANNEL_CHANGELOG = "changelog"
 CHANNEL_JOIN_REQUESTS = "join-requests"
 CHANNEL_MODERATOR_ONLY = "moderator-only"
 CHANNEL_COMMANDS = "commands"
@@ -104,6 +105,19 @@ def resolve_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
         if match is not None:
             return match
     return None
+
+
+def resolve_changelog_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    leaders_category = resolve_leaders_category(guild)
+    if leaders_category is not None:
+        match = resolve_text_channel_in_category(
+            guild,
+            name=CHANNEL_CHANGELOG,
+            category_id=leaders_category.id,
+        )
+        if match is not None:
+            return match
+    return resolve_text_channel_in_category(guild, name=CHANNEL_CHANGELOG)
 
 
 def resolve_join_requests_channel(guild: discord.Guild) -> discord.TextChannel | None:

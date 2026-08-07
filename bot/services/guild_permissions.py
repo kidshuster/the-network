@@ -383,6 +383,35 @@ def build_leaders_channel_overwrites(
     )
 
 
+def build_changelog_channel_overwrites(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    client_roles: Iterable[discord.Role],
+    access_role: discord.Role,
+    human_moderator_role: discord.Role | None,
+) -> OverwriteMap:
+    """Changelog channel — client roles can read; only moderators can post."""
+    base: dict[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ] = {
+        guild.default_role: build_everyone_hidden_overwrite(),
+    }
+    for role in client_roles:
+        if _can_configure_role(bot_member, role):
+            base[role] = discord.PermissionOverwrite(
+                view_channel=True,
+                read_message_history=True,
+                **_post_and_thread_lockdown(),
+            )
+    if _can_configure_role(bot_member, access_role):
+        base[access_role] = build_everyone_hidden_overwrite()
+    return cast(
+        OverwriteMap,
+        _with_moderator_overwrite(base, bot_member, human_moderator_role),
+    )
+
+
 def build_hub_public_category_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,

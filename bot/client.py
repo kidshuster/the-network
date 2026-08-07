@@ -44,6 +44,7 @@ class NetworkRelayBot(commands.Bot):
         self._topgg: TopggService | None = None
         self._slash_sync_started = False
         self._subscription_setup_synced = False
+        self._changelog_synced = False
 
     async def setup_hook(self) -> None:
         await self.db.connect()
@@ -162,6 +163,15 @@ class NetworkRelayBot(commands.Bot):
                     )
             except Exception:
                 logger.exception("Subscription setup sync on ready failed")
+
+        if context is not None and not self._changelog_synced:
+            from bot.services.changelog import sync_changelog_on_ready
+
+            try:
+                await sync_changelog_on_ready(self, context, guild)
+                self._changelog_synced = True
+            except Exception:
+                logger.exception("Changelog sync on ready failed")
 
     async def _register_persistent_views(self) -> None:
         context = self.bot_context

@@ -1,0 +1,9 @@
+kind: embed
+title: "The Network v{version}"
+colour: blurple
+description: "{summary}"
+fields:
+  - name: What's new
+    value: "{changes_value}"
+    inline: false
+footer: "The Network • changelog"
