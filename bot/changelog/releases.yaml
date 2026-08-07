@@ -1,4 +1,10 @@
 releases:
+  "1.2.0":
+    summary: "Changelog backfill on server init and startup."
+    changes:
+      - "Post all missing release notes from the catalog in version order."
+      - "Backfill runs on /server init and when the bot starts."
+      - "Skips versions already posted so re-init does not duplicate entries."
   "1.1.20":
     summary: "Leaders changelog channel and automatic release notes."
     changes:

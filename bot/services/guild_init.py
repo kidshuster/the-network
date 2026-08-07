@@ -654,9 +654,10 @@ async def initialize_guild(
             guild, bot_member, network_cat, hub_public, result=result
         )
         if context is not None:
-            from bot.services.leaders_channel import ensure_leaders_channel
+            from bot.services.changelog import sync_changelog_releases
+            from bot.services.leaders_channel import ensure_leaders_channels
 
-            leaders = await ensure_leaders_channel(
+            leaders, changelog = await ensure_leaders_channels(
                 guild,
                 bot_member,
                 context,
@@ -665,6 +666,12 @@ async def initialize_guild(
             )
             if leaders is not None:
                 result.notes.append(f"Leaders channel synced at {leaders.mention}.")
+            if changelog is not None:
+                posted = await sync_changelog_releases(context, changelog)
+                if posted:
+                    result.notes.append(
+                        f"Posted {posted} changelog release(s) to {changelog.mention}."
+                    )
 
         mod_only_overwrites = dict(
             build_moderation_staff_overwrites(guild, bot_member, human_moderator_role)

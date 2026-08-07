@@ -36,6 +36,16 @@ def installed_version() -> str:
         return "0.0.0"
 
 
+def version_key(release_version: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for piece in release_version.strip().lstrip("v").split("."):
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
 def _load_releases_catalog() -> dict[str, ReleaseNotes]:
     with _CHANGELOG_PATH.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
@@ -46,7 +56,7 @@ def _load_releases_catalog() -> dict[str, ReleaseNotes]:
         raise ValueError("changelog releases.yaml must contain a releases mapping")
 
     catalog: dict[str, ReleaseNotes] = {}
-    for version_key, entry in releases_raw.items():
+    for version_key_str, entry in releases_raw.items():
         if not isinstance(entry, dict):
             continue
         summary = str(entry.get("summary", "")).strip()
@@ -54,9 +64,9 @@ def _load_releases_catalog() -> dict[str, ReleaseNotes]:
         changes: list[str] = []
         if isinstance(changes_raw, list):
             changes = [str(item).strip() for item in changes_raw if str(item).strip()]
-        catalog[str(version_key)] = ReleaseNotes(
-            version=str(version_key),
-            summary=summary or f"Release {version_key}",
+        catalog[str(version_key_str)] = ReleaseNotes(
+            version=str(version_key_str),
+            summary=summary or f"Release {version_key_str}",
             changes=tuple(changes),
         )
     return catalog
@@ -64,6 +74,27 @@ def _load_releases_catalog() -> dict[str, ReleaseNotes]:
 
 def load_release_notes(release_version: str) -> ReleaseNotes | None:
     return _load_releases_catalog().get(release_version)
+
+
+def pending_release_versions(
+    catalog: dict[str, ReleaseNotes],
+    *,
+    last_posted: str | None,
+    up_to: str,
+) -> list[str]:
+    """Catalog versions after last_posted up to installed, oldest first."""
+    cap = version_key(up_to)
+    last = version_key(last_posted) if last_posted else None
+    pending: list[str] = []
+    for release_version in catalog:
+        key = version_key(release_version)
+        if key > cap:
+            continue
+        if last is not None and key <= last:
+            continue
+        pending.append(release_version)
+    pending.sort(key=version_key)
+    return pending
 
 
 def build_changelog_embed(notes: ReleaseNotes) -> Any:
@@ -76,40 +107,81 @@ def build_changelog_embed(notes: ReleaseNotes) -> Any:
     )
 
 
-async def maybe_post_release_changelog(
+async def sync_changelog_releases(
     context: BotContext,
     channel: discord.TextChannel,
-) -> bool:
-    current = installed_version()
+) -> int:
+    """Post missing release notes in version order up to the installed package version."""
+    installed = installed_version()
+    catalog = _load_releases_catalog()
     last_posted = await context.settings_repo.get(LAST_CHANGELOG_VERSION_KEY)
-    if last_posted == current:
-        return False
-
-    notes = load_release_notes(current)
-    if notes is None:
-        logger.warning(
-            "No changelog entry for installed version",
-            extra={"version": current},
-        )
-        await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, current)
-        return False
-
-    embed = build_changelog_embed(notes)
-    try:
-        await channel.send(embed=embed, silent=True)
-    except discord.HTTPException:
-        logger.warning(
-            "Could not post changelog release embed",
-            extra={"version": current, "channel_id": channel.id},
-        )
-        return False
-
-    await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, current)
-    logger.info(
-        "Posted changelog release",
-        extra={"version": current, "channel_id": channel.id},
+    versions = pending_release_versions(
+        catalog,
+        last_posted=last_posted,
+        up_to=installed,
     )
-    return True
+
+    posted_count = 0
+    for release_version in versions:
+        notes = catalog[release_version]
+        embed = build_changelog_embed(notes)
+        try:
+            await channel.send(embed=embed, silent=True)
+        except discord.HTTPException:
+            logger.warning(
+                "Could not post changelog release embed",
+                extra={"version": release_version, "channel_id": channel.id},
+            )
+            break
+
+        await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, release_version)
+        posted_count += 1
+        logger.info(
+            "Posted changelog release",
+            extra={"version": release_version, "channel_id": channel.id},
+        )
+
+    current_last = await context.settings_repo.get(LAST_CHANGELOG_VERSION_KEY)
+    if version_key(installed) > version_key(current_last or "0"):
+        remaining = pending_release_versions(
+            catalog,
+            last_posted=current_last,
+            up_to=installed,
+        )
+        if not remaining:
+            if load_release_notes(installed) is None:
+                logger.warning(
+                    "No changelog entry for installed version",
+                    extra={"version": installed},
+                )
+            await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, installed)
+
+    return posted_count
+
+
+async def sync_changelog_for_guild(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    context: BotContext,
+    *,
+    access_role: discord.Role,
+    human_moderator_role: discord.Role | None,
+) -> tuple[discord.TextChannel | None, int]:
+    """Ensure the Leaders changelog channel exists and backfill pending release notes."""
+    from bot.services.leaders_channel import ensure_leaders_channels
+
+    _leaders, changelog = await ensure_leaders_channels(
+        guild,
+        bot_member,
+        context,
+        access_role=access_role,
+        human_moderator_role=human_moderator_role,
+    )
+    if changelog is None:
+        return None, 0
+
+    posted = await sync_changelog_releases(context, changelog)
+    return changelog, posted
 
 
 async def sync_changelog_on_ready(
@@ -118,7 +190,6 @@ async def sync_changelog_on_ready(
     guild: discord.Guild,
 ) -> None:
     """Ensure the Leaders changelog channel exists and post notes for new versions."""
-    from bot.services.leaders_channel import ensure_leaders_channels
     from bot.services.network_provision import resolve_access_role
 
     bot_member = guild.me
@@ -135,14 +206,10 @@ async def sync_changelog_on_ready(
     from bot.services.guild_layout import resolve_human_moderator_role
 
     human_moderator_role = resolve_human_moderator_role(guild)
-    _leaders, changelog = await ensure_leaders_channels(
+    await sync_changelog_for_guild(
         guild,
         bot_member,
         context,
         access_role=access_role,
         human_moderator_role=human_moderator_role,
     )
-    if changelog is None:
-        return
-
-    await maybe_post_release_changelog(context, changelog)
