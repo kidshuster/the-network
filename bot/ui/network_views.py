@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+SUBSCRIBED_CHANNEL_CONNECTED_LABEL = "Subscribed channel connected"
+
 
 MAX_PROFILE_NETWORK_BUTTONS = 22
 
@@ -365,7 +367,7 @@ class SubscribeSetupView(discord.ui.View):
         self._network_key = network_key
 
         connected = discord.ui.Button(
-            label="Subscribe connected",
+            label=SUBSCRIBED_CHANNEL_CONNECTED_LABEL,
             style=discord.ButtonStyle.success,
             custom_id=subscribe_connected_button(subscription_id),
         )
@@ -398,7 +400,7 @@ class SubscriptionModerationView(discord.ui.View):
 
         if show_subscribe_connected:
             connected = discord.ui.Button(
-                label="Subscribe connected",
+                label=SUBSCRIBED_CHANNEL_CONNECTED_LABEL,
                 style=discord.ButtonStyle.success,
                 custom_id=subscribe_connected_button(subscription_id),
             )

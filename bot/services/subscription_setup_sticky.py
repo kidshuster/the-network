@@ -24,6 +24,66 @@ _SUBSCRIBE_SETUP_FOOTER = "subscribe setup"
 _SETUP_HISTORY_LIMIT = 50
 
 
+def _bot_author_icon_url(bot: NetworkRelayBot) -> str:
+    user = bot.user
+    if user is None:
+        return ""
+    return str(user.display_avatar.url)
+
+
+async def _publish_announcement(message: discord.Message) -> None:
+    publish = getattr(message, "publish", None)
+    if publish is None:
+        return
+    try:
+        await message.publish()
+    except discord.HTTPException as exc:
+        logger.warning(
+            "Could not publish announcement message",
+            extra={"message_id": message.id, "error": str(exc)},
+        )
+
+
+async def _broadcast_network_member_welcome(
+    bot: NetworkRelayBot,
+    context: BotContext,
+    guild: discord.Guild,
+    *,
+    client: Client,
+    subscription: ClientSubscription,
+    network: Network,
+) -> None:
+    """Notify other network members that a client finished connecting."""
+    embed = render_embed(
+        "network_member_connected",
+        author_icon_url=_bot_author_icon_url(bot),
+        network_display_name=network.display_name,
+        network_key=network.key,
+        client_server_name=client.server_name,
+    )
+    for dest_sub in context.routing_service.list_network_subscriptions(network.id):
+        if dest_sub.id == subscription.id or not dest_sub.enabled:
+            continue
+        dest_client = context.client_cache.get_client(dest_sub.client_id)
+        if dest_client is None or not dest_client.enabled:
+            continue
+        channel = guild.get_channel(dest_sub.subscribe_channel_id)
+        if channel is None or not hasattr(channel, "send"):
+            continue
+        try:
+            sent = await channel.send(embed=embed, silent=True)
+        except discord.HTTPException:
+            logger.warning(
+                "Could not post network member welcome",
+                extra={
+                    "subscription_id": dest_sub.id,
+                    "subscribe_channel_id": dest_sub.subscribe_channel_id,
+                },
+            )
+            continue
+        await _publish_announcement(sent)
+
+
 async def _delete_setup_message(
     guild: discord.Guild,
     channel_id: int,
@@ -232,15 +292,17 @@ async def _sync_subscribe_setup_sticky(
 
 
 async def _maybe_post_activation_welcome(
+    bot: NetworkRelayBot,
     subscription: ClientSubscription,
     *,
     subscribe_channel: discord.abc.GuildChannel,
     context: BotContext,
+    guild: discord.Guild,
     network: Network,
     client: Client,
     setup_state: SubscriptionSetupState,
 ) -> ClientSubscription:
-    """Post a one-time welcome embed to the subscribe feed when a network first activates."""
+    """Post a one-time server-connected embed when a network subscription first activates."""
     if not setup_state.fully_configured:
         return subscription
     if subscription.activation_welcome_message_id is not None:
@@ -250,15 +312,16 @@ async def _maybe_post_activation_welcome(
 
     embed = render_embed(
         "network_activation_welcome",
+        author_icon_url=_bot_author_icon_url(bot),
         network_display_name=network.display_name,
         network_key=network.key,
         client_server_name=client.server_name,
     )
     try:
-        message = await subscribe_channel.send(embed=embed)
+        message = await subscribe_channel.send(embed=embed, silent=True)
     except discord.HTTPException:
         logger.warning(
-            "Could not post activation welcome to subscribe channel",
+            "Could not post server connected message to subscribe channel",
             extra={
                 "subscription_id": subscription.id,
                 "subscribe_channel_id": subscription.subscribe_channel_id,
@@ -266,10 +329,21 @@ async def _maybe_post_activation_welcome(
         )
         return subscription
 
-    return await context.client_repo.update_activation_welcome_message_id(
+    await _publish_announcement(message)
+
+    updated = await context.client_repo.update_activation_welcome_message_id(
         subscription.id,
         message.id,
     )
+    await _broadcast_network_member_welcome(
+        bot,
+        context,
+        guild,
+        client=client,
+        subscription=subscription,
+        network=network,
+    )
+    return updated
 
 
 async def sync_subscription_setup(
@@ -335,9 +409,11 @@ async def sync_subscription_setup(
                 network_active=network_active,
             )
             subscription = await _maybe_post_activation_welcome(
+                bot,
                 subscription,
                 subscribe_channel=subscribe_channel,
                 context=context,
+                guild=guild,
                 network=network,
                 client=client,
                 setup_state=state,

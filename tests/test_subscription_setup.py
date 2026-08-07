@@ -14,6 +14,7 @@ from bot.services.subscription_setup import (
     is_publish_configured,
 )
 from bot.services.subscription_setup_sticky import (
+    _broadcast_network_member_welcome,
     _find_setup_sticky_by_scan,
     _maybe_post_activation_welcome,
     _sync_publish_setup_sticky,
@@ -251,13 +252,20 @@ async def test_reconcile_subscribe_sticky_does_not_create_new() -> None:
 async def test_activation_welcome_posts_once_when_fully_configured() -> None:
     subscribe_channel = MagicMock(spec=discord.TextChannel)
     subscribe_channel.id = 501
-    subscribe_channel.send = AsyncMock(return_value=MagicMock(id=1001))
+    sent_message = MagicMock(id=1001)
+    sent_message.publish = AsyncMock()
+    subscribe_channel.send = AsyncMock(return_value=sent_message)
+
+    bot = MagicMock()
+    bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
 
     context = MagicMock()
     context.client_repo.update_activation_welcome_message_id = AsyncMock(
         side_effect=lambda _sub_id, msg_id: _subscription(activation_welcome_message_id=msg_id)
     )
+    context.routing_service.list_network_subscriptions = MagicMock(return_value=[])
 
+    guild = MagicMock()
     active_state = SubscriptionSetupState(
         publish_configured=True,
         subscribe_confirmed=True,
@@ -265,9 +273,11 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
     )
 
     result = await _maybe_post_activation_welcome(
+        bot,
         _subscription(),
         subscribe_channel=subscribe_channel,
         context=context,
+        guild=guild,
         network=_network(),
         client=_client(),
         setup_state=active_state,
@@ -275,8 +285,66 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
 
     subscribe_channel.send.assert_awaited_once()
     sent_embed = subscribe_channel.send.await_args.kwargs["embed"]
-    assert sent_embed.title == "Welcome to Stingers"
+    assert sent_embed.title == "Server connected — Stingers"
+    assert sent_embed.author.icon_url == "https://cdn.discordapp.com/avatars/1/a.png"
+    sent_message.publish.assert_awaited_once()
     assert result.activation_welcome_message_id == 1001
+
+
+@pytest.mark.asyncio
+async def test_network_member_welcome_broadcasts_to_other_subscribe_channels() -> None:
+    bot = MagicMock()
+    bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
+
+    other_sub = _subscription(id=2, client_id=2, subscribe_channel_id=502)
+    joining_sub = _subscription(id=1, client_id=1, subscribe_channel_id=501)
+
+    other_channel = MagicMock(spec=discord.TextChannel)
+    other_sent = MagicMock(id=2001)
+    other_sent.publish = AsyncMock()
+    other_channel.send = AsyncMock(return_value=other_sent)
+
+    guild = MagicMock()
+    guild.get_channel = MagicMock(side_effect=lambda cid: other_channel if cid == 502 else None)
+
+    other_client = _client()
+    other_client = Client(
+        id=2,
+        guild_id=other_client.guild_id,
+        server_name="other-server",
+        display_name="Other",
+        category_id=other_client.category_id,
+        client_role_id=other_client.client_role_id,
+        profile_channel_id=other_client.profile_channel_id,
+        profile_message_id=other_client.profile_message_id,
+        enabled=True,
+        timecode_enabled=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    context = MagicMock()
+    context.routing_service.list_network_subscriptions = MagicMock(
+        return_value=[joining_sub, other_sub],
+    )
+    context.client_cache.get_client = MagicMock(return_value=other_client)
+
+    await _broadcast_network_member_welcome(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        subscription=joining_sub,
+        network=_network(),
+    )
+
+    other_channel.send.assert_awaited_once()
+    other_sent.publish.assert_awaited_once()
+    broadcast_embed = other_channel.send.await_args.kwargs["embed"]
+    assert broadcast_embed.title == "New member on Stingers"
+    assert broadcast_embed.author.icon_url == "https://cdn.discordapp.com/avatars/1/a.png"
 
 
 @pytest.mark.asyncio
@@ -291,9 +359,11 @@ async def test_activation_welcome_skips_when_not_fully_configured() -> None:
     )
 
     await _maybe_post_activation_welcome(
+        MagicMock(),
         _subscription(),
         subscribe_channel=subscribe_channel,
         context=MagicMock(),
+        guild=MagicMock(),
         network=_network(),
         client=_client(),
         setup_state=partial_state,
@@ -314,9 +384,11 @@ async def test_activation_welcome_skips_when_already_sent() -> None:
     )
 
     await _maybe_post_activation_welcome(
+        MagicMock(),
         _subscription(activation_welcome_message_id=999),
         subscribe_channel=subscribe_channel,
         context=MagicMock(),
+        guild=MagicMock(),
         network=_network(),
         client=_client(),
         setup_state=active_state,

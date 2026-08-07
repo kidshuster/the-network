@@ -16,7 +16,7 @@ fields:
     inline: false
     when: "{needs_subscribe}"
   - name: Subscribe setup
-    value: "Follow the instruction card in {subscribe_mention}, then click **Subscribe connected** here or there."
+    value: "Follow the instruction card in {subscribe_mention}, then click **Subscribed channel connected** here or there."
     inline: false
     when: "{needs_subscribe}"
 footer: "The Network • subscription setup"

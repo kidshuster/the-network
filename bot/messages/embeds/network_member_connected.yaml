@@ -1,0 +1,8 @@
+kind: embed
+title: "New member on {network_display_name}"
+colour: green
+author_name: "The Network"
+author_icon_url: "{author_icon_url}"
+description: |
+  **{client_server_name}** joined **`{network_key}`** and is now receiving network announcements.
+footer: "The Network • network welcome"
