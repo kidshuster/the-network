@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-MAX_PROFILE_NETWORK_BUTTONS = 23
+MAX_PROFILE_NETWORK_BUTTONS = 22
 
 
 class NetworkProfileView(discord.ui.View):

@@ -42,6 +42,18 @@ def test_network_profile_view_has_edit_and_delete_buttons() -> None:
     assert "Delete Client" in labels
 
 
+def test_network_profile_view_stays_within_discord_component_limit() -> None:
+    bot = MagicMock()
+    network_keys = [f"net{i}" for i in range(30)]
+    view = NetworkProfileView(
+        bot,
+        client_id=1,
+        network_keys=network_keys,
+        timecode_enabled=True,
+    )
+    assert len(view.children) <= 25
+
+
 @pytest.mark.asyncio
 async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> None:
     context = _make_context(db)

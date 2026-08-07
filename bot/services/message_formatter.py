@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 from dataclasses import dataclass
 
@@ -9,7 +10,8 @@ import discord
 from bot.constants import DEGRADED_FALLBACK
 from bot.domain.client import Client
 from bot.messages.loader import relay_embed_spec, resolve_colour
-from bot.services.date_parser import replace_dates
+
+logger = logging.getLogger(__name__)
 
 MENTION_TOKEN_RE = re.compile(r"<@[!&]?\d+>")
 EVERYONE_HERE_RE = re.compile(r"@everyone|@here", re.IGNORECASE)
@@ -112,7 +114,15 @@ def build_relay_embed_from_client(message: discord.Message, client: Client) -> R
     shell = relay_embed_spec()
     body = extract_relay_body(message)
     if client.timecode_enabled and body:
-        body = replace_dates(body)
+        try:
+            from bot.services.date_parser import replace_dates
+
+            body = replace_dates(body)
+        except Exception:
+            logger.exception(
+                "Date/time conversion failed; relaying original text",
+                extra={"client_id": client.id},
+            )
     image_urls = extract_relay_image_urls(message)
     primary_image_url = image_urls[0] if image_urls else None
 
