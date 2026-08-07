@@ -13,6 +13,7 @@ from bot.ui.custom_ids import (
     profile_edit_button,
     subscribe_connected_button,
     subscribe_network_button,
+    timecode_toggle_button,
 )
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ class NetworkProfileView(discord.ui.View):
         network_keys: list[str],
         *,
         subscribed_keys: set[str] | None = None,
+        timecode_enabled: bool = True,
     ) -> None:
         super().__init__(timeout=None)
         self._bot = bot
@@ -47,6 +49,17 @@ class NetworkProfileView(discord.ui.View):
             )
             button.callback = self._make_subscribe_callback(key)
             self.add_item(button)
+        timecode_style = (
+            discord.ButtonStyle.success if timecode_enabled else discord.ButtonStyle.secondary
+        )
+        timecode = discord.ui.Button(
+            label="Timecodes: On" if timecode_enabled else "Timecodes: Off",
+            style=timecode_style,
+            custom_id=timecode_toggle_button(client_id),
+            row=4,
+        )
+        timecode.callback = self._timecode_toggle_callback
+        self.add_item(timecode)
         edit = discord.ui.Button(
             label="Edit Profile",
             style=discord.ButtonStyle.secondary,
@@ -166,6 +179,46 @@ class NetworkProfileView(discord.ui.View):
             description += f"\nSubscribe: {subscribe.mention}"
         await interaction.followup.send(
             embed=render_embed("subscribe_success", description=description),
+            ephemeral=True,
+        )
+
+    async def _timecode_toggle_callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        context = self._bot.bot_context
+        guild = interaction.guild
+        if context is None or guild is None:
+            await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+            return
+
+        client = await context.client_repo.get_by_id(self._client_id)
+        if client is None:
+            await interaction.followup.send(render_text("client_not_found"), ephemeral=True)
+            return
+
+        member = interaction.user
+        if isinstance(member, discord.Member):
+            client_role = guild.get_role(client.client_role_id)
+            if client_role is None or client_role not in member.roles:
+                if not member.guild_permissions.manage_guild:
+                    await interaction.followup.send(
+                        render_text("client_role_required_edit"),
+                        ephemeral=True,
+                    )
+                    return
+
+        updated = await context.client_repo.set_timecode_enabled(
+            client.id,
+            not client.timecode_enabled,
+        )
+        await context.client_cache.load_cache()
+
+        from bot.services.client_profile_sync import refresh_client_profile_message
+
+        await refresh_client_profile_message(self._bot, context, guild, updated)
+
+        state = "enabled" if updated.timecode_enabled else "disabled"
+        await interaction.followup.send(
+            render_text("timecode_toggle_updated", state=state),
             ephemeral=True,
         )
 

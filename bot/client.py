@@ -185,7 +185,14 @@ class NetworkRelayBot(commands.Bot):
         networks = await context.network_repo.list_all()
         network_keys = [n.key for n in networks]
         for client in await context.client_repo.list_all():
-            self.add_view(NetworkProfileView(self, client.id, network_keys))
+            self.add_view(
+                NetworkProfileView(
+                    self,
+                    client.id,
+                    network_keys,
+                    timecode_enabled=client.timecode_enabled,
+                ),
+            )
 
         for sub in await context.client_repo.list_all_subscriptions():
             network_key = sub.network_key

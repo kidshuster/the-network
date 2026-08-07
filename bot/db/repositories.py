@@ -866,6 +866,17 @@ class ClientRepository:
             raise RuntimeError("Client disappeared after enable update")
         return updated
 
+    async def set_timecode_enabled(self, client_id: int, enabled: bool) -> Client:
+        now = datetime.now(tz=UTC).isoformat()
+        await self._db.execute(
+            "UPDATE clients SET timecode_enabled = ?, updated_at = ? WHERE id = ?",
+            (1 if enabled else 0, now, client_id),
+        )
+        updated = await self.get_by_id(client_id)
+        if updated is None:
+            raise RuntimeError("Client disappeared after timecode update")
+        return updated
+
     async def delete(self, client_id: int) -> Client | None:
         existing = await self.get_by_id(client_id)
         if existing is None:

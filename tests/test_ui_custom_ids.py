@@ -7,9 +7,11 @@ from bot.ui.custom_ids import (
     parse_join_server_button,
     parse_profile_edit_button,
     parse_request_action_button,
+    parse_timecode_toggle_button,
     profile_edit_button,
     request_approve_button,
     request_deny_button,
+    timecode_toggle_button,
 )
 
 
@@ -26,6 +28,11 @@ def test_profile_edit_custom_id_roundtrip() -> None:
 def test_delete_client_custom_id_roundtrip() -> None:
     custom_id = delete_client_button(12345)
     assert parse_delete_client_button(custom_id) == 12345
+
+
+def test_timecode_toggle_custom_id_roundtrip() -> None:
+    custom_id = timecode_toggle_button(12345)
+    assert parse_timecode_toggle_button(custom_id) == 12345
 
 
 def test_network_create_button() -> None:

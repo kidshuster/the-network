@@ -14,6 +14,7 @@ class Client:
     profile_channel_id: int
     profile_message_id: int
     enabled: bool
+    timecode_enabled: bool
     emoji_id: int | None
     emoji_name: str | None
     image_hash: str | None

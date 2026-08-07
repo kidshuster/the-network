@@ -154,6 +154,11 @@ class ClientRow:
             profile_channel_id=int(row["profile_channel_id"]),
             profile_message_id=int(row["profile_message_id"]),
             enabled=bool(row["enabled"]),
+            timecode_enabled=(
+                bool(row["timecode_enabled"])
+                if "timecode_enabled" in row.keys()
+                else True
+            ),
             emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
             emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,
             image_hash=str(row["image_hash"]) if row["image_hash"] is not None else None,

@@ -79,6 +79,7 @@ async def refresh_client_profile_message(
         client.id,
         [n.key for n in all_networks],
         subscribed_keys=subscribed_keys,
+        timecode_enabled=client.timecode_enabled,
     )
     bot.add_view(view)
 
@@ -87,6 +88,7 @@ async def refresh_client_profile_message(
         display_name=client.display_name,
         enabled=client.enabled,
         emoji_id=client.emoji_id,
+        timecode_enabled=client.timecode_enabled,
         subscribed_networks=tuple(network_entries),
     )
 

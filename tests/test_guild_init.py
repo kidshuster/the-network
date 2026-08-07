@@ -274,6 +274,7 @@ async def test_initialize_guild_survives_client_category_sync_50013(
         profile_channel_id=700,
         profile_message_id=701,
         enabled=True,
+        timecode_enabled=True,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

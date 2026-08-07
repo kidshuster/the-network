@@ -12,6 +12,9 @@ fields:
   - name: Status
     value: "{status}"
     inline: true
+  - name: Timecodes
+    value: "{timecode_status}"
+    inline: true
   - name: Subscribed networks
     value: "{networks_value}"
     inline: false

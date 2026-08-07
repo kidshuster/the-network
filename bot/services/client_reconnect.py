@@ -119,6 +119,7 @@ async def reconnect_clients_on_init(
                     bot,
                     client.id,
                     [network.key for network in all_networks],
+                    timecode_enabled=client.timecode_enabled,
                 ),
             )
             await refresh_client_profile_message(bot, context, guild, client)

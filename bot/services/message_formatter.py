@@ -9,6 +9,7 @@ import discord
 from bot.constants import DEGRADED_FALLBACK
 from bot.domain.client import Client
 from bot.messages.loader import relay_embed_spec, resolve_colour
+from bot.services.date_parser import replace_dates
 
 MENTION_TOKEN_RE = re.compile(r"<@[!&]?\d+>")
 EVERYONE_HERE_RE = re.compile(r"@everyone|@here", re.IGNORECASE)
@@ -110,6 +111,8 @@ class RelayEmbedParts:
 def build_relay_embed_from_client(message: discord.Message, client: Client) -> RelayEmbedParts:
     shell = relay_embed_spec()
     body = extract_relay_body(message)
+    if client.timecode_enabled and body:
+        body = replace_dates(body)
     image_urls = extract_relay_image_urls(message)
     primary_image_url = image_urls[0] if image_urls else None
 

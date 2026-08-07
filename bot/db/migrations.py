@@ -543,6 +543,19 @@ async def _migration_v11(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v13(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(clients)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "timecode_enabled" in columns:
+        return
+
+    await db.connection.execute(
+        "ALTER TABLE clients ADD COLUMN timecode_enabled INTEGER NOT NULL DEFAULT 1"
+    )
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -556,6 +569,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     10: _migration_v10,
     11: _migration_v11,
     12: _migration_v12,
+    13: _migration_v13,
 }
 
 

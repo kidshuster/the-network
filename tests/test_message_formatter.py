@@ -22,6 +22,7 @@ def _sample_client(*, emoji_id: int | None = 999) -> Client:
         server_name="test-server",
         display_name="Test Server",
         enabled=True,
+        timecode_enabled=True,
         category_id=10,
         client_role_id=20,
         profile_channel_id=30,
@@ -53,14 +54,46 @@ def test_client_emoji_url() -> None:
 
 def test_build_relay_embed_uses_display_name_and_server_icon() -> None:
     client = _sample_client()
-    message = _message(content="Raid starts at 8 PM.", author_name="1 test #stingers")
+    message = _message(content="Raid starts soon.", author_name="1 test #stingers")
     parts = build_relay_embed_from_client(message, client)
     embed = parts.embed
 
     assert embed.author.name == "Test Server"
     assert embed.author.icon_url == client_emoji_url(client)
-    assert embed.description == "Raid starts at 8 PM."
+    assert embed.description == "Raid starts soon."
     assert parts.primary_image_url is None
+
+
+def test_build_relay_embed_converts_dates_when_timecodes_enabled() -> None:
+    client = _sample_client()
+    message = _message(content="we are grouping at 4 pm pst")
+    parts = build_relay_embed_from_client(message, client)
+    assert parts.embed.description is not None
+    assert parts.embed.description.startswith("we are grouping at <t:")
+    assert parts.embed.description.endswith(">")
+
+
+def test_build_relay_embed_skips_date_conversion_when_timecodes_disabled() -> None:
+    client = _sample_client()
+    client = Client(
+        id=client.id,
+        guild_id=client.guild_id,
+        server_name=client.server_name,
+        display_name=client.display_name,
+        category_id=client.category_id,
+        client_role_id=client.client_role_id,
+        profile_channel_id=client.profile_channel_id,
+        profile_message_id=client.profile_message_id,
+        enabled=client.enabled,
+        timecode_enabled=False,
+        emoji_id=client.emoji_id,
+        emoji_name=client.emoji_name,
+        image_hash=client.image_hash,
+        degraded_reason=client.degraded_reason,
+    )
+    message = _message(content="we are grouping at 4 pm pst")
+    parts = build_relay_embed_from_client(message, client)
+    assert parts.embed.description == "we are grouping at 4 pm pst"
 
 
 def test_build_relay_embed_includes_image() -> None:

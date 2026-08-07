@@ -84,6 +84,20 @@ def parse_leave_network_button(custom_id: str) -> int | None:
         return None
 
 
+def timecode_toggle_button(client_id: int) -> str:
+    return f"{_PREFIX}:timecode_toggle:{client_id}"
+
+
+def parse_timecode_toggle_button(custom_id: str) -> int | None:
+    prefix = f"{_PREFIX}:timecode_toggle:"
+    if not custom_id.startswith(prefix):
+        return None
+    try:
+        return int(custom_id.removeprefix(prefix))
+    except ValueError:
+        return None
+
+
 def profile_edit_button(client_id: int) -> str:
     return f"{_PREFIX}:profile_edit:{client_id}"
 
