@@ -1,4 +1,9 @@
 releases:
+  "1.2.1":
+    summary: "Fix #changelog permissions for client roles."
+    changes:
+      - "Client roles can view and read history in #changelog but cannot send messages."
+      - "Break category permission sync on channel create so Leaders post access is not inherited."
   "1.2.0":
     summary: "Changelog backfill on server init and startup."
     changes:

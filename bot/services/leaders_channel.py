@@ -161,6 +161,7 @@ async def _sync_leaders_permissions(
                 overwrites=changelog_overwrites,
                 topic="Release notes for The Network bot",
                 reason=reason,
+                sync_permissions=False,
             )
         except discord.HTTPException:
             logger.warning("Could not create changelog channel")

@@ -325,6 +325,21 @@ def build_client_leader_channel_overwrite() -> discord.PermissionOverwrite:
     return build_client_leader_category_overwrite()
 
 
+def build_client_changelog_readonly_overwrite() -> discord.PermissionOverwrite:
+    """Client server leaders — view and read #changelog; no posting."""
+    return discord.PermissionOverwrite(
+        view_channel=True,
+        read_message_history=True,
+        send_messages=False,
+        embed_links=False,
+        attach_files=False,
+        add_reactions=False,
+        create_public_threads=False,
+        create_private_threads=False,
+        send_messages_in_threads=False,
+    )
+
+
 def build_leaders_category_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -399,11 +414,7 @@ def build_changelog_channel_overwrites(
     }
     for role in client_roles:
         if _can_configure_role(bot_member, role):
-            base[role] = discord.PermissionOverwrite(
-                view_channel=True,
-                read_message_history=True,
-                **_post_and_thread_lockdown(),
-            )
+            base[role] = build_client_changelog_readonly_overwrite()
     if _can_configure_role(bot_member, access_role):
         base[access_role] = build_everyone_hidden_overwrite()
     return cast(

@@ -166,6 +166,8 @@ def test_changelog_channel_overwrites_are_readonly_for_client_roles() -> None:
     assert overwrites[client].view_channel is True
     assert overwrites[client].read_message_history is True
     assert overwrites[client].send_messages is False
+    assert overwrites[client].embed_links is False
+    assert overwrites[client].attach_files is False
     assert overwrites[client].add_reactions is False
     assert overwrites[moderator].view_channel is True
     assert overwrites[moderator].send_messages is True
