@@ -129,6 +129,43 @@ def test_leaders_category_overwrites_hide_everyone_and_access_role() -> None:
     assert overwrites[client].add_reactions is True
 
 
+def test_leaders_channel_overwrites_include_operator_role() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    everyone = MagicMock(spec=discord.Role)
+    everyone.is_default.return_value = True
+    guild.default_role = everyone
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+
+    client = MagicMock(spec=discord.Role)
+    client.id = 101
+    client.position = 1
+
+    access = MagicMock(spec=discord.Role)
+    access.id = 201
+    access.position = 3
+
+    operator = MagicMock(spec=discord.Role)
+    operator.id = 301
+    operator.position = 9
+
+    overwrites = dict(
+        build_leaders_channel_overwrites(
+            guild,
+            bot_member,
+            [client],
+            access,
+            None,
+            operator_role=operator,
+        )
+    )
+
+    assert overwrites[operator].view_channel is True
+    assert overwrites[operator].manage_channels is True
+
+
 def test_changelog_channel_overwrites_are_readonly_for_client_roles() -> None:
     guild = MagicMock(spec=discord.Guild)
     everyone = MagicMock(spec=discord.Role)

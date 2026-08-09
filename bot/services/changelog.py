@@ -192,6 +192,7 @@ async def sync_changelog_for_guild(
     *,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    operator_role: discord.Role | None = None,
 ) -> tuple[discord.TextChannel | None, int]:
     """Ensure the Leaders changelog channel exists and backfill pending release notes."""
     from bot.services.leaders_channel import ensure_leaders_channels
@@ -202,6 +203,7 @@ async def sync_changelog_for_guild(
         context,
         access_role=access_role,
         human_moderator_role=human_moderator_role,
+        operator_role=operator_role,
     )
     if changelog is None:
         return None, 0
@@ -230,12 +232,18 @@ async def sync_changelog_on_ready(
         return
 
     from bot.services.guild_layout import resolve_human_moderator_role
+    from bot.services.network_provision import resolve_operator_role_by_name
 
     human_moderator_role = resolve_human_moderator_role(guild)
+    operator_role = resolve_operator_role_by_name(
+        guild,
+        role_name=bot.settings.network_operator_role_name,
+    )
     await sync_changelog_for_guild(
         guild,
         bot_member,
         context,
         access_role=access_role,
         human_moderator_role=human_moderator_role,
+        operator_role=operator_role,
     )

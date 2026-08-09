@@ -668,6 +668,7 @@ async def initialize_guild(
                 context,
                 access_role=access_role,
                 human_moderator_role=human_moderator_role,
+                operator_role=operator_role,
             )
             result.rectifications.extend(leaders_sync.rectification_notes())
             result.rectification_skipped.extend(leaders_sync.skip_notes())

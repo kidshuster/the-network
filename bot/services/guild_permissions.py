@@ -373,12 +373,31 @@ def build_leaders_category_overwrites(
     )
 
 
+def _with_operator_overwrite(
+    overwrites: dict[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ],
+    bot_member: discord.Member,
+    operator_role: discord.Role | None,
+) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
+    """Grant the bot hub access via its operator role (cannot target the bot member on channels)."""
+    if operator_role is None:
+        return overwrites
+    if not _can_configure_role(bot_member, operator_role):
+        return overwrites
+    overwrites[operator_role] = _bot_hub_overwrite()
+    return overwrites
+
+
 def build_leaders_channel_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
     client_roles: Iterable[discord.Role],
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    *,
+    operator_role: discord.Role | None = None,
 ) -> OverwriteMap:
     """Hidden from @everyone and hub access role; visible only to client roles."""
     base: dict[
@@ -392,6 +411,7 @@ def build_leaders_channel_overwrites(
             base[role] = build_client_leader_channel_overwrite()
     if _can_configure_role(bot_member, access_role):
         base[access_role] = build_everyone_hidden_overwrite()
+    base = _with_operator_overwrite(base, bot_member, operator_role)
     return cast(
         OverwriteMap,
         _with_moderator_overwrite(base, bot_member, human_moderator_role),
@@ -404,6 +424,8 @@ def build_changelog_channel_overwrites(
     client_roles: Iterable[discord.Role],
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    *,
+    operator_role: discord.Role | None = None,
 ) -> OverwriteMap:
     """Changelog channel — client roles can read; only moderators can post."""
     base: dict[
@@ -417,6 +439,7 @@ def build_changelog_channel_overwrites(
             base[role] = build_client_changelog_readonly_overwrite()
     if _can_configure_role(bot_member, access_role):
         base[access_role] = build_everyone_hidden_overwrite()
+    base = _with_operator_overwrite(base, bot_member, operator_role)
     return cast(
         OverwriteMap,
         _with_moderator_overwrite(base, bot_member, human_moderator_role),

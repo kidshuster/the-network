@@ -258,6 +258,7 @@ class ServerRequestService:
                 self._context,
                 result.client_role,
                 access_role_name=self._bot.settings.network_access_role_name,
+                operator_role_name=self._bot.settings.network_operator_role_name,
             )
         await self._finalize_review_message(guild, request, moderator, ServerRequestStatus.APPROVED)
 

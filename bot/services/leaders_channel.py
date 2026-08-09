@@ -37,6 +37,7 @@ class LeadersSyncResult:
     roles_missing: list[str] = field(default_factory=list)
     leaders_channel: discord.TextChannel | None = None
     changelog_channel: discord.TextChannel | None = None
+    replacements: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
     def rectification_notes(self) -> list[str]:
@@ -54,6 +55,7 @@ class LeadersSyncResult:
             )
         elif not self.roles_missing and not self.failures:
             notes.append("Leaders channels verified — no client roles registered yet.")
+        notes.extend(self.replacements)
         return notes
 
     def skip_notes(self) -> list[str]:
@@ -84,6 +86,100 @@ async def _list_client_roles(
     return client_roles, missing_clients
 
 
+async def _sync_or_replace_leaders_channel(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    *,
+    channel: discord.TextChannel | None,
+    category: discord.CategoryChannel,
+    name: str,
+    overwrites: dict[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ],
+    topic: str,
+    reason: str,
+    sync_result: LeadersSyncResult,
+    label: str,
+) -> discord.TextChannel | None:
+    from bot.services.guild_permissions import create_text_channel_with_overwrites
+
+    if channel is None:
+        try:
+            return await create_text_channel_with_overwrites(
+                guild,
+                bot_member,
+                name=name,
+                category=category,
+                overwrites=overwrites,
+                topic=topic,
+                reason=reason,
+            )
+        except discord.HTTPException as exc:
+            sync_result.failures.append(f"Leaders: could not create #{name} ({exc}).")
+            return None
+
+    move_kwargs: dict[str, object] = {}
+    if channel.category_id != category.id or channel.name != name:
+        move_kwargs["category"] = category
+        move_kwargs["name"] = name
+
+    try:
+        await sync_channel_permission_overwrites(
+            channel,
+            bot_member,
+            overwrites,
+            reason=reason,
+            **move_kwargs,
+        )
+        return channel
+    except discord.HTTPException as exc:
+        if exc.code != 50001:
+            sync_result.failures.append(
+                f"Leaders: could not sync {channel.mention} permissions ({exc})."
+            )
+            return channel
+
+    rebuild_name = f"{name}-rebuild"[:100]
+    try:
+        rebuilt = await create_text_channel_with_overwrites(
+            guild,
+            bot_member,
+            name=rebuild_name,
+            category=category,
+            overwrites=overwrites,
+            topic=topic,
+            reason=reason,
+        )
+    except discord.HTTPException as exc:
+        sync_result.failures.append(
+            f"Leaders: could not replace inaccessible {label} ({exc})."
+        )
+        return channel
+
+    try:
+        await channel.delete(reason=reason)
+    except discord.HTTPException:
+        logger.warning(
+            "Could not delete inaccessible Leaders channel after rebuild",
+            extra={"channel_id": channel.id},
+        )
+
+    if rebuilt.name != name:
+        try:
+            await rebuilt.edit(name=name, reason=reason)
+        except discord.HTTPException as exc:
+            sync_result.failures.append(
+                f"Leaders: rebuilt {label} as {rebuilt.mention} but could not rename ({exc})."
+            )
+            return rebuilt
+
+    sync_result.replacements.append(
+        f"Leaders: replaced inaccessible **{label}** with {rebuilt.mention}."
+    )
+    return rebuilt
+
+
 async def _sync_leaders_permissions(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -91,6 +187,7 @@ async def _sync_leaders_permissions(
     *,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    operator_role: discord.Role | None,
     extra_client_role: discord.Role | None = None,
     reason: str,
 ) -> tuple[
@@ -99,8 +196,6 @@ async def _sync_leaders_permissions(
     discord.TextChannel | None,
     LeadersSyncResult,
 ]:
-    from bot.services.guild_permissions import create_text_channel_with_overwrites
-
     sync_result = LeadersSyncResult()
     client_roles, missing_clients = await _list_client_roles(
         guild,
@@ -128,6 +223,7 @@ async def _sync_leaders_permissions(
             client_roles,
             access_role,
             human_moderator_role,
+            operator_role=operator_role,
         ),
         for_channel=True,
     )
@@ -139,6 +235,7 @@ async def _sync_leaders_permissions(
             client_roles,
             access_role,
             human_moderator_role,
+            operator_role=operator_role,
         ),
         for_channel=True,
     )
@@ -167,83 +264,32 @@ async def _sync_leaders_permissions(
                 f"Leaders: could not sync category permissions ({exc})."
             )
 
-    channel = resolve_leaders_channel(guild)
-    if channel is None:
-        try:
-            channel = await create_text_channel_with_overwrites(
-                guild,
-                bot_member,
-                name=CHANNEL_LEADERS,
-                category=category,
-                overwrites=channel_overwrites,
-                topic="Private channel for participating server leaders",
-                reason=reason,
-            )
-        except discord.HTTPException as exc:
-            logger.warning("Could not create leaders channel")
-            sync_result.failures.append(f"Leaders: could not create #leaders-channel ({exc}).")
-            return category, None, None, sync_result
-    else:
-        move_kwargs: dict[str, object] = {}
-        if channel.category_id != category.id or channel.name != CHANNEL_LEADERS:
-            move_kwargs["category"] = category
-            move_kwargs["name"] = CHANNEL_LEADERS
-        try:
-            await sync_channel_permission_overwrites(
-                channel,
-                bot_member,
-                channel_overwrites,
-                reason=reason,
-                **move_kwargs,
-            )
-        except discord.HTTPException as exc:
-            logger.warning(
-                "Could not sync leaders channel permissions",
-                extra={"channel_id": channel.id},
-            )
-            sync_result.failures.append(
-                f"Leaders: could not sync {channel.mention} permissions ({exc})."
-            )
+    channel = await _sync_or_replace_leaders_channel(
+        guild,
+        bot_member,
+        channel=resolve_leaders_channel(guild),
+        category=category,
+        name=CHANNEL_LEADERS,
+        overwrites=dict(channel_overwrites),
+        topic="Private channel for participating server leaders",
+        reason=reason,
+        sync_result=sync_result,
+        label="#leaders-channel",
+    )
     sync_result.leaders_channel = channel
 
-    changelog = resolve_changelog_channel(guild)
-    if changelog is None:
-        try:
-            changelog = await create_text_channel_with_overwrites(
-                guild,
-                bot_member,
-                name=CHANNEL_CHANGELOG,
-                category=category,
-                overwrites=changelog_overwrites,
-                topic="Release notes for The Network bot",
-                reason=reason,
-                sync_permissions=False,
-            )
-        except discord.HTTPException as exc:
-            logger.warning("Could not create changelog channel")
-            sync_result.failures.append(f"Leaders: could not create #changelog ({exc}).")
-            return category, channel, None, sync_result
-    else:
-        changelog_move_kwargs: dict[str, object] = {}
-        if changelog.category_id != category.id or changelog.name != CHANNEL_CHANGELOG:
-            changelog_move_kwargs["category"] = category
-            changelog_move_kwargs["name"] = CHANNEL_CHANGELOG
-        try:
-            await sync_channel_permission_overwrites(
-                changelog,
-                bot_member,
-                changelog_overwrites,
-                reason=reason,
-                **changelog_move_kwargs,
-            )
-        except discord.HTTPException as exc:
-            logger.warning(
-                "Could not sync changelog channel permissions",
-                extra={"channel_id": changelog.id},
-            )
-            sync_result.failures.append(
-                f"Leaders: could not sync {changelog.mention} permissions ({exc})."
-            )
+    changelog = await _sync_or_replace_leaders_channel(
+        guild,
+        bot_member,
+        channel=resolve_changelog_channel(guild),
+        category=category,
+        name=CHANNEL_CHANGELOG,
+        overwrites=dict(changelog_overwrites),
+        topic="Release notes for The Network bot",
+        reason=reason,
+        sync_result=sync_result,
+        label="#changelog",
+    )
     sync_result.changelog_channel = changelog
 
     return category, channel, changelog, sync_result
@@ -256,6 +302,7 @@ async def ensure_leaders_channels(
     *,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    operator_role: discord.Role | None = None,
     reason: str = "The Network guild init",
 ) -> tuple[discord.TextChannel | None, discord.TextChannel | None, LeadersSyncResult]:
     """Create or sync Leaders category channels for client roles."""
@@ -265,6 +312,7 @@ async def ensure_leaders_channels(
         context,
         access_role=access_role,
         human_moderator_role=human_moderator_role,
+        operator_role=operator_role,
         reason=reason,
     )
     if leaders is not None:
@@ -301,9 +349,13 @@ async def grant_leaders_channel_access(
     client_role: discord.Role,
     *,
     access_role_name: str,
+    operator_role_name: str,
 ) -> None:
     """Add a newly approved client role to the Leaders category and channel."""
-    from bot.services.network_provision import resolve_access_role
+    from bot.services.network_provision import (
+        resolve_access_role,
+        resolve_operator_role_by_name,
+    )
 
     access_role = resolve_access_role(guild, role_name=access_role_name)
     if access_role is None:
@@ -312,6 +364,7 @@ async def grant_leaders_channel_access(
     from bot.services.guild_layout import resolve_human_moderator_role
 
     human_moderator_role = resolve_human_moderator_role(guild)
+    operator_role = resolve_operator_role_by_name(guild, role_name=operator_role_name)
 
     _category, channel, _changelog, sync_result = await _sync_leaders_permissions(
         guild,
@@ -319,6 +372,7 @@ async def grant_leaders_channel_access(
         context,
         access_role=access_role,
         human_moderator_role=human_moderator_role,
+        operator_role=operator_role,
         extra_client_role=client_role,
         reason="The Network client approved",
     )

@@ -1,4 +1,9 @@
 releases:
+  "1.2.5":
+    summary: "Fix bot access to Leaders sub-channels for permission sync."
+    changes:
+      - "Grant the bot operator role access on #leaders-channel and #changelog."
+      - "Rebuild inaccessible Leaders channels when the bot was locked out (50001)."
   "1.2.4":
     summary: "Fix Leaders channel permission refresh and changelog embed limits."
     changes:
