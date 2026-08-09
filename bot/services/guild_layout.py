@@ -83,13 +83,14 @@ def resolve_leaders_category(guild: discord.Guild) -> discord.CategoryChannel | 
 def resolve_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
     leaders_category = resolve_leaders_category(guild)
     if leaders_category is not None:
-        match = resolve_text_channel_in_category(
-            guild,
-            name=CHANNEL_LEADERS,
-            category_id=leaders_category.id,
-        )
-        if match is not None:
-            return match
+        for name in (CHANNEL_LEADERS, LEGACY_CHANNEL_LEADERS):
+            match = resolve_text_channel_in_category(
+                guild,
+                name=name,
+                category_id=leaders_category.id,
+            )
+            if match is not None:
+                return match
 
     for name in (CHANNEL_LEADERS, LEGACY_CHANNEL_LEADERS):
         hub = resolve_network_hub_category(guild)

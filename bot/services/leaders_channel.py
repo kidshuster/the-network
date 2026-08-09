@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import discord
@@ -30,22 +31,57 @@ LEADERS_CHANNEL_SETTINGS_KEY = "hub_leaders_channel"
 CHANGELOG_CHANNEL_SETTINGS_KEY = "hub_changelog_channel"
 
 
+@dataclass
+class LeadersSyncResult:
+    roles_synced: list[str] = field(default_factory=list)
+    roles_missing: list[str] = field(default_factory=list)
+    leaders_channel: discord.TextChannel | None = None
+    changelog_channel: discord.TextChannel | None = None
+    failures: list[str] = field(default_factory=list)
+
+    def rectification_notes(self) -> list[str]:
+        notes: list[str] = []
+        if self.roles_synced:
+            role_list = ", ".join(self.roles_synced)
+            targets: list[str] = ["Leaders category"]
+            if self.leaders_channel is not None:
+                targets.append(self.leaders_channel.mention)
+            if self.changelog_channel is not None:
+                targets.append(self.changelog_channel.mention)
+            notes.append(
+                f"Leaders access synced for **{len(self.roles_synced)}** client role(s) "
+                f"({role_list}) on {', '.join(targets)}."
+            )
+        elif not self.roles_missing and not self.failures:
+            notes.append("Leaders channels verified — no client roles registered yet.")
+        return notes
+
+    def skip_notes(self) -> list[str]:
+        return [
+            f"Leaders: skipped **{server_name}** — client role missing in Discord."
+            for server_name in self.roles_missing
+        ]
+
+
 async def _list_client_roles(
     guild: discord.Guild,
     context: BotContext,
     *,
     extra_role: discord.Role | None = None,
-) -> list[discord.Role]:
+) -> tuple[list[discord.Role], list[str]]:
     client_roles: list[discord.Role] = []
+    missing_clients: list[str] = []
     for client in await context.client_repo.list_all():
         if client.guild_id != guild.id:
             continue
         role = guild.get_role(client.client_role_id)
         if role is not None:
             client_roles.append(role)
+        else:
+            missing_clients.append(client.server_name)
     if extra_role is not None and extra_role not in client_roles:
         client_roles.append(extra_role)
-    return client_roles
+    return client_roles, missing_clients
 
 
 async def _sync_leaders_permissions(
@@ -57,14 +93,22 @@ async def _sync_leaders_permissions(
     human_moderator_role: discord.Role | None,
     extra_client_role: discord.Role | None = None,
     reason: str,
-) -> tuple[discord.CategoryChannel | None, discord.TextChannel | None, discord.TextChannel | None]:
+) -> tuple[
+    discord.CategoryChannel | None,
+    discord.TextChannel | None,
+    discord.TextChannel | None,
+    LeadersSyncResult,
+]:
     from bot.services.guild_permissions import create_text_channel_with_overwrites
 
-    client_roles = await _list_client_roles(
+    sync_result = LeadersSyncResult()
+    client_roles, missing_clients = await _list_client_roles(
         guild,
         context,
         extra_role=extra_client_role,
     )
+    sync_result.roles_missing = missing_clients
+    sync_result.roles_synced = [role.name for role in client_roles]
 
     category_overwrites = filter_configurable_overwrites(
         bot_member,
@@ -107,16 +151,20 @@ async def _sync_leaders_permissions(
                 overwrites=category_overwrites,
                 reason=reason,
             )
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning("Could not create Leaders category")
-            return None, None, None
+            sync_result.failures.append(f"Leaders: could not create category ({exc}).")
+            return None, None, None, sync_result
     else:
         try:
             await category.edit(overwrites=category_overwrites, reason=reason)
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning(
                 "Could not sync Leaders category permissions",
                 extra={"category_id": category.id},
+            )
+            sync_result.failures.append(
+                f"Leaders: could not sync category permissions ({exc})."
             )
 
     channel = resolve_leaders_channel(guild)
@@ -131,9 +179,10 @@ async def _sync_leaders_permissions(
                 topic="Private channel for participating server leaders",
                 reason=reason,
             )
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning("Could not create leaders channel")
-            return category, None, None
+            sync_result.failures.append(f"Leaders: could not create #leaders-channel ({exc}).")
+            return category, None, None, sync_result
     else:
         move_kwargs: dict[str, object] = {}
         if channel.category_id != category.id or channel.name != CHANNEL_LEADERS:
@@ -147,11 +196,15 @@ async def _sync_leaders_permissions(
                 reason=reason,
                 **move_kwargs,
             )
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning(
                 "Could not sync leaders channel permissions",
                 extra={"channel_id": channel.id},
             )
+            sync_result.failures.append(
+                f"Leaders: could not sync {channel.mention} permissions ({exc})."
+            )
+    sync_result.leaders_channel = channel
 
     changelog = resolve_changelog_channel(guild)
     if changelog is None:
@@ -166,9 +219,10 @@ async def _sync_leaders_permissions(
                 reason=reason,
                 sync_permissions=False,
             )
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning("Could not create changelog channel")
-            return category, channel, None
+            sync_result.failures.append(f"Leaders: could not create #changelog ({exc}).")
+            return category, channel, None, sync_result
     else:
         changelog_move_kwargs: dict[str, object] = {}
         if changelog.category_id != category.id or changelog.name != CHANNEL_CHANGELOG:
@@ -182,13 +236,17 @@ async def _sync_leaders_permissions(
                 reason=reason,
                 **changelog_move_kwargs,
             )
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
             logger.warning(
                 "Could not sync changelog channel permissions",
                 extra={"channel_id": changelog.id},
             )
+            sync_result.failures.append(
+                f"Leaders: could not sync {changelog.mention} permissions ({exc})."
+            )
+    sync_result.changelog_channel = changelog
 
-    return category, channel, changelog
+    return category, channel, changelog, sync_result
 
 
 async def ensure_leaders_channels(
@@ -199,9 +257,9 @@ async def ensure_leaders_channels(
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
     reason: str = "The Network guild init",
-) -> tuple[discord.TextChannel | None, discord.TextChannel | None]:
+) -> tuple[discord.TextChannel | None, discord.TextChannel | None, LeadersSyncResult]:
     """Create or sync Leaders category channels for client roles."""
-    _category, leaders, changelog = await _sync_leaders_permissions(
+    _category, leaders, changelog, sync_result = await _sync_leaders_permissions(
         guild,
         bot_member,
         context,
@@ -213,7 +271,7 @@ async def ensure_leaders_channels(
         await context.settings_repo.set(LEADERS_CHANNEL_SETTINGS_KEY, str(leaders.id))
     if changelog is not None:
         await context.settings_repo.set(CHANGELOG_CHANNEL_SETTINGS_KEY, str(changelog.id))
-    return leaders, changelog
+    return leaders, changelog, sync_result
 
 
 async def ensure_leaders_channel(
@@ -225,7 +283,7 @@ async def ensure_leaders_channel(
     human_moderator_role: discord.Role | None,
 ) -> discord.TextChannel | None:
     """Create or sync the Leaders category and leaders channel for client roles."""
-    leaders, _changelog = await ensure_leaders_channels(
+    leaders, _changelog, _sync_result = await ensure_leaders_channels(
         guild,
         bot_member,
         context,
@@ -255,7 +313,7 @@ async def grant_leaders_channel_access(
 
     human_moderator_role = resolve_human_moderator_role(guild)
 
-    _category, channel, _changelog = await _sync_leaders_permissions(
+    _category, channel, _changelog, sync_result = await _sync_leaders_permissions(
         guild,
         bot_member,
         context,
@@ -268,4 +326,9 @@ async def grant_leaders_channel_access(
         logger.warning(
             "Could not grant leaders access for new client role",
             extra={"role_id": client_role.id},
+        )
+    elif sync_result.failures:
+        logger.warning(
+            "Leaders access partially failed for new client role",
+            extra={"role_id": client_role.id, "failures": sync_result.failures},
         )

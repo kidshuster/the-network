@@ -6,15 +6,13 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.domain.client import Client
+from bot.services.client_permission_rectification import rectify_client_permissions
 from bot.services.client_profile_sync import refresh_client_profile_message
 from bot.services.client_subscription import (
     reorder_client_category_channels,
     resync_subscriptions_for_network,
     sync_client_channel_names,
-    sync_client_profile_channel_permissions,
-    sync_subscription_channel_permissions,
 )
-from bot.services.guild_permissions import sync_client_category_permissions
 from bot.services.subscription_setup_sticky import sync_subscription_setup
 from bot.ui.network_views import NetworkProfileView
 
@@ -41,39 +39,34 @@ async def reconnect_clients_on_init(
     role_name = access_role_name or bot.settings.network_access_role_name
     guild_clients = [client for client in clients if client.guild_id == guild.id]
     if not guild_clients:
+        result.rectifications.append(
+            "Client profiles: none registered — skipped permission rectification."
+        )
         return
 
     reconnected = 0
     for client in guild_clients:
-        category = guild.get_channel(client.category_id)
-        if not isinstance(category, discord.CategoryChannel):
-            result.notes.append(
-                f"Skipped client {client.server_name}: category missing."
-            )
+        rectified = await rectify_client_permissions(
+            guild,
+            bot_member,
+            context,
+            client,
+            access_role=access_role,
+            human_moderator_role=human_moderator_role,
+            access_role_name=role_name,
+        )
+        result.rectifications.extend(rectified.rectification_notes())
+        result.rectification_skipped.extend(rectified.skip_notes())
+        result.rectification_failures.extend(rectified.failure_notes())
+
+        if rectified.skipped and not rectified.synced:
             continue
 
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None:
-            result.notes.append(
-                f"Skipped client {client.server_name}: client role missing."
-            )
+        category = guild.get_channel(client.category_id)
+        if not isinstance(category, discord.CategoryChannel):
             continue
 
         try:
-            await sync_client_category_permissions(
-                category,
-                bot_member,
-                client_role,
-                access_role,
-                human_moderator_role,
-                reason="The Network server init",
-            )
-            await sync_client_profile_channel_permissions(
-                guild,
-                bot_member,
-                client=client,
-                access_role_name=role_name,
-            )
             await sync_client_channel_names(
                 guild,
                 bot_member,
@@ -89,13 +82,6 @@ async def reconnect_clients_on_init(
                 network = await context.network_repo.get_by_id(subscription.network_id)
                 if network is None:
                     continue
-                await sync_subscription_channel_permissions(
-                    guild,
-                    bot_member,
-                    client=client,
-                    subscription=subscription,
-                    access_role_name=role_name,
-                )
                 await sync_subscription_setup(
                     bot,
                     context,
@@ -125,8 +111,8 @@ async def reconnect_clients_on_init(
             await refresh_client_profile_message(bot, context, guild, client)
             reconnected += 1
         except discord.HTTPException as exc:
-            result.notes.append(
-                f"Could not reconnect client {client.server_name}: {exc}"
+            result.rectification_failures.append(
+                f"**{client.server_name}**: could not finish reconnect ({exc})"
             )
             logger.warning(
                 "Client reconnect failed",
@@ -142,9 +128,11 @@ async def reconnect_clients_on_init(
             access_role_name=role_name,
         )
         if relinked:
-            result.notes.append(
+            result.rectifications.append(
                 f"Relinked {relinked} subscription(s) for network `{network.key}`."
             )
 
     if reconnected:
-        result.notes.append(f"Reconnected {reconnected} client(s) from database.")
+        result.rectifications.append(
+            f"Verified and refreshed {reconnected} client profile card(s)."
+        )

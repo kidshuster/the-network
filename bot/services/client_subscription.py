@@ -28,6 +28,7 @@ from bot.services.guild_permissions import (
     build_client_subscribe_channel_overwrites,
     create_text_channel_with_overwrites,
     filter_configurable_overwrites,
+    sync_channel_permission_overwrites,
 )
 from bot.services.network_provision import (
     resolve_access_role,
@@ -127,7 +128,12 @@ async def sync_subscription_channel_permissions(
     reason = "The Network subscription channel sync"
     if isinstance(publish, discord.TextChannel):
         try:
-            await publish.edit(overwrites=publish_overwrites, reason=reason)
+            await sync_channel_permission_overwrites(
+                publish,
+                bot_member,
+                publish_overwrites,
+                reason=reason,
+            )
         except discord.HTTPException:
             logger.warning(
                 "Could not sync publish channel permissions",
@@ -135,7 +141,12 @@ async def sync_subscription_channel_permissions(
             )
     if subscribe is not None:
         try:
-            await subscribe.edit(overwrites=subscribe_overwrites, reason=reason)
+            await sync_channel_permission_overwrites(
+                subscribe,
+                bot_member,
+                subscribe_overwrites,
+                reason=reason,
+            )
         except discord.HTTPException:
             logger.warning(
                 "Could not sync subscribe channel permissions",
@@ -170,7 +181,12 @@ async def sync_client_profile_channel_permissions(
         for_channel=True,
     )
     try:
-        await profile.edit(overwrites=overwrites, reason="The Network client profile sync")
+        await sync_channel_permission_overwrites(
+            profile,
+            bot_member,
+            overwrites,
+            reason="The Network client profile sync",
+        )
     except discord.HTTPException:
         logger.warning(
             "Could not sync profile channel permissions",

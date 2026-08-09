@@ -1,4 +1,10 @@
 releases:
+  "1.2.3":
+    summary: "Server init rectifies existing client permissions with a detailed report."
+    changes:
+      - "Second init card lists Leaders and client profile permission rectification work."
+      - "Init validates stored profiles, syncs missing channel permissions, and reports skips."
+      - "Fix legacy #leaders channel lookup inside the Leaders category."
   "1.2.2":
     summary: "Fix Leaders channel permissions for new client profiles."
     changes:

@@ -40,6 +40,51 @@ def _append_bullet_field(
     )
 
 
+def _server_init_rectification_embed(result: GuildInitResult) -> discord.Embed | None:
+    if not result.success:
+        return None
+
+    has_work = bool(
+        result.rectifications
+        or result.rectification_skipped
+        or result.rectification_failures
+    )
+    if not has_work:
+        embed = render_embed("server_init_rectification")
+        embed.description = (
+            "Existing client profiles and Leaders channels were checked. "
+            "No registered clients needed permission rectification."
+        )
+        return embed
+
+    embed = render_embed("server_init_rectification")
+    _append_bullet_field(
+        embed,
+        name="Rectified",
+        items=result.rectifications,
+    )
+    _append_bullet_field(
+        embed,
+        name="Skipped",
+        items=result.rectification_skipped,
+    )
+    if result.rectification_failures:
+        embed.colour = discord.Colour.gold()
+        embed.add_field(
+            name="Rectification warnings",
+            value="\n".join(
+                f"• {step}" for step in result.rectification_failures[:_MAX_INIT_FIELD_ITEMS]
+            )[:_MAX_INIT_FIELD_CHARS],
+            inline=False,
+        )
+    if not result.rectifications and not result.rectification_failures:
+        embed.description = (
+            "Existing client profiles and Leaders channels were checked. "
+            "Some profiles could not be rectified — see Skipped below."
+        )
+    return embed
+
+
 def _server_init_embed(result: GuildInitResult) -> discord.Embed:
     if not result.success:
         return render_embed(
@@ -143,6 +188,12 @@ class ServerCog(
                     embed=_server_init_embed(result),
                     ephemeral=True,
                 )
+                rectification_embed = _server_init_rectification_embed(result)
+                if rectification_embed is not None:
+                    await interaction.followup.send(
+                        embed=rectification_embed,
+                        ephemeral=True,
+                    )
             except NetworkValidationError as exc:
                 await interaction.followup.send(
                     embed=render_embed("server_init_failed", description=str(exc)),

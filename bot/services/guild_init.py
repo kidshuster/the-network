@@ -70,6 +70,9 @@ class GuildInitResult:
     updated_roles: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     failed_steps: list[str] = field(default_factory=list)
+    rectifications: list[str] = field(default_factory=list)
+    rectification_skipped: list[str] = field(default_factory=list)
+    rectification_failures: list[str] = field(default_factory=list)
     reason: str | None = None
 
 
@@ -389,7 +392,9 @@ async def _sync_client_categories(
             )
 
         if await _run_init_step(result, f"sync client category {category.name}", _sync):
-            result.notes.append(f"Synced client category {category.name}")
+            result.rectifications.append(
+                f"**{client.server_name}**: rectified category permissions."
+            )
 
 
 async def _reorder_moderation_channels(
@@ -657,13 +662,16 @@ async def initialize_guild(
             from bot.services.changelog import sync_changelog_releases
             from bot.services.leaders_channel import ensure_leaders_channels
 
-            leaders, changelog = await ensure_leaders_channels(
+            leaders, changelog, leaders_sync = await ensure_leaders_channels(
                 guild,
                 bot_member,
                 context,
                 access_role=access_role,
                 human_moderator_role=human_moderator_role,
             )
+            result.rectifications.extend(leaders_sync.rectification_notes())
+            result.rectification_skipped.extend(leaders_sync.skip_notes())
+            result.rectification_failures.extend(leaders_sync.failures)
             if leaders is not None:
                 result.notes.append(f"Leaders channel synced at {leaders.mention}.")
             if changelog is not None:

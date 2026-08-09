@@ -170,7 +170,7 @@ async def sync_changelog_for_guild(
     """Ensure the Leaders changelog channel exists and backfill pending release notes."""
     from bot.services.leaders_channel import ensure_leaders_channels
 
-    _leaders, changelog = await ensure_leaders_channels(
+    _leaders, changelog, _sync_result = await ensure_leaders_channels(
         guild,
         bot_member,
         context,
