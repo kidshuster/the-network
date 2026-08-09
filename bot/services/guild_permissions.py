@@ -125,6 +125,13 @@ def filter_configurable_overwrites(
         if isinstance(target, discord.Role):
             if _can_configure_role(bot_member, target):
                 filtered[target] = overwrite
+            elif (
+                for_channel
+                and not target.is_default()
+                and target.id == bot_member.top_role.id
+            ):
+                # Bot operator role — channel access uses a role overwrite (not the bot member).
+                filtered[target] = overwrite
             continue
         if isinstance(target, discord.Member):
             if for_channel:
@@ -346,6 +353,8 @@ def build_leaders_category_overwrites(
     client_roles: Iterable[discord.Role],
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
+    *,
+    operator_role: discord.Role | None = None,
 ) -> OverwriteMap:
     """Leaders category — hidden from @everyone and hub access; client roles can post."""
     base: dict[
@@ -362,6 +371,7 @@ def build_leaders_category_overwrites(
             base[role] = build_client_leader_category_overwrite()
     if _can_configure_role(bot_member, access_role):
         base[access_role] = build_everyone_hidden_category_overwrite()
+    base = _with_operator_overwrite(base, bot_member, operator_role)
     return cast(
         OverwriteMap,
         _with_moderator_overwrite(
@@ -382,9 +392,8 @@ def _with_operator_overwrite(
     operator_role: discord.Role | None,
 ) -> dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite]:
     """Grant the bot hub access via its operator role (cannot target the bot member on channels)."""
+    _ = bot_member
     if operator_role is None:
-        return overwrites
-    if not _can_configure_role(bot_member, operator_role):
         return overwrites
     overwrites[operator_role] = _bot_hub_overwrite()
     return overwrites

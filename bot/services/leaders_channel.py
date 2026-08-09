@@ -88,6 +88,9 @@ async def _resolve_stored_text_channel(
     guild: discord.Guild,
     context: BotContext,
     settings_key: str,
+    *,
+    category: discord.CategoryChannel | None = None,
+    expected_name: str | None = None,
 ) -> discord.TextChannel | None:
     raw = await context.settings_repo.get(settings_key)
     if raw is None:
@@ -97,19 +100,27 @@ async def _resolve_stored_text_channel(
     except ValueError:
         return None
     channel = guild.get_channel(channel_id)
-    if isinstance(channel, discord.TextChannel):
-        return channel
-    return None
+    if not isinstance(channel, discord.TextChannel):
+        return None
+    if category is not None and channel.category_id != category.id:
+        return None
+    if expected_name is not None and channel.name != expected_name:
+        return None
+    return channel
 
 
 async def _resolve_leaders_channel_for_sync(
     guild: discord.Guild,
     context: BotContext,
+    *,
+    category: discord.CategoryChannel | None = None,
 ) -> discord.TextChannel | None:
     stored = await _resolve_stored_text_channel(
         guild,
         context,
         LEADERS_CHANNEL_SETTINGS_KEY,
+        category=category,
+        expected_name=CHANNEL_LEADERS,
     )
     if stored is not None:
         return stored
@@ -119,11 +130,15 @@ async def _resolve_leaders_channel_for_sync(
 async def _resolve_changelog_channel_for_sync(
     guild: discord.Guild,
     context: BotContext,
+    *,
+    category: discord.CategoryChannel | None = None,
 ) -> discord.TextChannel | None:
     stored = await _resolve_stored_text_channel(
         guild,
         context,
         CHANGELOG_CHANNEL_SETTINGS_KEY,
+        category=category,
+        expected_name=CHANNEL_CHANGELOG,
     )
     if stored is not None:
         return stored
@@ -215,6 +230,7 @@ async def _sync_leaders_permissions(
             client_roles,
             access_role,
             human_moderator_role,
+            operator_role=operator_role,
         ),
     )
     channel_overwrites = filter_configurable_overwrites(
@@ -269,7 +285,7 @@ async def _sync_leaders_permissions(
     channel = await _ensure_leaders_text_channel(
         guild,
         bot_member,
-        channel=await _resolve_leaders_channel_for_sync(guild, context),
+        channel=await _resolve_leaders_channel_for_sync(guild, context, category=category),
         category=category,
         name=CHANNEL_LEADERS,
         overwrites=dict(channel_overwrites),
@@ -282,7 +298,7 @@ async def _sync_leaders_permissions(
     changelog = await _ensure_leaders_text_channel(
         guild,
         bot_member,
-        channel=await _resolve_changelog_channel_for_sync(guild, context),
+        channel=await _resolve_changelog_channel_for_sync(guild, context, category=category),
         category=category,
         name=CHANNEL_CHANGELOG,
         overwrites=dict(changelog_overwrites),

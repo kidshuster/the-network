@@ -1,4 +1,9 @@
 releases:
+  "1.2.7":
+    summary: "Fix Leaders changelog permission sync when operator is the bot's top role."
+    changes:
+      - "Always grant the operator role on Leaders channels and category overwrites."
+      - "Ignore stale stored Leaders channel IDs outside the Leaders category."
   "1.2.6":
     summary: "Remove Leaders channel rebuild fallback; sync permissions only."
     changes:
