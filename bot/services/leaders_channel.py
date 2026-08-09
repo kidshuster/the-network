@@ -18,6 +18,7 @@ from bot.services.guild_permissions import (
     build_leaders_category_overwrites,
     build_leaders_channel_overwrites,
     filter_configurable_overwrites,
+    sync_channel_permission_overwrites,
 )
 
 if TYPE_CHECKING:
@@ -134,16 +135,18 @@ async def _sync_leaders_permissions(
             logger.warning("Could not create leaders channel")
             return category, None, None
     else:
-        edit_kwargs: dict[str, object] = {
-            "overwrites": channel_overwrites,
-            "sync_permissions": False,
-            "reason": reason,
-        }
+        move_kwargs: dict[str, object] = {}
         if channel.category_id != category.id or channel.name != CHANNEL_LEADERS:
-            edit_kwargs["category"] = category
-            edit_kwargs["name"] = CHANNEL_LEADERS
+            move_kwargs["category"] = category
+            move_kwargs["name"] = CHANNEL_LEADERS
         try:
-            await channel.edit(**edit_kwargs)  # type: ignore[arg-type]
+            await sync_channel_permission_overwrites(
+                channel,
+                bot_member,
+                channel_overwrites,
+                reason=reason,
+                **move_kwargs,
+            )
         except discord.HTTPException:
             logger.warning(
                 "Could not sync leaders channel permissions",
@@ -167,16 +170,18 @@ async def _sync_leaders_permissions(
             logger.warning("Could not create changelog channel")
             return category, channel, None
     else:
-        changelog_edit_kwargs: dict[str, object] = {
-            "overwrites": changelog_overwrites,
-            "sync_permissions": False,
-            "reason": reason,
-        }
+        changelog_move_kwargs: dict[str, object] = {}
         if changelog.category_id != category.id or changelog.name != CHANNEL_CHANGELOG:
-            changelog_edit_kwargs["category"] = category
-            changelog_edit_kwargs["name"] = CHANNEL_CHANGELOG
+            changelog_move_kwargs["category"] = category
+            changelog_move_kwargs["name"] = CHANNEL_CHANGELOG
         try:
-            await changelog.edit(**changelog_edit_kwargs)  # type: ignore[arg-type]
+            await sync_channel_permission_overwrites(
+                changelog,
+                bot_member,
+                changelog_overwrites,
+                reason=reason,
+                **changelog_move_kwargs,
+            )
         except discord.HTTPException:
             logger.warning(
                 "Could not sync changelog channel permissions",

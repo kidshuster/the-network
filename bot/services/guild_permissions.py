@@ -664,6 +664,38 @@ def prepare_server_feed_channel_overwrites(
     )
 
 
+async def sync_channel_permission_overwrites(
+    channel: discord.abc.GuildChannel,
+    bot_member: discord.Member,
+    overwrites: Mapping[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ],
+    *,
+    reason: str,
+    **edit_kwargs: object,
+) -> None:
+    """Apply channel overwrites via set_permissions.
+
+    Bulk ``channel.edit(overwrites=...)`` is unreliable when the channel still
+    inherits category permissions; unsync first, then set each overwrite.
+    """
+    if isinstance(channel, discord.CategoryChannel):
+        msg = "sync_channel_permission_overwrites is for non-category channels"
+        raise TypeError(msg)
+
+    safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
+    payload = dict(edit_kwargs)
+    if getattr(channel, "permissions_synced", False):
+        payload["sync_permissions"] = False
+    if payload:
+        await channel.edit(reason=reason, **payload)  # type: ignore[attr-defined]
+    for target, overwrite in safe.items():
+        if not isinstance(target, (discord.Role, discord.Member)):
+            continue
+        await channel.set_permissions(target, overwrite=overwrite, reason=reason)
+
+
 async def create_text_channel_with_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -697,16 +729,12 @@ async def create_text_channel_with_overwrites(
     if category is not None and sync_permissions is not None:
         kwargs["sync_permissions"] = sync_permissions
     channel = await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
-    safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
-    if sync_permissions is False:
-        await channel.edit(
-            sync_permissions=False,
-            overwrites=safe,
-            reason=reason,
-        )
-    else:
-        for target, overwrite in safe.items():
-            await channel.set_permissions(target, overwrite=overwrite, reason=reason)
+    await sync_channel_permission_overwrites(
+        channel,
+        bot_member,
+        overwrites,
+        reason=reason,
+    )
     return channel
 
 

@@ -1,4 +1,10 @@
 releases:
+  "1.2.2":
+    summary: "Fix Leaders channel permissions for new client profiles."
+    changes:
+      - "Grant client roles access to #leaders-channel and #changelog when a profile is approved."
+      - "Apply channel overwrites via set_permissions so synced channels update reliably."
+      - "Server init re-syncs Leaders permissions for all stored client roles."
   "1.2.1":
     summary: "Fix #changelog permissions for client roles."
     changes:
