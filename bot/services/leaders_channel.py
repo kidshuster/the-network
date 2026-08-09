@@ -37,7 +37,6 @@ class LeadersSyncResult:
     roles_missing: list[str] = field(default_factory=list)
     leaders_channel: discord.TextChannel | None = None
     changelog_channel: discord.TextChannel | None = None
-    replacements: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
     def rectification_notes(self) -> list[str]:
@@ -55,7 +54,6 @@ class LeadersSyncResult:
             )
         elif not self.roles_missing and not self.failures:
             notes.append("Leaders channels verified — no client roles registered yet.")
-        notes.extend(self.replacements)
         return notes
 
     def skip_notes(self) -> list[str]:
@@ -86,7 +84,53 @@ async def _list_client_roles(
     return client_roles, missing_clients
 
 
-async def _sync_or_replace_leaders_channel(
+async def _resolve_stored_text_channel(
+    guild: discord.Guild,
+    context: BotContext,
+    settings_key: str,
+) -> discord.TextChannel | None:
+    raw = await context.settings_repo.get(settings_key)
+    if raw is None:
+        return None
+    try:
+        channel_id = int(raw)
+    except ValueError:
+        return None
+    channel = guild.get_channel(channel_id)
+    if isinstance(channel, discord.TextChannel):
+        return channel
+    return None
+
+
+async def _resolve_leaders_channel_for_sync(
+    guild: discord.Guild,
+    context: BotContext,
+) -> discord.TextChannel | None:
+    stored = await _resolve_stored_text_channel(
+        guild,
+        context,
+        LEADERS_CHANNEL_SETTINGS_KEY,
+    )
+    if stored is not None:
+        return stored
+    return resolve_leaders_channel(guild)
+
+
+async def _resolve_changelog_channel_for_sync(
+    guild: discord.Guild,
+    context: BotContext,
+) -> discord.TextChannel | None:
+    stored = await _resolve_stored_text_channel(
+        guild,
+        context,
+        CHANGELOG_CHANNEL_SETTINGS_KEY,
+    )
+    if stored is not None:
+        return stored
+    return resolve_changelog_channel(guild)
+
+
+async def _ensure_leaders_text_channel(
     guild: discord.Guild,
     bot_member: discord.Member,
     *,
@@ -100,7 +144,6 @@ async def _sync_or_replace_leaders_channel(
     topic: str,
     reason: str,
     sync_result: LeadersSyncResult,
-    label: str,
 ) -> discord.TextChannel | None:
     from bot.services.guild_permissions import create_text_channel_with_overwrites
 
@@ -132,52 +175,11 @@ async def _sync_or_replace_leaders_channel(
             reason=reason,
             **move_kwargs,
         )
-        return channel
-    except discord.HTTPException as exc:
-        if exc.code != 50001:
-            sync_result.failures.append(
-                f"Leaders: could not sync {channel.mention} permissions ({exc})."
-            )
-            return channel
-
-    rebuild_name = f"{name}-rebuild"[:100]
-    try:
-        rebuilt = await create_text_channel_with_overwrites(
-            guild,
-            bot_member,
-            name=rebuild_name,
-            category=category,
-            overwrites=overwrites,
-            topic=topic,
-            reason=reason,
-        )
     except discord.HTTPException as exc:
         sync_result.failures.append(
-            f"Leaders: could not replace inaccessible {label} ({exc})."
+            f"Leaders: could not sync {channel.mention} permissions ({exc})."
         )
-        return channel
-
-    try:
-        await channel.delete(reason=reason)
-    except discord.HTTPException:
-        logger.warning(
-            "Could not delete inaccessible Leaders channel after rebuild",
-            extra={"channel_id": channel.id},
-        )
-
-    if rebuilt.name != name:
-        try:
-            await rebuilt.edit(name=name, reason=reason)
-        except discord.HTTPException as exc:
-            sync_result.failures.append(
-                f"Leaders: rebuilt {label} as {rebuilt.mention} but could not rename ({exc})."
-            )
-            return rebuilt
-
-    sync_result.replacements.append(
-        f"Leaders: replaced inaccessible **{label}** with {rebuilt.mention}."
-    )
-    return rebuilt
+    return channel
 
 
 async def _sync_leaders_permissions(
@@ -264,31 +266,29 @@ async def _sync_leaders_permissions(
                 f"Leaders: could not sync category permissions ({exc})."
             )
 
-    channel = await _sync_or_replace_leaders_channel(
+    channel = await _ensure_leaders_text_channel(
         guild,
         bot_member,
-        channel=resolve_leaders_channel(guild),
+        channel=await _resolve_leaders_channel_for_sync(guild, context),
         category=category,
         name=CHANNEL_LEADERS,
         overwrites=dict(channel_overwrites),
         topic="Private channel for participating server leaders",
         reason=reason,
         sync_result=sync_result,
-        label="#leaders-channel",
     )
     sync_result.leaders_channel = channel
 
-    changelog = await _sync_or_replace_leaders_channel(
+    changelog = await _ensure_leaders_text_channel(
         guild,
         bot_member,
-        channel=resolve_changelog_channel(guild),
+        channel=await _resolve_changelog_channel_for_sync(guild, context),
         category=category,
         name=CHANNEL_CHANGELOG,
         overwrites=dict(changelog_overwrites),
         topic="Release notes for The Network bot",
         reason=reason,
         sync_result=sync_result,
-        label="#changelog",
     )
     sync_result.changelog_channel = changelog
 

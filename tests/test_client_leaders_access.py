@@ -91,6 +91,8 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     changelog.edit = AsyncMock()
     changelog.set_permissions = AsyncMock()
 
+    category.channels = [leaders, changelog]
+
     existing_role = MagicMock(spec=discord.Role)
     existing_role.id = 100
     existing_role.position = 1
@@ -106,6 +108,11 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     access.name = "Network Access"
     access.position = 5
     access.is_default.return_value = False
+
+    operator = MagicMock(spec=discord.Role)
+    operator.id = 302
+    operator.position = 9
+    operator.is_default.return_value = False
 
     bot_member = MagicMock(spec=discord.Member)
     bot_member.guild_permissions.manage_roles = True
@@ -140,6 +147,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
 
     context = MagicMock()
     context.client_repo.list_all = AsyncMock(return_value=[client])
+    context.settings_repo.get = AsyncMock(return_value=None)
 
     import bot.services.guild_layout as guild_layout
     import bot.services.leaders_channel as leaders_module
@@ -150,6 +158,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
         "resolve_leaders_channel": leaders_module.resolve_leaders_channel,
         "resolve_changelog_channel": leaders_module.resolve_changelog_channel,
         "resolve_access_role": network_provision.resolve_access_role,
+        "resolve_operator_role_by_name": network_provision.resolve_operator_role_by_name,
         "resolve_human_moderator_role": guild_layout.resolve_human_moderator_role,
     }
 
@@ -157,6 +166,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     leaders_module.resolve_leaders_channel = MagicMock(return_value=leaders)
     leaders_module.resolve_changelog_channel = MagicMock(return_value=changelog)
     network_provision.resolve_access_role = MagicMock(return_value=access)
+    network_provision.resolve_operator_role_by_name = MagicMock(return_value=operator)
     guild_layout.resolve_human_moderator_role = MagicMock(return_value=None)
 
     try:
@@ -166,12 +176,16 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
             context,
             new_role,
             access_role_name="Network Access",
+            operator_role_name="The Network+",
         )
     finally:
         leaders_module.resolve_leaders_category = originals["resolve_leaders_category"]
         leaders_module.resolve_leaders_channel = originals["resolve_leaders_channel"]
         leaders_module.resolve_changelog_channel = originals["resolve_changelog_channel"]
         network_provision.resolve_access_role = originals["resolve_access_role"]
+        network_provision.resolve_operator_role_by_name = originals[
+            "resolve_operator_role_by_name"
+        ]
         guild_layout.resolve_human_moderator_role = originals["resolve_human_moderator_role"]
 
     leaders_targets = [

@@ -1,4 +1,9 @@
 releases:
+  "1.2.6":
+    summary: "Remove Leaders channel rebuild fallback; sync permissions only."
+    changes:
+      - "Drop -rebuild channel recovery; init creates or syncs Leaders channels in place."
+      - "Prefer stored channel IDs when rectifying Leaders permissions."
   "1.2.5":
     summary: "Fix bot access to Leaders sub-channels for permission sync."
     changes:
