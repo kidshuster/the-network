@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.cogs.servers import _server_init_rectification_embed
+from bot.cogs.servers import _format_bullet_list, _server_init_rectification_embed
 from bot.services.guild_init import GuildInitResult
 
 
@@ -28,3 +28,20 @@ def test_server_init_rectification_embed_when_no_clients() -> None:
     embed = _server_init_rectification_embed(result)
     assert embed is not None
     assert "No registered clients" in embed.description
+
+
+def test_build_changelog_embed_splits_long_change_lists() -> None:
+    from bot.services.changelog import ReleaseNotes, build_changelog_embed
+
+    changes = tuple(f"Change item {index} with extra detail" for index in range(80))
+    notes = ReleaseNotes(version="9.9.9", summary="Big release", changes=changes)
+    embed = build_changelog_embed(notes)
+
+    for field in embed.fields:
+        assert len(field.value) <= 1024
+
+
+def test_format_bullet_list_truncates_to_discord_limit() -> None:
+    items = [f"Entry {index}: {'x' * 80}" for index in range(50)]
+    value = _format_bullet_list(items)
+    assert len(value) <= 1024

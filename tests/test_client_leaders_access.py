@@ -24,9 +24,10 @@ def test_guild_init_syncs_leaders_for_all_client_roles() -> None:
     assert "ensure_leaders_channels" in source
 
 
-async def test_sync_channel_permission_overwrites_unsyncs_synced_channel() -> None:
+async def test_sync_channel_permission_overwrites_refreshes_from_category() -> None:
     channel = MagicMock(spec=discord.TextChannel)
-    channel.permissions_synced = True
+    channel.category_id = 100
+    channel.permissions_synced = False
     channel.edit = AsyncMock()
     channel.set_permissions = AsyncMock()
 
@@ -49,7 +50,10 @@ async def test_sync_channel_permission_overwrites_unsyncs_synced_channel() -> No
         reason="test",
     )
 
-    channel.edit.assert_awaited_once_with(sync_permissions=False, reason="test")
+    assert channel.edit.await_count >= 2
+    edit_kwargs = [call.kwargs for call in channel.edit.await_args_list]
+    assert any(kwargs.get("sync_permissions") is True for kwargs in edit_kwargs)
+    assert any(kwargs.get("sync_permissions") is False for kwargs in edit_kwargs)
     channel.set_permissions.assert_awaited_once_with(
         client_role,
         overwrite=overwrite,
@@ -77,7 +81,6 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     leaders.id = 501
     leaders.name = "leaders-channel"
     leaders.category_id = category.id
-    leaders.permissions_synced = True
     leaders.edit = AsyncMock()
     leaders.set_permissions = AsyncMock()
 
@@ -85,7 +88,6 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     changelog.id = 502
     changelog.name = "changelog"
     changelog.category_id = category.id
-    changelog.permissions_synced = True
     changelog.edit = AsyncMock()
     changelog.set_permissions = AsyncMock()
 

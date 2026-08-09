@@ -21,8 +21,22 @@ from bot.ui.join_views import JoinNetworkView
 
 logger = logging.getLogger(__name__)
 
-_MAX_INIT_FIELD_ITEMS = 8
-_MAX_INIT_FIELD_CHARS = 900
+_MAX_EMBED_FIELD_CHARS = 1024
+_MAX_EMBED_FIELDS = 25
+
+
+def _format_bullet_list(items: list[str], *, max_items: int = 25) -> str:
+    lines: list[str] = []
+    for item in items[:max_items]:
+        line = f"• {item}"
+        candidate = "\n".join([*lines, line]) if lines else line
+        if len(candidate) > _MAX_EMBED_FIELD_CHARS:
+            omitted = len(items) - len(lines)
+            if omitted > 0 and lines:
+                lines.append(f"• … and {omitted} more")
+            break
+        lines.append(line)
+    return "\n".join(lines)[:_MAX_EMBED_FIELD_CHARS]
 
 
 def _append_bullet_field(
@@ -33,16 +47,18 @@ def _append_bullet_field(
 ) -> None:
     if not items:
         return
+    if len(embed.fields) >= _MAX_EMBED_FIELDS:
+        return
     embed.add_field(
         name=name,
-        value="\n".join(f"• {item}" for item in items[:_MAX_INIT_FIELD_ITEMS]),
+        value=_format_bullet_list(items),
         inline=False,
     )
 
 
-def _server_init_rectification_embed(result: GuildInitResult) -> discord.Embed | None:
+def _server_init_rectification_embeds(result: GuildInitResult) -> list[discord.Embed]:
     if not result.success:
-        return None
+        return []
 
     has_work = bool(
         result.rectifications
@@ -55,34 +71,46 @@ def _server_init_rectification_embed(result: GuildInitResult) -> discord.Embed |
             "Existing client profiles and Leaders channels were checked. "
             "No registered clients needed permission rectification."
         )
-        return embed
+        return [embed]
 
-    embed = render_embed("server_init_rectification")
-    _append_bullet_field(
-        embed,
-        name="Rectified",
-        items=result.rectifications,
-    )
-    _append_bullet_field(
-        embed,
-        name="Skipped",
-        items=result.rectification_skipped,
-    )
-    if result.rectification_failures:
-        embed.colour = discord.Colour.gold()
-        embed.add_field(
-            name="Rectification warnings",
-            value="\n".join(
-                f"• {step}" for step in result.rectification_failures[:_MAX_INIT_FIELD_ITEMS]
-            )[:_MAX_INIT_FIELD_CHARS],
-            inline=False,
-        )
+    embeds: list[discord.Embed] = []
+    base = render_embed("server_init_rectification")
+    embeds.append(base)
+    current = base
+
+    def _ensure_embed() -> discord.Embed:
+        nonlocal current
+        if len(current.fields) >= _MAX_EMBED_FIELDS:
+            current = render_embed("server_init_rectification")
+            current.description = "Rectification report (continued)."
+            embeds.append(current)
+        return current
+
+    for item in result.rectifications:
+        target = _ensure_embed()
+        _append_bullet_field(target, name="Rectified", items=[item])
+
+    for item in result.rectification_skipped:
+        target = _ensure_embed()
+        _append_bullet_field(target, name="Skipped", items=[item])
+
+    for item in result.rectification_failures:
+        target = _ensure_embed()
+        target.colour = discord.Colour.gold()
+        _append_bullet_field(target, name="Rectification warnings", items=[item])
+
     if not result.rectifications and not result.rectification_failures:
-        embed.description = (
+        base.description = (
             "Existing client profiles and Leaders channels were checked. "
             "Some profiles could not be rectified — see Skipped below."
         )
-    return embed
+
+    return embeds
+
+
+def _server_init_rectification_embed(result: GuildInitResult) -> discord.Embed | None:
+    embeds = _server_init_rectification_embeds(result)
+    return embeds[0] if embeds else None
 
 
 def _server_init_embed(result: GuildInitResult) -> discord.Embed:
@@ -97,21 +125,17 @@ def _server_init_embed(result: GuildInitResult) -> discord.Embed:
     _append_bullet_field(embed, name="Channels created", items=result.created_channels)
     _append_bullet_field(embed, name="Channels moved", items=result.moved_channels)
     _append_bullet_field(embed, name="Roles", items=result.updated_roles)
+    if result.notes:
+        embed.add_field(
+            name="Notes",
+            value=_format_bullet_list(result.notes),
+            inline=False,
+        )
     if result.failed_steps:
         embed.colour = discord.Colour.gold()
         embed.add_field(
             name="Permission warnings",
-            value="\n".join(f"• {step}" for step in result.failed_steps[:_MAX_INIT_FIELD_ITEMS])[
-                :_MAX_INIT_FIELD_CHARS
-            ],
-            inline=False,
-        )
-    if result.notes:
-        embed.add_field(
-            name="Notes",
-            value="\n".join(f"• {note}" for note in result.notes[:_MAX_INIT_FIELD_ITEMS])[
-                :_MAX_INIT_FIELD_CHARS
-            ],
+            value=_format_bullet_list(result.failed_steps),
             inline=False,
         )
     return embed
@@ -134,9 +158,7 @@ def _server_uninit_embed(result: GuildUninitResult) -> discord.Embed:
     if result.notes:
         embed.add_field(
             name="Notes",
-            value="\n".join(f"• {note}" for note in result.notes[:_MAX_INIT_FIELD_ITEMS])[
-                :_MAX_INIT_FIELD_CHARS
-            ],
+            value=_format_bullet_list(result.notes),
             inline=False,
         )
     return embed
@@ -188,8 +210,7 @@ class ServerCog(
                     embed=_server_init_embed(result),
                     ephemeral=True,
                 )
-                rectification_embed = _server_init_rectification_embed(result)
-                if rectification_embed is not None:
+                for rectification_embed in _server_init_rectification_embeds(result):
                     await interaction.followup.send(
                         embed=rectification_embed,
                         ephemeral=True,

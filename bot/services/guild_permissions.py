@@ -677,19 +677,29 @@ async def sync_channel_permission_overwrites(
 ) -> None:
     """Apply channel overwrites via set_permissions.
 
-    Bulk ``channel.edit(overwrites=...)`` is unreliable when the channel still
-    inherits category permissions; unsync first, then set each overwrite.
+    Channels that already opted out of category sync keep stale overwrites until
+    they re-inherit the category. Refresh from the parent category first, then
+    apply the desired channel-specific overwrites.
     """
     if isinstance(channel, discord.CategoryChannel):
         msg = "sync_channel_permission_overwrites is for non-category channels"
         raise TypeError(msg)
 
     safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
-    payload = dict(edit_kwargs)
-    if getattr(channel, "permissions_synced", False):
-        payload["sync_permissions"] = False
-    if payload:
-        await channel.edit(reason=reason, **payload)  # type: ignore[attr-defined]
+    if edit_kwargs:
+        await channel.edit(reason=reason, **edit_kwargs)  # type: ignore[arg-type]
+
+    if channel.category_id is not None:
+        await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
+        await channel.edit(sync_permissions=False, reason=reason)  # type: ignore[attr-defined]
+    else:
+        await channel.edit(  # type: ignore[attr-defined]
+            overwrites=safe,
+            sync_permissions=False,
+            reason=reason,
+        )
+        return
+
     for target, overwrite in safe.items():
         if not isinstance(target, (discord.Role, discord.Member)):
             continue

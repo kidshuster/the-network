@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import discord
 import yaml
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
+
+_MAX_EMBED_FIELD_CHARS = 1024
 
 _CHANGELOG_PATH = Path(__file__).resolve().parent.parent / "changelog" / "releases.yaml"
 LAST_CHANGELOG_VERSION_KEY = "hub_changelog_last_version"
@@ -97,14 +99,38 @@ def pending_release_versions(
     return pending
 
 
-def build_changelog_embed(notes: ReleaseNotes) -> Any:
-    changes_value = "\n".join(f"• {item}" for item in notes.changes) or "See release notes."
-    return render_embed(
+def _chunk_bullet_lines(items: tuple[str, ...], *, prefix: str = "• ") -> list[str]:
+    chunks: list[str] = []
+    current = ""
+    for item in items:
+        line = f"{prefix}{item}\n"
+        if len(current) + len(line) > _MAX_EMBED_FIELD_CHARS:
+            if current:
+                chunks.append(current.rstrip())
+            if len(line) > _MAX_EMBED_FIELD_CHARS:
+                chunks.append(line[: _MAX_EMBED_FIELD_CHARS - 1].rstrip())
+                current = ""
+            else:
+                current = line
+        else:
+            current += line
+    if current:
+        chunks.append(current.rstrip())
+    return chunks or ["See release notes."]
+
+
+def build_changelog_embed(notes: ReleaseNotes) -> discord.Embed:
+    embed = render_embed(
         "changelog_release",
         version=notes.version,
         summary=notes.summary,
-        changes_value=changes_value,
+        changes_value="See release notes.",
     )
+    embed.clear_fields()
+    for index, chunk in enumerate(_chunk_bullet_lines(notes.changes)):
+        field_name = "What's new" if index == 0 else "What's new (cont.)"
+        embed.add_field(name=field_name, value=chunk, inline=False)
+    return embed
 
 
 async def sync_changelog_releases(

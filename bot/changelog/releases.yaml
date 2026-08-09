@@ -1,4 +1,10 @@
 releases:
+  "1.2.4":
+    summary: "Fix Leaders channel permission refresh and changelog embed limits."
+    changes:
+      - "Re-sync Leaders sub-channels from the category before applying channel overwrites."
+      - "Truncate server init rectification embeds to Discord field limits."
+      - "Split long changelog bullet lists across multiple embed fields."
   "1.2.3":
     summary: "Server init rectifies existing client permissions with a detailed report."
     changes:
