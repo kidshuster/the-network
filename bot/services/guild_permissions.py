@@ -125,12 +125,8 @@ def filter_configurable_overwrites(
         if isinstance(target, discord.Role):
             if _can_configure_role(bot_member, target):
                 filtered[target] = overwrite
-            elif (
-                for_channel
-                and not target.is_default()
-                and target.id == bot_member.top_role.id
-            ):
-                # Bot operator role — channel access uses a role overwrite (not the bot member).
+            elif not target.is_default() and target.id == bot_member.top_role.id:
+                # Operator role — always include so the bot keeps channel access.
                 filtered[target] = overwrite
             continue
         if isinstance(target, discord.Member):
@@ -707,11 +703,10 @@ async def sync_channel_permission_overwrites(
     reason: str,
     **edit_kwargs: object,
 ) -> None:
-    """Apply channel overwrites via set_permissions.
+    """Apply channel overwrites in one edit when possible.
 
-    Channels that already opted out of category sync keep stale overwrites until
-    they re-inherit the category. Refresh from the parent category first, then
-    apply the desired channel-specific overwrites.
+    Avoid toggling sync_permissions off without overwrites — copying category
+    member overwrites onto the channel triggers 50013 and can lock the bot out.
     """
     if isinstance(channel, discord.CategoryChannel):
         msg = "sync_channel_permission_overwrites is for non-category channels"
@@ -721,21 +716,21 @@ async def sync_channel_permission_overwrites(
     if edit_kwargs:
         await channel.edit(reason=reason, **edit_kwargs)  # type: ignore[arg-type]
 
-    if channel.category_id is not None:
-        await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
-        await channel.edit(sync_permissions=False, reason=reason)  # type: ignore[attr-defined]
-    else:
+    try:
         await channel.edit(  # type: ignore[attr-defined]
             overwrites=safe,
             sync_permissions=False,
             reason=reason,
         )
-        return
-
-    for target, overwrite in safe.items():
-        if not isinstance(target, (discord.Role, discord.Member)):
-            continue
-        await channel.set_permissions(target, overwrite=overwrite, reason=reason)
+    except discord.HTTPException:
+        if channel.category_id is None:
+            raise
+        await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
+        await channel.edit(  # type: ignore[attr-defined]
+            overwrites=safe,
+            sync_permissions=False,
+            reason=reason,
+        )
 
 
 async def create_text_channel_with_overwrites(
@@ -753,7 +748,7 @@ async def create_text_channel_with_overwrites(
     news: bool = False,
     sync_permissions: bool | None = None,
 ) -> discord.TextChannel:
-    """Create a text channel, then apply overwrites (required for restricted categories)."""
+    """Create a text channel with overwrites applied at creation time."""
     from bot.services.guild_notifications import ensure_guild_only_mention_notifications
 
     await ensure_guild_only_mention_notifications(
@@ -761,23 +756,22 @@ async def create_text_channel_with_overwrites(
         bot_member,
         reason=reason,
     )
-    kwargs: dict[str, object] = {"name": name, "reason": reason}
+    safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
+    kwargs: dict[str, object] = {
+        "name": name,
+        "reason": reason,
+        "overwrites": safe,
+        "sync_permissions": False,
+    }
     if category is not None:
         kwargs["category"] = category
     if topic is not None:
         kwargs["topic"] = topic
     if news:
         kwargs["news"] = True
-    if category is not None and sync_permissions is not None:
+    if sync_permissions is not None:
         kwargs["sync_permissions"] = sync_permissions
-    channel = await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
-    await sync_channel_permission_overwrites(
-        channel,
-        bot_member,
-        overwrites,
-        reason=reason,
-    )
-    return channel
+    return await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
 
 
 async def sync_partner_feed_channel_permissions(

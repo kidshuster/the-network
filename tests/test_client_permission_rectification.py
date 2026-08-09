@@ -112,7 +112,8 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
     assert "category" in result.synced
     assert any("#acme-profile" in item for item in result.synced)
     category.edit.assert_awaited_once()
-    profile.set_permissions.assert_awaited()
+    profile.edit.assert_awaited()
+    assert profile.edit.await_args.kwargs.get("sync_permissions") is False
 
 
 def test_guild_init_result_tracks_rectification_fields() -> None:

@@ -110,15 +110,13 @@ def resolve_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
 
 def resolve_changelog_channel(guild: discord.Guild) -> discord.TextChannel | None:
     leaders_category = resolve_leaders_category(guild)
-    if leaders_category is not None:
-        match = resolve_text_channel_in_category(
-            guild,
-            name=CHANNEL_CHANGELOG,
-            category_id=leaders_category.id,
-        )
-        if match is not None:
-            return match
-    return resolve_text_channel_in_category(guild, name=CHANNEL_CHANGELOG)
+    if leaders_category is None:
+        return None
+    return resolve_text_channel_in_category(
+        guild,
+        name=CHANNEL_CHANGELOG,
+        category_id=leaders_category.id,
+    )
 
 
 def resolve_join_requests_channel(guild: discord.Guild) -> discord.TextChannel | None:

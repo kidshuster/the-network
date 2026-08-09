@@ -24,17 +24,16 @@ def test_guild_init_syncs_leaders_for_all_client_roles() -> None:
     assert "ensure_leaders_channels" in source
 
 
-async def test_sync_channel_permission_overwrites_refreshes_from_category() -> None:
+async def test_sync_channel_permission_overwrites_applies_bulk_edit() -> None:
     channel = MagicMock(spec=discord.TextChannel)
     channel.category_id = 100
-    channel.permissions_synced = False
     channel.edit = AsyncMock()
-    channel.set_permissions = AsyncMock()
 
     bot_member = MagicMock(spec=discord.Member)
     bot_member.guild_permissions.manage_roles = True
     bot_member.top_role = MagicMock()
     bot_member.top_role.position = 10
+    bot_member.top_role.id = 50
 
     client_role = MagicMock(spec=discord.Role)
     client_role.id = 101
@@ -50,15 +49,49 @@ async def test_sync_channel_permission_overwrites_refreshes_from_category() -> N
         reason="test",
     )
 
-    assert channel.edit.await_count >= 2
-    edit_kwargs = [call.kwargs for call in channel.edit.await_args_list]
-    assert any(kwargs.get("sync_permissions") is True for kwargs in edit_kwargs)
-    assert any(kwargs.get("sync_permissions") is False for kwargs in edit_kwargs)
-    channel.set_permissions.assert_awaited_once_with(
-        client_role,
-        overwrite=overwrite,
+    channel.edit.assert_awaited_once_with(
+        overwrites={client_role: overwrite},
+        sync_permissions=False,
         reason="test",
     )
+
+
+async def test_sync_channel_permission_overwrites_refreshes_from_category_on_failure() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock(
+        side_effect=[
+            discord.HTTPException(MagicMock(), "Forbidden"),
+            None,
+            None,
+        ]
+    )
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+    bot_member.top_role.id = 50
+
+    client_role = MagicMock(spec=discord.Role)
+    client_role.id = 101
+    client_role.position = 1
+    client_role.is_default.return_value = False
+
+    overwrite = discord.PermissionOverwrite(view_channel=True)
+
+    await sync_channel_permission_overwrites(
+        channel,
+        bot_member,
+        {client_role: overwrite},
+        reason="test",
+    )
+
+    assert channel.edit.await_count == 3
+    edit_kwargs = [call.kwargs for call in channel.edit.await_args_list]
+    assert edit_kwargs[0]["overwrites"] == {client_role: overwrite}
+    assert edit_kwargs[1]["sync_permissions"] is True
+    assert edit_kwargs[2]["overwrites"] == {client_role: overwrite}
+    assert edit_kwargs[2]["sync_permissions"] is False
 
 
 async def test_grant_leaders_channel_access_sets_permissions_on_existing_channels() -> None:
@@ -189,15 +222,15 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
         guild_layout.resolve_human_moderator_role = originals["resolve_human_moderator_role"]
 
     leaders_targets = [
-        call.args[0]
-        for call in leaders.set_permissions.await_args_list
-        if call.args
-    ]
+        call.kwargs["overwrites"]
+        for call in leaders.edit.await_args_list
+        if call.kwargs.get("overwrites") is not None
+    ][-1]
     changelog_targets = [
-        call.args[0]
-        for call in changelog.set_permissions.await_args_list
-        if call.args
-    ]
+        call.kwargs["overwrites"]
+        for call in changelog.edit.await_args_list
+        if call.kwargs.get("overwrites") is not None
+    ][-1]
 
     assert existing_role in leaders_targets
     assert new_role in leaders_targets

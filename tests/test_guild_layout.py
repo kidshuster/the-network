@@ -5,11 +5,14 @@ from unittest.mock import MagicMock
 import discord
 
 from bot.services.guild_layout import (
+    CATEGORY_LEADERS,
     CATEGORY_NETWORK,
+    CHANNEL_CHANGELOG,
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_WELCOME_SINK,
     join_channel_name,
     resolve_bot_role,
+    resolve_changelog_channel,
     resolve_human_moderator_role,
     resolve_moderator_role,
     resolve_network_announcement_channel,
@@ -70,6 +73,26 @@ def test_resolve_welcome_sink_channel() -> None:
     other.name = "rules"
     guild.text_channels = [other, sink]
     assert resolve_welcome_sink_channel(guild) is sink
+
+
+def test_resolve_changelog_channel_only_in_leaders_category() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    leaders_category = MagicMock(spec=discord.CategoryChannel)
+    leaders_category.name = CATEGORY_LEADERS
+    leaders_category.id = 10
+
+    in_leaders = MagicMock(spec=discord.TextChannel)
+    in_leaders.name = CHANNEL_CHANGELOG
+    in_leaders.category_id = leaders_category.id
+
+    elsewhere = MagicMock(spec=discord.TextChannel)
+    elsewhere.name = CHANNEL_CHANGELOG
+    elsewhere.category_id = 99
+
+    guild.categories = [leaders_category]
+    guild.text_channels = [elsewhere, in_leaders]
+
+    assert resolve_changelog_channel(guild) is in_leaders
 
 
 def test_resolve_network_announcement_channel() -> None:

@@ -1,4 +1,10 @@
 releases:
+  "1.2.8":
+    summary: "Fix Leaders channel permission sync 50013 errors."
+    changes:
+      - "Apply channel overwrites in one edit instead of toggling category sync."
+      - "Create Leaders channels with overwrites at creation time."
+      - "Resolve #changelog only inside the Leaders category."
   "1.2.7":
     summary: "Fix Leaders changelog permission sync when operator is the bot's top role."
     changes:
