@@ -1,0 +1,156 @@
+kind: permission_presets
+presets:
+  bot_hub:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    manage_channels: true
+    manage_messages: true
+    manage_webhooks: true
+    manage_roles: true
+
+  everyone_hidden:
+    view_channel: false
+    send_messages: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false
+
+  everyone_hidden_category:
+    view_channel: false
+    send_messages: false
+    add_reactions: false
+
+  everyone_readonly:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false
+
+  everyone_readonly_category:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+    add_reactions: false
+
+  everyone_readonly_announcement:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+
+  everyone_hidden_announcement:
+    view_channel: false
+    send_messages: false
+
+  network_access:
+    view_channel: true
+    read_message_history: true
+    manage_webhooks: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+
+  network_access_feed:
+    view_channel: true
+    read_message_history: true
+    manage_webhooks: true
+    embed_links: true
+    attach_files: true
+    send_messages: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false
+
+  moderator_staff:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    manage_channels: true
+    manage_webhooks: true
+    manage_messages: true
+    create_public_threads: true
+    send_messages_in_threads: true
+
+  moderator_staff_category:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    manage_channels: true
+    manage_webhooks: true
+    manage_messages: true
+
+  moderator_staff_slash:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    manage_channels: true
+    manage_webhooks: true
+    manage_messages: true
+    use_application_commands: true
+
+  moderator_announcement:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    manage_channels: true
+    manage_webhooks: true
+    manage_messages: true
+
+  client_view:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false
+
+  client_view_category:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+    add_reactions: false
+
+  client_leader_talk:
+    view_channel: true
+    read_message_history: true
+    send_messages: true
+    embed_links: true
+    attach_files: true
+    add_reactions: true
+
+  client_changelog_readonly:
+    view_channel: true
+    read_message_history: true
+    send_messages: false
+    embed_links: false
+    attach_files: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false
+
+  partner_feed:
+    view_channel: true
+    read_message_history: true
+    manage_webhooks: true
+    send_messages: false
+    add_reactions: false
+    create_public_threads: false
+    create_private_threads: false
+    send_messages_in_threads: false

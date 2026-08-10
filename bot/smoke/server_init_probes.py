@@ -6,12 +6,13 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.clients.names import slugify_client_name
 from bot.config import Settings
-from bot.services.guild_init import initialize_guild
-from bot.services.guild_layout import (
+from bot.hub.init import initialize_guild
+from bot.hub.leaders import ensure_leaders_channels
+from bot.hub.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
-    CATEGORY_NETWORK,
     CHANNEL_CHANGELOG,
     CHANNEL_LEADERS,
     CHANNEL_MODERATOR_ONLY,
@@ -20,8 +21,10 @@ from bot.services.guild_layout import (
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.services.leaders_channel import ensure_leaders_channels
-from bot.services.network_provision import (
+from bot.layout import LayoutContext, compile_client, compile_hub
+from bot.layout.compiler import ResourceKind
+from bot.layout.managed import hub_category_names, preserved_channel_names
+from bot.networks.roles import (
     resolve_access_role,
     resolve_operator_role_by_name,
     validate_hub_permissions,
@@ -208,20 +211,125 @@ async def probe_moderator_only_channel(
     )
 
 
+def _hub_layout_context(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    settings: Settings,
+) -> LayoutContext:
+    access = resolve_access_role(guild, role_name=settings.network_access_role_name)
+    operator = resolve_operator_role_by_name(
+        guild,
+        role_name=settings.network_operator_role_name,
+    )
+    return LayoutContext(
+        guild=guild,
+        bot_member=bot_member,
+        access_role=access,
+        moderator_role=resolve_human_moderator_role(guild),
+        operator_role=operator,
+        reason=_PROBE_REASON,
+    )
+
+
+def _channel_by_name(guild: discord.Guild, name: str) -> discord.TextChannel | None:
+    target = name.casefold()
+    for channel in guild.text_channels:
+        if channel.name.casefold() == target:
+            return channel
+    return None
+
+
+def _overwrite_matches(
+    channel: discord.abc.GuildChannel,
+    role: discord.Role,
+    desired: discord.PermissionOverwrite,
+) -> bool:
+    current = channel.overwrites_for(role)
+    return (
+        current.pair()[0].value == desired.pair()[0].value
+        and current.pair()[1].value == desired.pair()[1].value
+    )
+
+
 async def probe_hub_layout(
     guild: discord.Guild,
+    bot_member: discord.Member | None = None,
+    settings: Settings | None = None,
 ) -> ProbeResult:
-    missing: list[str] = []
-    for category_name in (CATEGORY_MODERATION, CATEGORY_NETWORK, CATEGORY_LEADERS):
-        if not any(cat.name == category_name for cat in guild.categories):
-            missing.append(category_name)
-    if missing:
+    """Assert live hub categories/channels match YAML compile_hub output."""
+    expected_categories = hub_category_names()
+    missing_cats = [
+        name
+        for name in sorted(expected_categories)
+        if not any(cat.name.casefold() == name for cat in guild.categories)
+    ]
+    if missing_cats:
         return ProbeResult(
             "hub layout",
             False,
-            f"missing categories: {', '.join(missing)} — run `/server init` first",
+            f"missing categories: {', '.join(missing_cats)} — run `/server init` first",
         )
-    return ProbeResult("hub layout", True, "Moderation, Network, and Leaders categories present")
+
+    # Prefer compiled names when roles are available; fall back to YAML names.
+    channel_names: set[str] = set()
+    community_missing: list[str] = []
+    if bot_member is not None and settings is not None:
+        try:
+            ctx = _hub_layout_context(guild, bot_member, settings)
+            for resource in compile_hub(ctx):
+                if resource.kind is ResourceKind.CATEGORY:
+                    continue
+                channel_names.add(resource.name.casefold())
+                if resource.community_slot is not None:
+                    found = _channel_by_name(guild, resource.name)
+                    if found is None:
+                        for legacy in resource.legacy_names:
+                            found = _channel_by_name(guild, legacy)
+                            if found is not None:
+                                break
+                    if found is None:
+                        community_missing.append(resource.name)
+                    elif (
+                        resource.community_slot == "rules"
+                        and guild.rules_channel is not None
+                        and guild.rules_channel.id != found.id
+                    ):
+                        community_missing.append(
+                            f"{resource.name} (not bound as guild.rules_channel)"
+                        )
+        except Exception as exc:
+            return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
+    else:
+        from bot.layout.loader import load_hub_layout
+
+        for channel in load_hub_layout().channels:
+            channel_names.add(channel.name.casefold())
+
+    missing_channels = [
+        name for name in sorted(channel_names) if _channel_by_name(guild, name) is None
+    ]
+    # Allow legacy leaders name
+    if "leaders-channel" in missing_channels and _channel_by_name(guild, "leaders"):
+        missing_channels.remove("leaders-channel")
+
+    problems = [
+        *(f"category:{n}" for n in missing_cats),
+        *(f"channel:{n}" for n in missing_channels),
+        *(f"community:{n}" for n in community_missing),
+    ]
+    if problems:
+        return ProbeResult(
+            "hub layout",
+            False,
+            "missing YAML hub resources: " + ", ".join(problems[:8]),
+        )
+
+    preserved = preserved_channel_names()
+    detail = (
+        f"{len(expected_categories)} hub categories, {len(channel_names)} channels; "
+        f"preserved/community={', '.join(sorted(preserved)) or 'none'}"
+    )
+    return ProbeResult("hub layout", True, detail)
 
 
 async def probe_hub_announcements(
@@ -229,12 +337,12 @@ async def probe_hub_announcements(
     context: BotContext,
     settings: Settings,
 ) -> ProbeResult:
-    from bot.services.guild_layout import (
+    from bot.hub.announcements import is_hub_announcements_client
+    from bot.hub.resolve import (
         find_network_announcements_text_channel,
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )
-    from bot.services.hub_announcements import is_hub_announcements_client
 
     mod_category = resolve_moderation_category(guild)
     mod_channel = resolve_network_announcements_channel(guild)
@@ -427,6 +535,115 @@ async def probe_leaders_drift_resync(
         f"restored Leaders access for **{server_name}** on category, "
         f"#{CHANNEL_LEADERS}, and #{CHANNEL_CHANGELOG}",
     )
+
+
+async def probe_client_layout_reinit(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    bot: NetworkRelayBot,
+    context: BotContext,
+    settings: Settings,
+) -> ProbeResult:
+    """Strip client category/profile overwrites, reinit, assert compile_client match."""
+    clients = [
+        client
+        for client in await context.client_repo.list_all()
+        if client.guild_id == guild.id
+    ]
+    if not clients:
+        return ProbeResult(
+            "client layout reinit",
+            True,
+            "skipped — no registered clients",
+        )
+
+    client = clients[0]
+    client_role = guild.get_role(client.client_role_id)
+    category = guild.get_channel(client.category_id)
+    profile = guild.get_channel(client.profile_channel_id)
+    if client_role is None or not isinstance(category, discord.CategoryChannel):
+        return ProbeResult(
+            "client layout reinit",
+            False,
+            f"{client.server_name}: client role or category missing",
+        )
+    if not isinstance(profile, discord.TextChannel):
+        return ProbeResult(
+            "client layout reinit",
+            False,
+            f"{client.server_name}: profile channel missing",
+        )
+
+    access = resolve_access_role(guild, role_name=settings.network_access_role_name)
+    operator = resolve_operator_role_by_name(
+        guild,
+        role_name=settings.network_operator_role_name,
+    )
+    human_mod = resolve_human_moderator_role(guild)
+    layout_ctx = LayoutContext(
+        guild=guild,
+        bot_member=bot_member,
+        access_role=access,
+        moderator_role=human_mod,
+        operator_role=operator,
+        client_role=client_role,
+        server_name=client.server_name,
+        slug=slugify_client_name(client.server_name),
+        reason=_PROBE_REASON,
+    )
+    desired = {
+        resource.id: resource
+        for resource in compile_client(layout_ctx, channel_ids={"client", "profile"})
+    }
+
+    async with guild_test_resource_guard(guild, bot_member=bot_member):
+        await _strip_role_overwrite(category, client_role)
+        await _strip_role_overwrite(profile, client_role)
+
+        view_registry = PersistentViewRegistry(bot)
+        result = await initialize_guild(
+            guild,
+            bot_member,
+            access_role_name=settings.network_access_role_name,
+            operator_role_name=settings.network_operator_role_name,
+            clients=await context.client_repo.list_all(),
+            bot=bot,
+            context=context,
+            skip_join_smoke=True,
+            view_registry=view_registry,
+        )
+        if not result.success:
+            return ProbeResult(
+                "client layout reinit",
+                False,
+                result.reason or "initialize_guild failed",
+            )
+
+        mismatches: list[str] = []
+        cat_desired = desired["client"].overwrites.get(client_role)
+        if cat_desired is not None and not _overwrite_matches(
+            category, client_role, cat_desired
+        ):
+            mismatches.append("category client overwrite")
+        profile_desired = desired["profile"].overwrites.get(client_role)
+        if profile_desired is not None and not _overwrite_matches(
+            profile, client_role, profile_desired
+        ):
+            mismatches.append("profile client overwrite")
+
+        gaps = await _collect_leaders_access_gaps(guild, context)
+        client_gaps = [g for g in gaps if g.startswith(f"{client.server_name}:")]
+        if mismatches or client_gaps:
+            return ProbeResult(
+                "client layout reinit",
+                False,
+                "; ".join([*mismatches, *client_gaps[:3]]),
+            )
+        return ProbeResult(
+            "client layout reinit",
+            True,
+            f"restored compile_client overwrites + Leaders for **{client.server_name}**",
+        )
 
 
 async def probe_reinit_rectifies_clients(
@@ -675,7 +892,7 @@ async def run_server_init_audit(
     report.add(await probe_pre_init_smoke(guild, bot_member, settings))
     report.add(await probe_manage_server_permission(guild, bot_member))
     report.add(await probe_moderator_only_channel(guild, bot_member))
-    report.add(await probe_hub_layout(guild))
+    report.add(await probe_hub_layout(guild, bot_member, settings))
     report.add(await probe_hub_announcements(guild, context, settings))
     report.add(await probe_leaders_access_current(guild, context))
     return report
@@ -695,12 +912,21 @@ async def run_server_init_stress_probes(
     report.add(await probe_pre_init_smoke(guild, bot_member, settings))
     report.add(await probe_manage_server_permission(guild, bot_member))
     report.add(await probe_moderator_only_channel(guild, bot_member))
-    report.add(await probe_hub_layout(guild))
+    report.add(await probe_hub_layout(guild, bot_member, settings))
     report.add(await probe_hub_announcements(guild, context, settings))
     report.add(await probe_leaders_drift_resync(guild, bot_member, context, settings))
     if include_reinit:
         report.add(
             await probe_reinit_rectifies_clients(
+                guild,
+                bot_member,
+                bot,
+                context,
+                settings,
+            )
+        )
+        report.add(
+            await probe_client_layout_reinit(
                 guild,
                 bot_member,
                 bot,

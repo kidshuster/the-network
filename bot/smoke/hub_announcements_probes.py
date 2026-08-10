@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.services.guild_layout import resolve_network_announcements_channel
-from bot.services.hub_announcements import (
+from bot.hub.announcements import (
     dispatch_hub_announcement,
     ensure_hub_announcements_client,
     inject_hub_announcement,
 )
-from bot.services.permission_probe import PROBE_PNG
-from bot.services.server_request_service import ServerRequestService
+from bot.hub.resolve import resolve_network_announcements_channel
+from bot.onboarding.server_requests import ServerRequestService
+from bot.permissions.probe import PROBE_PNG
 from bot.smoke.provision_flow import (
     _SmokeProfileAttachment,
     cleanup_smoke_client,
@@ -89,7 +89,7 @@ async def _provision_smoke_subscriber(
     if not approve.success:
         raise RuntimeError(f"Smoke subscriber accept failed: {approve.message}")
 
-    from bot.services.client_subscription import ClientSubscriptionService
+    from bot.clients.subscription import ClientSubscriptionService
 
     client = await context.client_repo.get_by_server_name(guild.id, server_name)
     if client is None:
@@ -212,7 +212,7 @@ async def run_hub_announcements_smoke_flow(
 
         mod_channel = resolve_network_announcements_channel(guild)
         if mod_channel is None:
-            from bot.services.guild_layout import find_network_announcements_text_channel
+            from bot.hub.resolve import find_network_announcements_text_channel
 
             legacy = find_network_announcements_text_channel(
                 guild,

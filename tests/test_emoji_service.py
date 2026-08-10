@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.services.emoji_service import (
+from bot.media.emoji import (
     EmojiService,
     EmojiSyncTarget,
     build_emoji_name,

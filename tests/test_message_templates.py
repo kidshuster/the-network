@@ -12,8 +12,8 @@ from bot.messages import (
     render_text,
     validate_all_templates,
 )
-from bot.services.join_requests_sticky import HOW_TO_JOIN_VERSION
-from bot.services.rules_sticky import RULES_STICKY_VERSION
+from bot.stickies.join_requests_sticky import HOW_TO_JOIN_VERSION
+from bot.stickies.rules_sticky import RULES_STICKY_VERSION
 
 _MESSAGES_DIR = Path(__file__).resolve().parents[1] / "bot" / "messages"
 

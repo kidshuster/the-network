@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
+from bot.bot_settings import BotSettingsService
 from bot.config import Settings
 from bot.constants import SETTING_PROFILE_FORUM_CHANNEL_ID
 from bot.db.repositories import SettingsRepository
-from bot.services.bot_settings import BotSettingsService
 
 
 @pytest.mark.asyncio

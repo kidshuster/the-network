@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.services.network_admin_sticky import sync_network_admin_sticky
+from bot.stickies.network_admin_sticky import sync_network_admin_sticky
 
 
 @pytest.mark.asyncio
@@ -14,7 +14,7 @@ async def test_sync_network_admin_sticky_wipes_before_post(
 ) -> None:
     wipe = AsyncMock(return_value=(3, None))
     monkeypatch.setattr(
-        "bot.services.discord_cleanup.wipe_text_channel",
+        "bot.discord_util.cleanup.wipe_text_channel",
         wipe,
     )
 

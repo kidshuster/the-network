@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from bot.services.date_parser import replace_dates
+from bot.parsers.date_parser import replace_dates
 
 TIMECODE = re.compile(r"<t:\d+>")
 

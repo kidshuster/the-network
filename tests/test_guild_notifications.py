@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import discord
 import pytest
 
-from bot.services.guild_notifications import (
+from bot.hub.notifications import (
     count_hub_guild_channels,
     ensure_guild_only_mention_notifications,
     sync_guild_notification_policy,

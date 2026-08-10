@@ -8,7 +8,7 @@ from context_helpers import make_test_context
 
 from bot.config import Settings
 from bot.domain.client import Client
-from bot.services.hub_announcements import (
+from bot.hub.announcements import (
     can_post_hub_announcement,
     dispatch_hub_announcement,
     is_hub_announcements_client,
@@ -110,10 +110,10 @@ async def test_relay_skips_hub_announcements_subscribe_destination(
     db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from bot.clients.cache import ClientCache
     from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
-    from bot.services.client_cache import ClientCache
-    from bot.services.relay_service import RelayService
-    from bot.services.routing_service import RoutingService
+    from bot.networks.routing import RoutingService
+    from bot.relay.service import RelayService
 
     settings = _settings(monkeypatch)
     network_repo = NetworkRepository(db)
@@ -369,7 +369,7 @@ async def test_dispatch_hub_announcement_relays_to_target_network(
     injected = MagicMock(spec=discord.Message)
     injected.id = 9001
     monkeypatch.setattr(
-        "bot.services.hub_announcements.inject_hub_announcement",
+        "bot.hub.announcements.inject_hub_announcement",
         AsyncMock(return_value=injected),
     )
     context.relay_service.relay_message = AsyncMock(return_value=MagicMock(success=True))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bot.cogs.servers import _format_bullet_list, _server_init_rectification_embed
-from bot.services.guild_init import GuildInitResult
+from bot.hub.init import GuildInitResult
 
 
 def test_server_init_rectification_embed_lists_work_done() -> None:
@@ -31,7 +31,7 @@ def test_server_init_rectification_embed_when_no_clients() -> None:
 
 
 def test_build_changelog_embed_splits_long_change_lists() -> None:
-    from bot.services.changelog import ReleaseNotes, build_changelog_embed
+    from bot.hub.changelog import ReleaseNotes, build_changelog_embed
 
     changes = tuple(f"Change item {index} with extra detail" for index in range(80))
     notes = ReleaseNotes(version="9.9.9", summary="Big release", changes=changes)

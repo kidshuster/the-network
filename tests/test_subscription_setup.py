@@ -9,12 +9,12 @@ from view_registry_helpers import make_test_view_registry
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
-from bot.services.subscription_setup import (
+from bot.stickies.subscription_setup import (
     SubscriptionSetupState,
     derive_network_link_status,
     is_publish_configured,
 )
-from bot.services.subscription_setup_sticky import (
+from bot.stickies.subscription_setup_sticky import (
     _broadcast_network_member_welcome,
     _find_setup_sticky_by_scan,
     _maybe_post_activation_welcome,

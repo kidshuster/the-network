@@ -6,7 +6,7 @@ import pytest
 from discord_helpers import make_bot_member, make_role
 
 from bot.domain.errors import NetworkValidationError
-from bot.services.network_provision import validate_operator_setup
+from bot.networks.roles import validate_operator_setup
 
 
 def _operator_bot() -> tuple[MagicMock, MagicMock, MagicMock]:

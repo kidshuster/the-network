@@ -50,6 +50,10 @@ windows (minutes to hours).
 
 **Prevention (built in):**
 
+- **Pre-flight quota check** before live smoke (`bin/smoke_check_quota.sh`) — probes
+  the same Discord buckets smoke uses (role create, category create, in-category
+  channel create) and reads `X-RateLimit-*` / `retry_after` headers. Fails fast if
+  buckets are exhausted.
 - Pacing between probe phases and role creates (`bot/smoke/pacing.py`)
 - Pauses between smoke steps in `bin/smoke_testwork.sh`
 - Fast-fail on 429 via `max_ratelimit_timeout` on smoke Discord clients
@@ -62,8 +66,18 @@ windows (minutes to hours).
 | `SMOKE_DUPLICATE_PROBE_DELAY_SEC` | 15 | Extra pause after probe-only before join E2E |
 | `SMOKE_PROBE_PHASE_DELAY_SEC` | 2 | Operator probe → provision probe |
 | `SMOKE_ROLE_CREATE_DELAY_SEC` | 1.5 | Before each probe `create_role` |
+| `SMOKE_MAX_RETRY_AFTER_SEC` | 30 | Quota check fails if 429 `retry_after` exceeds this |
+| `SMOKE_MIN_RATE_LIMIT_REMAINING` | 1 | Quota check fails if remaining requests drop below this |
 
-Set any to `0` to disable. Increase if you still see `RateLimited` errors.
+Set any to `0` to disable pacing delays. Increase pacing if you still see
+`RateLimited` errors during smoke.
+
+**Check quota manually:**
+
+```bash
+bin/smoke_check_quota.sh          # exit 0 = ready, 1 = wait or use staging guild
+./test --full --skip-quota-check  # emergency override (not recommended)
+```
 
 **If smoke fails with rate limits:** wait for the reported `retry_after`, or use a
 fresh staging guild. `./test --dev` always works offline.
@@ -72,15 +86,16 @@ fresh staging guild. `./test --dev` always works offline.
 
 `bin/smoke_testwork.sh` (see script for details):
 
-1. Artifact cleanup
-2. Button/command parity
-3. Pre-init provision probe (`--probe-only`)
-4. Join-approval E2E
-5. Setup welcome smoke
-6. Hub announcements smoke
-7. Hub rebuild smoke
-8. Server init stress probes
-9. Teardown (removes smoke clients and Discord artifacts)
+1. Discord rate-limit quota check
+2. Artifact cleanup
+3. Button/command parity
+4. Pre-init provision probe (`--probe-only`)
+5. Join-approval E2E
+6. Setup welcome smoke
+7. Hub announcements smoke
+8. Hub rebuild smoke (uninit preserves clients; re-init restores YAML layout overwrites)
+9. Server init stress probes (YAML hub layout, client overwrite reinit, Leaders retention)
+10. Teardown (removes smoke clients and Discord artifacts)
 
 ## pytest vs live
 
@@ -89,5 +104,5 @@ fresh staging guild. `./test --dev` always works offline.
 | Unit / integration | `pytest` | Mocked |
 | Live probes | `bin/smoke_*.sh` | Real API |
 
-494+ pytest tests cover business logic; live smoke verifies permissions, provisioning,
-and hub layout against Discord’s actual behavior.
+pytest covers `bot.layout` compile/apply + PermissionService filters; live smoke
+verifies YAML hub/client layout and permission retention against Discord’s actual behavior.

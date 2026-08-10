@@ -10,7 +10,7 @@ from interaction_helpers import make_interaction, make_member
 from bot.cogs._responses import defer_ephemeral
 from bot.domain.client import Client
 from bot.messages import render_text
-from bot.services.sticky_sync import embed_content_signature, sticky_channel_embed_permission_error
+from bot.stickies.sync import embed_content_signature, sticky_channel_embed_permission_error
 from bot.ui._auth import MembershipPolicy, ensure_client_access, validate_hub_modal_context
 
 

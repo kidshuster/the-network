@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 import discord
 
 from bot.domain.network import Network
-from bot.services.guild_layout import (
+from bot.hub.resolve import (
     join_channel_name,
     resolve_join_requests_channel,
     resolve_network_hub_category,
     resolve_network_join_channel,
 )
-from bot.services.rules_sticky import (
+from bot.stickies.rules_sticky import (
     RULES_FOOTER,
     RULES_STICKY_SETTINGS_KEY,
     build_rules_embed,

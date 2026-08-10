@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.services.guild_layout import (
+from bot.hub.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,

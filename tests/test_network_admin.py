@@ -8,8 +8,8 @@ from view_registry_helpers import make_test_view_registry
 
 from bot.domain.errors import NetworkValidationError
 from bot.domain.network import Network
-from bot.services.network_admin import create_network, delete_network
-from bot.services.network_admin_sticky import build_network_admin_embed
+from bot.networks.admin import create_network, delete_network
+from bot.stickies.network_admin_sticky import build_network_admin_embed
 
 
 def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
@@ -55,7 +55,7 @@ def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    import bot.services.client_subscription as client_subscription
+    import bot.clients.subscription as client_subscription
 
     context = _mock_context()
     context.client_repo.list_all = AsyncMock(return_value=[])
@@ -65,7 +65,7 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
     guild.id = 100
     guild.me = MagicMock()
     monkeypatch.setattr(
-        "bot.services.client_profile_sync.refresh_all_client_profiles",
+        "bot.clients.profile_sync.refresh_all_client_profiles",
         AsyncMock(return_value=2),
     )
     monkeypatch.setattr(
@@ -74,7 +74,7 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
         AsyncMock(return_value=0),
     )
     monkeypatch.setattr(
-        "bot.services.hub_announcements.ensure_hub_announcements_subscription",
+        "bot.hub.announcements.ensure_hub_announcements_subscription",
         AsyncMock(return_value=False),
     )
 
@@ -146,7 +146,7 @@ async def test_delete_network_hard_deletes_and_detaches(
     bot = MagicMock()
     guild = MagicMock(spec=discord.Guild)
     monkeypatch.setattr(
-        "bot.services.client_profile_sync.refresh_all_client_profiles",
+        "bot.clients.profile_sync.refresh_all_client_profiles",
         AsyncMock(return_value=1),
     )
 

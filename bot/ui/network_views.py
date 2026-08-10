@@ -129,8 +129,8 @@ class NetworkProfileView(discord.ui.View):
             await response.send_text("bot_member_unavailable_brief")
             return
 
-        from bot.services.client_subscription import ClientSubscriptionService
-        from bot.services.subscription_setup_sticky import sync_subscription_setup
+        from bot.clients.subscription import ClientSubscriptionService
+        from bot.stickies.subscription_setup_sticky import sync_subscription_setup
 
         service = ClientSubscriptionService()
         result = await service.subscribe_client(
@@ -168,7 +168,7 @@ class NetworkProfileView(discord.ui.View):
                 view_registry=view_registry,
             )
         else:
-            from bot.services.client_profile_sync import refresh_client_profile_message
+            from bot.clients.profile_sync import refresh_client_profile_message
 
             await refresh_client_profile_message(
                 self._bot,
@@ -222,7 +222,7 @@ class NetworkProfileView(discord.ui.View):
         )
         await context.client_cache.load_cache()
 
-        from bot.services.client_profile_sync import refresh_client_profile_message
+        from bot.clients.profile_sync import refresh_client_profile_message
 
         await refresh_client_profile_message(
             self._bot,
@@ -331,7 +331,7 @@ async def handle_subscribe_connected(
         await response.send_text("network_not_found", network_key=network_key)
         return
 
-    from bot.services.subscription_setup_sticky import sync_subscription_setup
+    from bot.stickies.subscription_setup_sticky import sync_subscription_setup
 
     view_registry = PersistentViewRegistry(bot)
     subscription = await context.client_repo.set_subscribe_confirmed(
@@ -492,8 +492,8 @@ class SubscriptionModerationView(discord.ui.View):
             await response.send_text("bot_member_unavailable_brief")
             return
 
-        from bot.services.client_profile_sync import refresh_client_profile_message
-        from bot.services.client_subscription import ClientSubscriptionService
+        from bot.clients.profile_sync import refresh_client_profile_message
+        from bot.clients.subscription import ClientSubscriptionService
 
         service = ClientSubscriptionService()
         result = await service.unsubscribe_client(

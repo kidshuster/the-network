@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from bot.bot_settings import BotSettingsService
+    from bot.clients.cache import ClientCache
     from bot.config import Settings
     from bot.db.connection import Database
     from bot.db.repositories import (
@@ -14,10 +16,8 @@ if TYPE_CHECKING:
         ServerRequestRepository,
         SettingsRepository,
     )
-    from bot.services.bot_settings import BotSettingsService
-    from bot.services.client_cache import ClientCache
-    from bot.services.relay_service import RelayService
-    from bot.services.routing_service import RoutingService
+    from bot.networks.routing import RoutingService
+    from bot.relay.service import RelayService
 
 
 @dataclass
@@ -74,7 +74,7 @@ class BotContext:
 
     async def refresh_client_counts(self) -> None:
         await self.client_cache.load_cache()
-        from bot.services.hub_announcements import is_hub_announcements_client
+        from bot.hub.announcements import is_hub_announcements_client
 
         clients = await self.client_repo.list_all()
         visible = [

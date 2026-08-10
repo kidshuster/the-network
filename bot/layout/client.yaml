@@ -1,0 +1,70 @@
+kind: client_layout
+managed: client
+category:
+  name: "{server_name}"
+  overwrites:
+    - role: everyone
+      preset: everyone_hidden_category
+    - role: client
+      scope: this_client
+      preset: client_view_category
+    - role: access
+      preset: network_access
+    - role: moderator
+      preset: moderator_staff_category
+    - role: bot
+      preset: bot_hub
+
+channels:
+  - id: profile
+    name: "{slug}-profile"
+    category: client
+    type: text
+    topic: "Profile and network subscriptions for {server_name}"
+    when: always
+    position: 0
+    overwrites:
+      - role: everyone
+        preset: everyone_hidden
+      - role: client
+        scope: this_client
+        preset: client_view
+      - role: access
+        preset: network_access
+      - role: moderator
+        preset: moderator_staff
+
+  - id: publish
+    name: "{slug}-{network_key}-publish"
+    category: client
+    type: text
+    topic: "Publish channel for network {network_key}"
+    when: subscribed
+    position: 10
+    overwrites:
+      - role: everyone
+        preset: everyone_hidden
+      - role: client
+        scope: this_client
+        preset: partner_feed
+      - role: access
+        preset: network_access_feed
+      - role: moderator
+        preset: moderator_staff
+
+  - id: subscribe
+    name: "{slug}-{network_key}-subscribe"
+    category: client
+    type: announcement
+    when: subscribed
+    position: 11
+    overwrites:
+      - role: everyone
+        preset: everyone_hidden
+      - role: client
+        scope: this_client
+        preset: client_view
+      - role: access
+        preset: network_access
+      - role: moderator
+        preset: moderator_staff

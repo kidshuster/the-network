@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
-from bot.services.subscription_setup import SubscriptionSetupState
+from bot.stickies.subscription_setup import SubscriptionSetupState
 
 if TYPE_CHECKING:
     import discord

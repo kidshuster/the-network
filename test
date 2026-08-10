@@ -6,18 +6,20 @@ cd "$ROOT"
 
 MODE=""
 SMOKE_RESTART=0
+SKIP_QUOTA_CHECK=0
 
 usage() {
   cat <<'EOF'
-Usage: ./test [--dev | --full] [--smoke-restart]
+Usage: ./test [--dev | --full] [--smoke-restart] [--skip-quota-check]
 
 Modes:
   --dev           Local only — ruff, mypy, pytest (default; ~1 minute)
   --full          --dev, then live Testwork smoke suite (~15–30 minutes)
 
 Options:
-  --smoke-restart After live smoke, restart the bot (default: leave stopped)
-  -h, --help      Show this help
+  --smoke-restart     After live smoke, restart the bot (default: leave stopped)
+  --skip-quota-check  Skip Discord rate-limit pre-flight (not recommended)
+  -h, --help          Show this help
 
 Live smoke uses the guild in .env. Stop the running bot first (one gateway
 session per token). For aggressive probe runs, use a burn-in guild:
@@ -40,6 +42,7 @@ for arg in "$@"; do
     --dev) MODE="dev" ;;
     --full) MODE="full" ;;
     --smoke-restart) SMOKE_RESTART=1 ;;
+    --skip-quota-check) SKIP_QUOTA_CHECK=1 ;;
     -h|--help)
       usage
       exit 0
@@ -98,6 +101,9 @@ run_full_smoke() {
   smoke_args=(--no-restart)
   if [[ "$SMOKE_RESTART" -eq 1 ]]; then
     smoke_args=()
+  fi
+  if [[ "$SKIP_QUOTA_CHECK" -eq 1 ]]; then
+    smoke_args+=(--skip-quota-check)
   fi
   bin/smoke_testwork.sh "${smoke_args[@]}"
 

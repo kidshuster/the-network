@@ -24,7 +24,7 @@ class RelayCog(commands.Cog):
             return
         if not isinstance(channel, discord.TextChannel):
             return
-        from bot.services.subscription_setup_sticky import (
+        from bot.stickies.subscription_setup_sticky import (
             sync_subscription_setup_by_publish_channel,
         )
         from bot.ui.persistent_views import PersistentViewRegistry
@@ -49,7 +49,7 @@ class RelayCog(commands.Cog):
         if context is None:
             return
 
-        from bot.services.hub_announcements import handle_network_announcements_message
+        from bot.hub.announcements import handle_network_announcements_message
 
         if message.guild is not None and message.guild.id == self.bot.settings.guild_id:
             await handle_network_announcements_message(self.bot, message)

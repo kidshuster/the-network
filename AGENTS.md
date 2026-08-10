@@ -13,15 +13,26 @@ Discord bot that relays followed announcement messages through a central server.
 
 ```
 bot/
-  cogs/       Slash commands and event handlers
-  services/   Business logic (relay, provisioning, guild init, etc.)
-  domain/     Dataclasses and domain types
-  db/         Models, repositories, migrations
-  ui/         Discord views, buttons, modals
-  messages/   YAML-driven message templates
-tests/        pytest + pytest-asyncio (mock Discord objects)
-deploy/       Production deploy docs and scripts
-doc/          Design spec and planning (reference only)
+  cogs/          Slash commands and event handlers
+  layout/        YAML layout compile/apply (hub + client)
+  permissions/   Discord permission I/O + probe helpers
+  hub/           Guild/hub lifecycle and hub-only features
+  clients/       Client lifecycle, profiles, subscriptions
+  networks/      Network CRUD, routing, role validation
+  relay/         Announcement relay pipeline
+  stickies/      Sticky message sync helpers
+  onboarding/    Join-request / accept flow
+  discord_util/  Low-level Discord helpers (cleanup, errors, steps)
+  media/         Emoji + image helpers
+  parsers/       Profile and date parsers
+  integrations/  Third-party integrations (e.g. Top.gg)
+  domain/        Dataclasses and domain types
+  db/            Models, repositories, migrations
+  ui/            Discord views, buttons, modals
+  messages/      YAML-driven message templates
+tests/           pytest + pytest-asyncio (mock Discord objects)
+deploy/          Production deploy docs and scripts
+doc/             Design spec and planning (reference only)
 ```
 
 ## Commands
@@ -42,7 +53,7 @@ See `docs/smoke-testing.md` for staging guild setup and smoke pacing.
 ## Conventions
 
 - Use `from __future__ import annotations` in all modules.
-- Keep Discord I/O in cogs/ui; put logic in services; keep pure types in domain.
+- Keep Discord I/O in cogs/ui; put logic in domain packages (`hub/`, `clients/`, `relay/`, etc.); keep pure types in domain.
 - Settings live in `bot/config.py` — add new env vars there with pydantic Field aliases.
 - Database changes need a migration in `bot/db/migrations.py`.
 - Message copy lives in YAML under `bot/messages/` — avoid hardcoding user-facing strings in Python.

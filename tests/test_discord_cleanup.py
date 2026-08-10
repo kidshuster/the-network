@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.services.discord_cleanup import wipe_text_channel
+from bot.discord_util.cleanup import wipe_text_channel
 
 
 @pytest.mark.asyncio

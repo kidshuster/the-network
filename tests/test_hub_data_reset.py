@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from context_helpers import make_test_context
 
-from bot.services.hub_data_reset import reset_hub_layout_data
-from bot.services.join_requests_sticky import HOW_TO_JOIN_SETTINGS_KEY
-from bot.services.network_admin_sticky import NETWORK_ADMIN_SETTINGS_KEY
+from bot.hub.data_reset import reset_hub_layout_data
+from bot.stickies.join_requests_sticky import HOW_TO_JOIN_SETTINGS_KEY
+from bot.stickies.network_admin_sticky import NETWORK_ADMIN_SETTINGS_KEY
 
 
 @pytest.mark.asyncio

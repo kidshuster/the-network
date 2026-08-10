@@ -9,12 +9,14 @@ source "$ROOT/.venv/bin/activate"
 export PYTHONUNBUFFERED=1
 
 RESTART_BOT=1
+SKIP_QUOTA_CHECK=0
 for arg in "$@"; do
   case "$arg" in
     --no-restart) RESTART_BOT=0 ;;
+    --skip-quota-check) SKIP_QUOTA_CHECK=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: bin/smoke_testwork.sh [--no-restart]
+Usage: bin/smoke_testwork.sh [--no-restart] [--skip-quota-check]
 
 Runs the full live smoke/stress suite against the guild in .env (Testwork staging).
 
@@ -38,6 +40,8 @@ Environment (optional):
   SMOKE_DUPLICATE_PROBE_DELAY_SEC Extra pause after probe-only before E2E (default: 15)
   SMOKE_PROBE_PHASE_DELAY_SEC     Pause between operator/provision probes (default: 2)
   SMOKE_ROLE_CREATE_DELAY_SEC     Pause before each probe role create (default: 1.5)
+  SMOKE_MAX_RETRY_AFTER_SEC       Max 429 retry_after to start smoke (default: 30)
+  SMOKE_MIN_RATE_LIMIT_REMAINING  Min bucket remaining after probe POST (default: 1)
 EOF
       exit 0
       ;;
@@ -64,6 +68,10 @@ run_step() {
   echo "Waiting ${delay}s before next step (SMOKE_STEP_DELAY_SEC)..."
   sleep "$delay"
 }
+
+if [[ "$SKIP_QUOTA_CHECK" -eq 0 ]]; then
+  run_step "Discord rate-limit quota check" "$ROOT/bin/smoke_check_quota.sh"
+fi
 
 run_step "pre-flight artifact cleanup" "$ROOT/bin/smoke_cleanup_artifacts.sh"
 

@@ -71,11 +71,11 @@ async def test_subscribe_button_success_renders_subscribe_success_embed(
 
     subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
     monkeypatch.setattr(
-        "bot.services.client_subscription.ClientSubscriptionService.subscribe_client",
+        "bot.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.services.subscription_setup_sticky.sync_subscription_setup",
+        "bot.stickies.subscription_setup_sticky.sync_subscription_setup",
         AsyncMock(),
     )
 
@@ -175,7 +175,7 @@ async def test_subscribe_button_renders_failure_embed(
         error="Discord API error: Missing Permissions",
     )
     monkeypatch.setattr(
-        "bot.services.client_subscription.ClientSubscriptionService.subscribe_client",
+        "bot.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
 
@@ -274,11 +274,11 @@ async def test_subscribe_button_allows_manage_guild_without_client_role(
 
     subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
     monkeypatch.setattr(
-        "bot.services.client_subscription.ClientSubscriptionService.subscribe_client",
+        "bot.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.services.subscription_setup_sticky.sync_subscription_setup",
+        "bot.stickies.subscription_setup_sticky.sync_subscription_setup",
         AsyncMock(),
     )
 
@@ -430,7 +430,7 @@ async def test_leave_network_renders_failure_embed(
 
     unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
     monkeypatch.setattr(
-        "bot.services.client_subscription.ClientSubscriptionService.unsubscribe_client",
+        "bot.clients.subscription.ClientSubscriptionService.unsubscribe_client",
         AsyncMock(return_value=unsubscribe_result),
     )
 

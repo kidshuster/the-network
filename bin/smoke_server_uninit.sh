@@ -18,7 +18,7 @@ load_dotenv(Path(".env"))
 
 from bot.config import Settings
 from bot.smoke.discord_client import create_smoke_discord_client
-from bot.services.guild_uninit import uninitialize_guild
+from bot.hub.uninit import uninitialize_guild
 
 
 async def main() -> None:

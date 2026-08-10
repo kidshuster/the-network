@@ -10,7 +10,7 @@ from request_helpers import make_server_request
 from view_registry_helpers import make_test_view_registry
 
 from bot.domain.server_request import ServerRequestStatus
-from bot.services.server_request_service import ServerRequestService
+from bot.onboarding.server_requests import ServerRequestService
 
 
 def _service_context(**repo_methods: object) -> SimpleNamespace:
@@ -110,7 +110,7 @@ async def test_approve_request_provisions_client_on_success(
     )
 
     monkeypatch.setattr(
-        "bot.services.server_request_service._load_request_profile_image",
+        "bot.onboarding.server_requests._load_request_profile_image",
         AsyncMock(return_value=MagicMock(data=b"png")),
     )
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ async def test_approve_request_provisions_client_on_success(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.services.leaders_channel.grant_leaders_channel_access",
+        "bot.hub.leaders.grant_leaders_channel_access",
         AsyncMock(),
     )
 
@@ -174,7 +174,7 @@ async def test_approve_request_grants_leaders_access_for_provisioned_role(
     grant_mock = AsyncMock(return_value=MagicMock(failures=[]))
 
     monkeypatch.setattr(
-        "bot.services.server_request_service._load_request_profile_image",
+        "bot.onboarding.server_requests._load_request_profile_image",
         AsyncMock(return_value=MagicMock(data=b"png")),
     )
     monkeypatch.setattr(
@@ -193,7 +193,7 @@ async def test_approve_request_grants_leaders_access_for_provisioned_role(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.services.leaders_channel.grant_leaders_channel_access",
+        "bot.hub.leaders.grant_leaders_channel_access",
         grant_mock,
     )
 
@@ -240,7 +240,7 @@ async def test_approve_request_surfaces_leaders_sync_failures_in_message(
     )
 
     monkeypatch.setattr(
-        "bot.services.server_request_service._load_request_profile_image",
+        "bot.onboarding.server_requests._load_request_profile_image",
         AsyncMock(return_value=MagicMock(data=b"png")),
     )
     monkeypatch.setattr(
@@ -259,7 +259,7 @@ async def test_approve_request_surfaces_leaders_sync_failures_in_message(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.services.leaders_channel.grant_leaders_channel_access",
+        "bot.hub.leaders.grant_leaders_channel_access",
         AsyncMock(
             return_value=MagicMock(
                 failures=["Leaders category not found — run `/server init` first"],
@@ -298,7 +298,7 @@ async def test_approve_request_surfaces_provisioning_failure(
     )
 
     monkeypatch.setattr(
-        "bot.services.server_request_service._load_request_profile_image",
+        "bot.onboarding.server_requests._load_request_profile_image",
         AsyncMock(return_value=MagicMock(data=b"png")),
     )
     monkeypatch.setattr(

@@ -5,13 +5,13 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.clients.cache import ClientCache
 from bot.config import Settings
 from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
-from bot.services.client_cache import ClientCache
-from bot.services.relay_service import RelayService
-from bot.services.routing_service import RoutingService
+from bot.networks.routing import RoutingService
+from bot.relay.service import RelayService
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch) -> Settings:

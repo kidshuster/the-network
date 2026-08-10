@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
+from bot.bot_settings import BotSettingsService
+from bot.clients.cache import ClientCache
 from bot.context import BotContext
 from bot.db import migrations
 from bot.db.connection import Database
@@ -17,11 +19,9 @@ from bot.db.repositories import (
     ServerRequestRepository,
     SettingsRepository,
 )
-from bot.services.bot_settings import BotSettingsService
-from bot.services.client_cache import ClientCache
-from bot.services.relay_service import RelayService
-from bot.services.routing_service import RoutingService
-from bot.services.topgg import TopggService
+from bot.integrations.topgg import TopggService
+from bot.networks.routing import RoutingService
+from bot.relay.service import RelayService
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -92,9 +92,11 @@ class NetworkRelayBot(commands.Bot):
         await self.load_extension("bot.cogs.servers")
         await self.load_extension("bot.cogs.relay")
 
+        from bot.layout import validate_all_layouts
         from bot.messages import validate_all_templates
 
         validate_all_templates()
+        validate_all_layouts()
 
         await self._register_persistent_views()
 
@@ -133,7 +135,7 @@ class NetworkRelayBot(commands.Bot):
             asyncio.create_task(self._sync_slash_commands())
 
         context = self.bot_context
-        from bot.services.changelog import installed_version
+        from bot.hub.changelog import installed_version
 
         logger.info(
             "Bot ready",
@@ -154,7 +156,7 @@ class NetworkRelayBot(commands.Bot):
             await self._topgg.start()
 
         if context is not None and not self._subscription_setup_synced:
-            from bot.services.subscription_setup_sticky import sync_all_subscription_setups
+            from bot.stickies.subscription_setup_sticky import sync_all_subscription_setups
             from bot.ui.persistent_views import PersistentViewRegistry
 
             try:
@@ -174,7 +176,7 @@ class NetworkRelayBot(commands.Bot):
                 logger.exception("Subscription setup sync on ready failed")
 
         if context is not None and not self._changelog_synced:
-            from bot.services.changelog import sync_changelog_on_ready
+            from bot.hub.changelog import sync_changelog_on_ready
 
             try:
                 await sync_changelog_on_ready(self, context, guild)

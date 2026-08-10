@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bot.bot_settings import BotSettingsService
+from bot.clients.cache import ClientCache
 from bot.config import Settings
 from bot.context import BotContext
 from bot.db import migrations
@@ -11,10 +13,8 @@ from bot.db.repositories import (
     ServerRequestRepository,
     SettingsRepository,
 )
-from bot.services.bot_settings import BotSettingsService
-from bot.services.client_cache import ClientCache
-from bot.services.relay_service import RelayService
-from bot.services.routing_service import RoutingService
+from bot.networks.routing import RoutingService
+from bot.relay.service import RelayService
 
 
 async def create_bot_context(settings: Settings) -> tuple[Database, BotContext]:

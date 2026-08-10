@@ -17,7 +17,7 @@ load_dotenv(Path(".env"))
 import discord
 
 from bot.cogs.servers import ServerCog
-from bot.services.server_request_service import (
+from bot.onboarding.server_requests import (
     ServerRequestService,
     build_moderator_request_embed,
 )

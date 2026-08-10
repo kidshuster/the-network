@@ -153,3 +153,64 @@ The baseline is **not complete** solely on coverage percentage (61%). Meaningful
 - Subscription sticky reconcile vs create modes
 
 See [refactor-results.md](refactor-results.md) for first-track completion status and deeper-track phase progress.
+
+---
+
+## Focused refactor baseline (Track A + Track B)
+
+Snapshot for the permission API consolidation and repository rewrite plan.
+**Date:** 2026-08-10  
+**Branch:** main @ `7b1bf48`
+
+### Track A — permission-related LOC
+
+| Module | Lines |
+|--------|------:|
+| `bot/services/guild_permissions.py` | 1,067 |
+| `bot/services/leaders_channel.py` | 489 |
+| `bot/services/guild_init_reconcilers.py` | 653 |
+| `bot/services/permission_probe.py` | 422 |
+| `bot/services/client_provision.py` | 145 |
+| `bot/services/client_subscription.py` | 685 |
+| `bot/services/client_permission_rectification.py` | 143 |
+| **Subtotal (direct permission callers)** | **3,604** |
+
+Legacy helpers to remove after migration: `strip_bot_member_overwrites`,
+`prepare_category_create_overwrites`, `filter_configurable_overwrites`,
+`apply_overwrites_with_fallback`, `sync_channel_permission_overwrites`,
+`create_text_channel_with_overwrites`, `sync_client_category_permissions`,
+Leaders-specific fallbacks and direct `set_permissions` loops.
+
+### Track B — repository-related LOC
+
+| Module | Lines |
+|--------|------:|
+| `bot/db/repositories.py` | 1,096 |
+| `bot/db/models.py` | 181 |
+| `bot/db/connection.py` | 44 |
+| `bot/db/migrations.py` | 624 |
+| **Subtotal** | **1,945** |
+
+`ClientRepository` currently owns client, subscription, and blacklist persistence
+(~40 methods). Row mappers still contain migration-column fallbacks (`in row.keys()`).
+
+### Stage 0 quality gate (focused refactor)
+
+| Check | Result |
+|-------|--------|
+| `ruff check .` | ✅ |
+| `mypy bot` | ✅ |
+| `pytest -q` | ✅ 499+ passed |
+
+### Stage 0 characterization tests added
+
+| File | Focus |
+|------|-------|
+| `test_permission_filter_divergence.py` | Documents filter/creation/fallback divergence on operator and bot targets |
+| `test_migration_helpers.py` | `_column_not_null` correctness and single-fetch regression |
+| `test_repository_characterization.py` | ClientRepository domain boundary inventory, autocommit, partial network delete |
+
+### Next commits (separate tracks)
+
+**Track A:** semantic models → compiler → `PermissionService` → Leaders-first migration  
+**Track B:** migration fix → repository split → transactions → caller migration

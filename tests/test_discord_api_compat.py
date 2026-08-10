@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
-from bot.services.guild_permissions import create_text_channel_with_overwrites
+from bot.permissions.service import build_context, permission_service
 
 
 def _create_text_channel_param_names() -> set[str]:
@@ -23,7 +23,12 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
             name = next(iter(sorted(unknown)))
             msg = f"Guild.create_text_channel() got an unexpected keyword argument {name!r}"
             raise TypeError(msg)
-        return MagicMock(spec=discord.TextChannel)
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.id = 1
+        channel.category_id = 100
+        channel.overwrites = {}
+        channel.edit = AsyncMock()
+        return channel
 
     guild.create_text_channel = strict_create
 
@@ -31,6 +36,8 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     everyone.is_default.return_value = True
 
     bot_member = MagicMock(spec=discord.Member)
+    bot_member.guild = guild
+    bot_member.guild_permissions.manage_channels = True
     bot_member.top_role = MagicMock()
     bot_member.top_role.position = 10
     bot_member.top_role.id = 50
@@ -39,12 +46,13 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     category.id = 100
 
     with patch(
-        "bot.services.guild_notifications.ensure_guild_only_mention_notifications",
+        "bot.hub.notifications.ensure_guild_only_mention_notifications",
         new=AsyncMock(),
     ):
-        await create_text_channel_with_overwrites(
+        await permission_service.ensure_text_channel(
             guild,
-            bot_member,
+            build_context(guild, bot_member, access_role=None, moderator_role=None),
+            existing=None,
             name="network-profile-probe",
             category=category,
             overwrites={everyone: discord.PermissionOverwrite(view_channel=False)},

@@ -7,7 +7,7 @@ import pytest
 from view_registry_helpers import make_test_view_registry
 
 from bot.db.repositories import ServerRequestRepository
-from bot.services.server_request_service import ServerRequestService
+from bot.onboarding.server_requests import ServerRequestService
 
 
 def _service(*, bot_user_id: int = 999) -> ServerRequestService:
@@ -42,7 +42,7 @@ async def test_submit_request_defaults_display_name_to_server_name(
     profile_image.url = "https://example.com/p.png"
 
     monkeypatch.setattr(
-        "bot.services.server_request_service.read_profile_image_attachment",
+        "bot.onboarding.server_requests.read_profile_image_attachment",
         AsyncMock(return_value=MagicMock(data=b"fake-png")),
     )
 
@@ -54,15 +54,15 @@ async def test_submit_request_defaults_display_name_to_server_name(
     )
     channel.send = AsyncMock(return_value=MagicMock(id=9001))
     monkeypatch.setattr(
-        "bot.services.guild_layout.resolve_join_requests_channel",
+        "bot.hub.resolve.resolve_join_requests_channel",
         MagicMock(return_value=channel),
     )
     monkeypatch.setattr(
-        "bot.services.guild_layout.resolve_human_moderator_role",
+        "bot.hub.resolve.resolve_human_moderator_role",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        "bot.services.message_delivery.build_moderator_join_request_send_kwargs",
+        "bot.relay.delivery.build_moderator_join_request_send_kwargs",
         MagicMock(return_value={}),
     )
 

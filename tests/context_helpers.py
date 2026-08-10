@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from bot.clients.cache import ClientCache
 from bot.context import BotContext
 from bot.db.repositories import (
     ClientRepository,
@@ -10,8 +11,7 @@ from bot.db.repositories import (
     ServerRequestRepository,
     SettingsRepository,
 )
-from bot.services.client_cache import ClientCache
-from bot.services.routing_service import RoutingService
+from bot.networks.routing import RoutingService
 
 
 def make_test_context(db) -> BotContext:

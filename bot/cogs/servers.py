@@ -12,12 +12,12 @@ from bot.cogs._checks import require_manage_guild
 from bot.cogs._responses import DeferredEphemeralResponse
 from bot.context import BotContext
 from bot.domain.errors import NetworkValidationError
+from bot.hub.data_reset import reset_hub_layout_data
+from bot.hub.init import GuildInitResult, initialize_guild
+from bot.hub.resolve import resolve_join_the_network_channel
+from bot.hub.uninit import GuildUninitResult, uninitialize_guild
 from bot.messages import render_embed, render_text
-from bot.services.guild_init import GuildInitResult, initialize_guild
-from bot.services.guild_layout import resolve_join_the_network_channel
-from bot.services.guild_uninit import GuildUninitResult, uninitialize_guild
-from bot.services.hub_data_reset import reset_hub_layout_data
-from bot.services.join_requests_sticky import sync_hub_join_sticky
+from bot.stickies.join_requests_sticky import sync_hub_join_sticky
 from bot.ui.persistent_views import PersistentViewRegistry
 
 logger = logging.getLogger(__name__)

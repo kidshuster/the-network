@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
-from discord_helpers import http_50013, make_guild_with_roles
+from discord_helpers import make_guild_with_roles
 from subscription_helpers import make_client_subscription
 
+from bot.clients.subscription import ClientSubscriptionService
 from bot.domain.client import Client
-from bot.services.client_subscription import ClientSubscriptionService
 
 
 def _client() -> Client:
@@ -76,19 +76,28 @@ async def test_subscribe_client_creates_missing_channels(
     subscribe = MagicMock(spec=discord.TextChannel, id=101)
 
     monkeypatch.setattr(
-        "bot.services.client_subscription.resolve_human_moderator_role",
+        "bot.clients.subscription.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.services.client_subscription.resolve_access_role",
+        "bot.clients.subscription.resolve_access_role",
         MagicMock(return_value=access),
     )
+    from bot.layout.applier import BatchApplyResult, ResourceApplyResult
+
     monkeypatch.setattr(
-        "bot.services.client_subscription.create_text_channel_with_overwrites",
-        AsyncMock(side_effect=[publish, subscribe]),
+        "bot.clients.subscription.apply_layout",
+        AsyncMock(
+            return_value=BatchApplyResult(
+                results=[
+                    ResourceApplyResult("publish", True, channel=publish),
+                    ResourceApplyResult("subscribe", True, channel=subscribe),
+                ]
+            )
+        ),
     )
     monkeypatch.setattr(
-        "bot.services.client_subscription.reorder_client_category_channels",
+        "bot.clients.subscription.reorder_client_category_channels",
         AsyncMock(),
     )
 
@@ -133,18 +142,26 @@ async def test_subscribe_client_rolls_back_on_second_channel_failure(
     publish.delete = AsyncMock()
 
     monkeypatch.setattr(
-        "bot.services.client_subscription.resolve_human_moderator_role",
+        "bot.clients.subscription.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.services.client_subscription.resolve_access_role",
+        "bot.clients.subscription.resolve_access_role",
         MagicMock(return_value=access),
     )
 
-    create_mock = AsyncMock(side_effect=[publish, http_50013()])
+    from bot.layout.applier import BatchApplyResult, ResourceApplyResult
+
     monkeypatch.setattr(
-        "bot.services.client_subscription.create_text_channel_with_overwrites",
-        create_mock,
+        "bot.clients.subscription.apply_layout",
+        AsyncMock(
+            return_value=BatchApplyResult(
+                results=[
+                    ResourceApplyResult("publish", True, channel=publish),
+                    ResourceApplyResult("subscribe", False, detail="Missing Permissions"),
+                ]
+            )
+        ),
     )
 
     client_repo = MagicMock()
@@ -180,7 +197,7 @@ async def test_subscribe_client_fails_when_client_role_missing(
     guild.get_channel = MagicMock(return_value=category)
 
     monkeypatch.setattr(
-        "bot.services.client_subscription.resolve_access_role",
+        "bot.clients.subscription.resolve_access_role",
         MagicMock(return_value=access),
     )
 

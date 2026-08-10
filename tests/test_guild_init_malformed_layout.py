@@ -10,14 +10,18 @@ from view_registry_helpers import make_test_view_registry
 
 from bot.domain.client import Client
 from bot.domain.errors import NetworkValidationError
-from bot.services.guild_init import initialize_guild
+from bot.hub.init import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
 
 
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
     categories: dict[str, MagicMock] = {}
     for name in ("Moderation", "The Network", "Leaders"):
-        cat = MagicMock(spec=discord.CategoryChannel, id=id(name), name=name, channels=[])
+        cat = MagicMock(spec=discord.CategoryChannel)
+        cat.id = id(name)
+        cat.name = name
+        cat.channels = []
+        cat.overwrites = {}
         cat.edit = AsyncMock()
         categories[name] = cat
         guild.categories.append(cat)
@@ -50,21 +54,31 @@ async def test_init_moves_channel_from_wrong_category(
     guild, bot, human_mod, access, operator = make_guild_with_roles()
     categories = _hub_categories(guild)
 
-    wrong_cat = MagicMock(spec=discord.CategoryChannel, id=999, name="Random")
+    wrong_cat = MagicMock(spec=discord.CategoryChannel)
+    wrong_cat.id = 999
+    wrong_cat.name = "Random"
     join_requests = MagicMock(spec=discord.TextChannel)
     join_requests.id = 800
     join_requests.name = "join-requests"
     join_requests.category_id = wrong_cat.id
+    join_requests.overwrites = {}
     join_requests.edit = AsyncMock(return_value=None)
     guild.text_channels = [join_requests]
+    guild.create_text_channel = AsyncMock(
+        side_effect=lambda **kwargs: MagicMock(
+            spec=discord.TextChannel,
+            id=801,
+            name=str(kwargs.get("name", "channel")),
+            mention=f"#{kwargs.get('name', 'channel')}",
+            category_id=getattr(kwargs.get("category"), "id", None),
+            overwrites={},
+            edit=AsyncMock(),
+        )
+    )
 
-    def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
-        return categories.get(name)
-
-    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init.run_guild_init_smoke_checks",
+        "bot.hub.init.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -73,10 +87,9 @@ async def test_init_moves_channel_from_wrong_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
+        "bot.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
-    guild.create_text_channel = AsyncMock()
     guild.create_category = AsyncMock()
 
     result = await initialize_guild(
@@ -88,8 +101,11 @@ async def test_init_moves_channel_from_wrong_category(
 
     assert result.success is True
     join_requests.edit.assert_awaited()
-    edit_kwargs = join_requests.edit.await_args.kwargs
-    assert edit_kwargs.get("category") is categories["Moderation"]
+    category_edits = [
+        call.kwargs.get("category")
+        for call in join_requests.edit.await_args_list
+    ]
+    assert categories["Moderation"] in category_edits
 
 
 @pytest.mark.asyncio
@@ -104,16 +120,24 @@ async def test_init_syncs_existing_channel_in_correct_category(
     commands.id = 801
     commands.name = "commands"
     commands.category_id = moderation.id
+    commands.overwrites = {}
     commands.edit = AsyncMock()
     guild.text_channels = [commands]
+    guild.create_text_channel = AsyncMock(
+        side_effect=lambda **kwargs: MagicMock(
+            spec=discord.TextChannel,
+            id=802,
+            name=str(kwargs.get("name", "channel")),
+            mention=f"#{kwargs.get('name', 'channel')}",
+            category_id=getattr(kwargs.get("category"), "id", None),
+            overwrites={},
+            edit=AsyncMock(),
+        )
+    )
 
-    def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
-        return categories.get(name)
-
-    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init.run_guild_init_smoke_checks",
+        "bot.hub.init.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -122,7 +146,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
+        "bot.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -144,7 +168,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guild, bot, human_mod, access, operator = make_guild_with_roles()
-    categories = _hub_categories(guild)
+    _hub_categories(guild)
     client = _stored_client()
 
     client_role = MagicMock(spec=discord.Role, id=60, name="Client: Acme", position=1)
@@ -159,13 +183,9 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
         side_effect=lambda cid: client_category if cid == 600 else None,
     )
 
-    def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
-        return categories.get(name)
-
-    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init.run_guild_init_smoke_checks",
+        "bot.hub.init.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -174,13 +194,13 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
+        "bot.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     reconnect = AsyncMock()
-    monkeypatch.setattr("bot.services.client_reconnect.reconnect_clients_on_init", reconnect)
+    monkeypatch.setattr("bot.clients.reconnect.reconnect_clients_on_init", reconnect)
     monkeypatch.setattr(
-        "bot.services.leaders_channel.ensure_leaders_channels",
+        "bot.hub.leaders.ensure_leaders_channels",
         AsyncMock(return_value=(None, None, MagicMock(
             rectification_notes=lambda: [],
             skip_notes=lambda: [],
@@ -221,7 +241,7 @@ async def test_init_fails_when_smoke_probe_raises_validation_error(
     guild, bot, human_mod, access, operator = make_guild_with_roles()
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init.run_guild_init_smoke_checks",
+        "bot.hub.init.run_guild_init_smoke_checks",
         AsyncMock(
             side_effect=NetworkValidationError("Join-approval provisioning probe failed"),
         ),
@@ -245,7 +265,7 @@ async def test_init_survives_unexpected_exception_with_typed_reason(
     guild, bot, human_mod, access, operator = make_guild_with_roles()
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init.run_guild_init_smoke_checks",
+        "bot.hub.init.run_guild_init_smoke_checks",
         AsyncMock(side_effect=RuntimeError("boom")),
     )
 

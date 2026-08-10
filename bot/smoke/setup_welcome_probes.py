@@ -10,19 +10,19 @@ import discord
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
-from bot.services.permission_probe import PROBE_PNG
-from bot.services.server_request_service import ServerRequestService
-from bot.services.subscription_setup import SubscriptionSetupState
-from bot.services.subscription_setup_sticky import (
-    _maybe_post_activation_welcome,
-    sync_subscription_setup,
-)
+from bot.onboarding.server_requests import ServerRequestService
+from bot.permissions.probe import PROBE_PNG
 from bot.smoke.provision_flow import (
     _SmokeProfileAttachment,
     cleanup_smoke_client,
     ensure_smoke_network_key,
 )
 from bot.smoke.resource_guard import guild_test_resource_guard
+from bot.stickies.subscription_setup import SubscriptionSetupState
+from bot.stickies.subscription_setup_sticky import (
+    _maybe_post_activation_welcome,
+    sync_subscription_setup,
+)
 from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
@@ -132,7 +132,7 @@ async def _provision_smoke_welcome_client(
     if client is None:
         raise RuntimeError("Smoke welcome accept did not register a client.")
 
-    from bot.services.client_subscription import ClientSubscriptionService
+    from bot.clients.subscription import ClientSubscriptionService
 
     sub_service = ClientSubscriptionService()
     subscribe = await sub_service.subscribe_client(

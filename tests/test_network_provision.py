@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.domain.errors import NetworkValidationError
-from bot.services.network_provision import (
+from bot.networks.roles import (
     format_operator_setup_instructions,
     resolve_access_role,
     validate_hub_permissions,
@@ -47,7 +47,7 @@ def test_format_operator_setup_instructions_lists_permissions() -> None:
 
 
 def test_base_overwrites_include_access_role() -> None:
-    from bot.services.network_provision import build_base_overwrites
+    from bot.networks.roles import build_base_overwrites
 
     guild = MagicMock(spec=discord.Guild)
     guild.default_role = MagicMock(spec=discord.Role)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from bot.domain.errors import ProfileParseError
-from bot.services.profile_parser import parse_profile
+from bot.parsers.profile_parser import parse_profile
 
 DESIGN_SPEC_SAMPLE = """\
 server_name: Vanguard

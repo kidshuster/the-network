@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.services.channel_names import announcement_channel_base_name, build_network_channel_name
+from bot.clients.names import announcement_channel_base_name, build_network_channel_name
 
 
 def test_announcement_channel_base_name() -> None:

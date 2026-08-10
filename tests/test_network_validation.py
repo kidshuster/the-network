@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.domain.errors import NetworkValidationError
-from bot.services.network_validation import validate_network_channels
+from bot.networks.validation import validate_network_channels
 
 
 def _permissions(**flags: bool) -> MagicMock:
