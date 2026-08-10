@@ -155,9 +155,15 @@ class NetworkRelayBot(commands.Bot):
 
         if context is not None and not self._subscription_setup_synced:
             from bot.services.subscription_setup_sticky import sync_all_subscription_setups
+            from bot.ui.persistent_views import PersistentViewRegistry
 
             try:
-                synced = await sync_all_subscription_setups(self, context, guild)
+                synced = await sync_all_subscription_setups(
+                    self,
+                    context,
+                    guild,
+                    view_registry=PersistentViewRegistry(self),
+                )
                 self._subscription_setup_synced = True
                 if synced:
                     logger.info(

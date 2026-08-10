@@ -11,6 +11,7 @@ from bot.domain.client import Client
 from bot.domain.errors import NetworkValidationError
 from bot.services.guild_init import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
+from view_registry_helpers import make_test_view_registry
 
 
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
@@ -206,6 +207,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
         bot=network_bot,
         context=context,
         skip_join_smoke=True,
+        view_registry=make_test_view_registry(),
     )
 
     assert result.success is True

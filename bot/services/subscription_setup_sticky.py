@@ -10,6 +10,7 @@ from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 from bot.messages import render_embed
 from bot.services.subscription_setup import SubscriptionSetupState, resolve_setup_state
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -160,18 +161,6 @@ async def _resolve_setup_sticky_message(
     )
 
 
-def _subscribe_setup_view(
-    bot: NetworkRelayBot,
-    subscription: ClientSubscription,
-    network: Network,
-) -> discord.ui.View:
-    from bot.ui.network_views import SubscribeSetupView
-
-    view = SubscribeSetupView(bot, subscription.id, network.key)
-    bot.add_view(view)
-    return view
-
-
 async def _sync_publish_setup_sticky(
     guild: discord.Guild,
     subscription: ClientSubscription,
@@ -237,7 +226,6 @@ async def _sync_publish_setup_sticky(
 
 
 async def _sync_subscribe_setup_sticky(
-    bot: NetworkRelayBot,
     guild: discord.Guild,
     subscription: ClientSubscription,
     *,
@@ -247,6 +235,7 @@ async def _sync_subscribe_setup_sticky(
     bot_user_id: int,
     confirmed: bool,
     allow_create: bool,
+    view_registry: ViewRegistry,
 ) -> ClientSubscription:
     if confirmed:
         message = await _resolve_setup_sticky_message(
@@ -275,7 +264,7 @@ async def _sync_subscribe_setup_sticky(
         subscribe_mention=subscribe_channel.mention,
         network_channel_name=f"🌐-{network.display_name}",
     )
-    view = _subscribe_setup_view(bot, subscription, network)
+    view = view_registry.register_subscribe_setup_view(subscription.id, network.key)
     message = await _resolve_setup_sticky_message(
         subscribe_channel,
         bot_user_id=bot_user_id,
@@ -380,6 +369,7 @@ async def sync_subscription_setup(
     subscription: ClientSubscription,
     network: Network | None,
     setup_mode: SetupMode = "create",
+    view_registry: ViewRegistry,
 ) -> SubscriptionSetupState:
     """Refresh setup stickies, moderation card, and profile for one subscription."""
     from bot.services.client_profile_sync import (
@@ -420,7 +410,6 @@ async def sync_subscription_setup(
             )
         if subscribe_channel is not None:
             subscription = await _sync_subscribe_setup_sticky(
-                bot,
                 guild,
                 subscription,
                 subscribe_channel=subscribe_channel,
@@ -430,6 +419,7 @@ async def sync_subscription_setup(
                 confirmed=state.subscribe_confirmed,
                 allow_create=allow_create
                 or subscription.subscribe_setup_message_id is None,
+                view_registry=view_registry,
             )
             state = await resolve_setup_state(
                 guild,
@@ -456,9 +446,16 @@ async def sync_subscription_setup(
             subscription=subscription,
             setup_state=state,
             setup_mode=setup_mode,
+            view_registry=view_registry,
         )
 
-    await refresh_client_profile_message(bot, context, guild, client)
+    await refresh_client_profile_message(
+        bot,
+        context,
+        guild,
+        client,
+        view_registry=view_registry,
+    )
     return state
 
 
@@ -466,6 +463,8 @@ async def sync_all_subscription_setups(
     bot: NetworkRelayBot,
     context: BotContext,
     guild: discord.Guild,
+    *,
+    view_registry: ViewRegistry,
 ) -> int:
     """Ensure setup stickies and moderation cards exist for every subscription."""
     synced = 0
@@ -487,6 +486,7 @@ async def sync_all_subscription_setups(
                 subscription=subscription,
                 network=network,
                 setup_mode="reconcile",
+                view_registry=view_registry,
             )
             synced += 1
     return synced
@@ -497,6 +497,8 @@ async def sync_subscription_setup_by_publish_channel(
     context: BotContext,
     guild: discord.Guild,
     publish_channel_id: int,
+    *,
+    view_registry: ViewRegistry,
 ) -> None:
     subscription = await context.client_repo.get_subscription_by_publish_channel(
         publish_channel_id,
@@ -519,4 +521,5 @@ async def sync_subscription_setup_by_publish_channel(
         subscription=subscription,
         network=network,
         setup_mode="reconcile",
+        view_registry=view_registry,
     )

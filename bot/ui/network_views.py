@@ -17,6 +17,7 @@ from bot.ui.custom_ids import (
     subscribe_network_button,
     timecode_toggle_button,
 )
+from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -157,6 +158,7 @@ class NetworkProfileView(discord.ui.View):
         await context.client_cache.load_cache()
         await context.routing_service.load_cache()
 
+        view_registry = PersistentViewRegistry(self._bot)
         if result.created:
             await sync_subscription_setup(
                 self._bot,
@@ -165,11 +167,18 @@ class NetworkProfileView(discord.ui.View):
                 client=client,
                 subscription=result.subscription,
                 network=network,
+                view_registry=view_registry,
             )
         else:
             from bot.services.client_profile_sync import refresh_client_profile_message
 
-            await refresh_client_profile_message(self._bot, context, guild, client)
+            await refresh_client_profile_message(
+                self._bot,
+                context,
+                guild,
+                client,
+                view_registry=view_registry,
+            )
 
         label = "Subscribed" if result.created else "Already subscribed"
         sub = result.subscription
@@ -217,7 +226,13 @@ class NetworkProfileView(discord.ui.View):
 
         from bot.services.client_profile_sync import refresh_client_profile_message
 
-        await refresh_client_profile_message(self._bot, context, guild, updated)
+        await refresh_client_profile_message(
+            self._bot,
+            context,
+            guild,
+            updated,
+            view_registry=PersistentViewRegistry(self._bot),
+        )
 
         state = "enabled" if updated.timecode_enabled else "disabled"
         await response.send(
@@ -329,6 +344,7 @@ async def handle_subscribe_connected(
 
     from bot.services.subscription_setup_sticky import sync_subscription_setup
 
+    view_registry = PersistentViewRegistry(bot)
     subscription = await context.client_repo.set_subscribe_confirmed(
         subscription.id,
         True,
@@ -340,6 +356,7 @@ async def handle_subscribe_connected(
         client=client,
         subscription=subscription,
         network=network,
+        view_registry=view_registry,
     )
     await response.send(
         embed=render_embed(
@@ -520,7 +537,13 @@ class SubscriptionModerationView(discord.ui.View):
 
         await context.client_cache.load_cache()
         await context.routing_service.load_cache()
-        await refresh_client_profile_message(self._bot, context, guild, client)
+        await refresh_client_profile_message(
+            self._bot,
+            context,
+            guild,
+            client,
+            view_registry=PersistentViewRegistry(self._bot),
+        )
 
         await response.send(
             embed=render_embed(

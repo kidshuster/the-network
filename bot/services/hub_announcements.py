@@ -29,7 +29,7 @@ from bot.services.guild_permissions import (
 )
 from bot.services.image_service import download_profile_image_from_url, normalize_image_bytes
 from bot.services.network_provision import resolve_operator_role_by_name
-from bot.ui.network_views import NetworkProfileView
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -246,6 +246,8 @@ async def _create_hub_client_record(
     bot: NetworkRelayBot,
     context: BotContext,
     bot_member: discord.Member,
+    *,
+    view_registry: ViewRegistry,
 ) -> Client:
     settings = bot.settings
     provision_service = ClientProvisionService()
@@ -258,7 +260,8 @@ async def _create_hub_client_record(
     )
 
     networks = await context.network_repo.list_all()
-    view = NetworkProfileView(bot, 0, [n.key for n in networks])
+    network_keys = [n.key for n in networks]
+    view = view_registry.register_client_profile_view(0, network_keys)
     embed = build_client_profile_embed(
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -276,13 +279,18 @@ async def _create_hub_client_record(
         profile_message_id=starter.id,
     )
 
-    view = NetworkProfileView(bot, client.id, [n.key for n in networks])
-    bot.add_view(view)
+    view = view_registry.register_client_profile_for_client(client, network_keys)
     await starter.edit(view=view)
 
     avatar = await _download_bot_avatar_image(bot)
     client = await _sync_hub_client_emoji(guild, bot, context, client, image_data=avatar)
-    await refresh_client_profile_message(bot, context, guild, client)
+    await refresh_client_profile_message(
+        bot,
+        context,
+        guild,
+        client,
+        view_registry=view_registry,
+    )
     return client
 
 
@@ -372,6 +380,7 @@ async def ensure_hub_announcements_client(
     context: BotContext,
     *,
     result: GuildInitResult | None = None,
+    view_registry: ViewRegistry,
 ) -> Client | None:
     """Ensure hub announcements client, mod channel, and all network subscriptions."""
     if guild.id != bot.settings.guild_id:
@@ -399,7 +408,13 @@ async def ensure_hub_announcements_client(
     )
     if client is None:
         try:
-            client = await _create_hub_client_record(guild, bot, context, bot_member)
+            client = await _create_hub_client_record(
+                guild,
+                bot,
+                context,
+                bot_member,
+                view_registry=view_registry,
+            )
             if result is not None:
                 result.notes.append(
                     "Created hub announcements client "

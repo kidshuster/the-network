@@ -6,6 +6,7 @@ import discord
 import pytest
 from context_helpers import make_test_context
 from discord_helpers import make_guild_with_roles
+from view_registry_helpers import make_test_view_registry
 
 from bot.services.client_profile_edit import apply_client_profile_edit
 from bot.testing.png_fixtures import probe_png_bytes
@@ -17,7 +18,10 @@ async def test_apply_edit_not_found(db) -> None:
     context = make_test_context(db)
     bot = MagicMock()
 
-    result = await apply_client_profile_edit(bot, context, guild, client_id=999, display_name="New")
+    view_registry = make_test_view_registry()
+    result = await apply_client_profile_edit(
+        bot, context, guild, client_id=999, display_name="New", view_registry=view_registry
+    )
 
     assert result.success is False
     assert result.error == "Client profile was not found."
@@ -32,8 +36,9 @@ async def test_apply_edit_rejects_empty_display_name(db) -> None:
     client = await create_test_client(context.client_repo)
     bot = MagicMock()
 
+    view_registry = make_test_view_registry()
     result = await apply_client_profile_edit(
-        bot, context, guild, client_id=client.id, display_name="  "
+        bot, context, guild, client_id=client.id, display_name="  ", view_registry=view_registry
     )
 
     assert result.success is False
@@ -54,8 +59,14 @@ async def test_apply_edit_updates_display_name_and_refreshes_profile(
     refresh = AsyncMock()
     monkeypatch.setattr("bot.services.client_profile_edit.refresh_client_profile_message", refresh)
 
+    view_registry = make_test_view_registry()
     result = await apply_client_profile_edit(
-        bot, context, guild, client_id=client.id, display_name="Renamed"
+        bot,
+        context,
+        guild,
+        client_id=client.id,
+        display_name="Renamed",
+        view_registry=view_registry,
     )
 
     assert result.success is True
@@ -86,6 +97,7 @@ async def test_apply_edit_invalid_image_returns_validation_error(
         AsyncMock(),
     )
 
+    view_registry = make_test_view_registry()
     result = await apply_client_profile_edit(
         bot,
         context,
@@ -93,6 +105,7 @@ async def test_apply_edit_invalid_image_returns_validation_error(
         client_id=client.id,
         display_name="Acme",
         profile_image=attachment,
+        view_registry=view_registry,
     )
 
     assert result.success is False
@@ -138,6 +151,7 @@ async def test_apply_edit_with_valid_image_syncs_emoji(
         AsyncMock(),
     )
 
+    view_registry = make_test_view_registry()
     result = await apply_client_profile_edit(
         bot,
         context,
@@ -145,6 +159,7 @@ async def test_apply_edit_with_valid_image_syncs_emoji(
         client_id=client.id,
         display_name="Acme",
         profile_image=attachment,
+        view_registry=view_registry,
     )
 
     assert result.success is True

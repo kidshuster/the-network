@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import discord
 
@@ -11,10 +10,6 @@ from bot.services.sticky_sync import (
     embed_content_signature,
     sync_stored_embed_sticky,
 )
-from bot.ui.join_views import JoinNetworkView
-
-if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +65,8 @@ def build_how_to_join_embed() -> discord.Embed:
 async def sync_hub_join_sticky(
     guild: discord.Guild,
     bot_member: discord.Member,
-    bot: NetworkRelayBot,
     channel: discord.TextChannel,
+    view: discord.ui.View,
     *,
     get_setting: Callable[[str], Awaitable[str | None]],
     set_setting: Callable[[str, str], Awaitable[None]],
@@ -79,8 +74,6 @@ async def sync_hub_join_sticky(
 ) -> HowToJoinStickyResult:
     desired_embed = build_how_to_join_embed()
     desired_signature = embed_content_signature(desired_embed)
-    view = JoinNetworkView(bot)
-    bot.add_view(view)
 
     async def refresh_current(
         message: discord.Message,

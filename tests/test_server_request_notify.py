@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from view_registry_helpers import make_test_view_registry
 
 from bot.db.repositories import ServerRequestRepository
 from bot.services.server_request_service import ServerRequestService
@@ -13,7 +14,7 @@ def _service(*, bot_user_id: int = 999) -> ServerRequestService:
     bot = MagicMock()
     bot.user = MagicMock(id=bot_user_id)
     context = MagicMock()
-    return ServerRequestService(context, bot)
+    return ServerRequestService(context, bot, view_registry=make_test_view_registry())
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,7 @@ async def test_submit_request_defaults_display_name_to_server_name(
         MagicMock(return_value={}),
     )
 
-    service = ServerRequestService(context, bot)
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())
     result = await service.submit_request(
         guild,
         requester=requester,

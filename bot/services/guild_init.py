@@ -39,6 +39,7 @@ from bot.services.network_provision import (
     validate_hub_permissions,
 )
 from bot.services.step_runner import run_guild_step
+from bot.services.view_registry import ViewRegistry
 from bot.smoke.provision_flow import run_guild_init_smoke_checks, run_post_init_join_smoke
 
 if TYPE_CHECKING:
@@ -705,6 +706,7 @@ async def initialize_guild(
     bot: NetworkRelayBot | None = None,
     context: BotContext | None = None,
     skip_join_smoke: bool = False,
+    view_registry: ViewRegistry | None = None,
 ) -> GuildInitResult:
     result = GuildInitResult(success=True)
 
@@ -898,7 +900,7 @@ async def initialize_guild(
 
         await _reorder_moderation_channels(moderation, result=result)
 
-        if bot is not None and context is not None:
+        if bot is not None and context is not None and view_registry is not None:
             from bot.services.hub_announcements import ensure_hub_announcements_client
 
             await ensure_hub_announcements_client(
@@ -906,12 +908,13 @@ async def initialize_guild(
                 bot,
                 context,
                 result=result,
+                view_registry=view_registry,
             )
 
         guild_clients = [
             client for client in (clients or []) if client.guild_id == guild.id
         ]
-        if clients and bot is not None and context is not None:
+        if clients and bot is not None and context is not None and view_registry is not None:
             from bot.services.client_reconnect import reconnect_clients_on_init
 
             await reconnect_clients_on_init(
@@ -923,6 +926,7 @@ async def initialize_guild(
                 human_moderator_role,
                 clients,
                 result=result,
+                view_registry=view_registry,
             )
             await context.client_cache.load_cache()
             await context.routing_service.load_cache()
@@ -951,17 +955,18 @@ async def initialize_guild(
             result=result,
         )
 
-        if bot is not None and context is not None:
+        if bot is not None and context is not None and view_registry is not None:
             from bot.services.join_requests_sticky import sync_hub_join_sticky
             from bot.services.rules_sticky import sync_rules_sticky
 
             join_channel = resolve_join_the_network_channel(guild)
             if join_channel is not None:
+                join_view = view_registry.register_join_network_view()
                 join_result = await sync_hub_join_sticky(
                     guild,
                     bot_member,
-                    bot,
                     join_channel,
+                    join_view,
                     get_setting=context.settings_repo.get,
                     set_setting=context.settings_repo.set,
                     wipe_channel=True,
@@ -970,9 +975,6 @@ async def initialize_guild(
                     result.notes.append(
                         f"Join guide synced in {join_channel.mention}."
                     )
-                from bot.ui.join_views import JoinNetworkView
-
-                bot.add_view(JoinNetworkView(bot))
 
             rules_result = await sync_rules_sticky(
                 guild,
@@ -988,12 +990,13 @@ async def initialize_guild(
 
             admin_channel = resolve_network_admin_channel(guild)
             if admin_channel is not None:
+                admin_view = view_registry.register_network_admin_view()
                 admin_result = await sync_network_admin_sticky(
                     guild,
                     bot_member,
-                    bot,
                     admin_channel,
                     context,
+                    admin_view,
                     get_setting=context.settings_repo.get,
                     set_setting=context.settings_repo.set,
                     wipe_channel=True,
@@ -1006,10 +1009,6 @@ async def initialize_guild(
                     result.failed_steps.append(
                         f"Network admin sticky: {admin_result.reason}"
                     )
-
-                from bot.ui.network_admin_views import NetworkAdminView
-
-                bot.add_view(NetworkAdminView(bot))
 
             try:
                 if not skip_join_smoke:

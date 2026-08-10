@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.errors import NetworkValidationError
 from bot.domain.network import Network
@@ -83,6 +84,7 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
         guild,
         key="stingers",
         display_name="Stingers",
+        view_registry=make_test_view_registry(),
     )
 
     assert result.success is True
@@ -116,6 +118,7 @@ async def test_create_network_rejects_duplicate_key() -> None:
         guild,
         key="stingers",
         display_name="Stingers",
+        view_registry=make_test_view_registry(),
     )
 
     assert result.success is False
@@ -147,7 +150,9 @@ async def test_delete_network_hard_deletes_and_detaches(
         AsyncMock(return_value=1),
     )
 
-    result = await delete_network(context, bot, guild, key="stingers")
+    result = await delete_network(
+        context, bot, guild, key="stingers", view_registry=make_test_view_registry()
+    )
 
     assert result.success is True
     context.client_repo.detach_subscriptions_from_network.assert_awaited_once_with(
@@ -175,6 +180,7 @@ async def test_create_network_validation_error() -> None:
         guild,
         key="stingers",
         display_name="Stingers",
+        view_registry=make_test_view_registry(),
     )
 
     assert result.success is False
@@ -187,7 +193,9 @@ async def test_delete_network_not_found() -> None:
     bot = MagicMock()
     guild = MagicMock(spec=discord.Guild)
 
-    result = await delete_network(context, bot, guild, key="missing")
+    result = await delete_network(
+        context, bot, guild, key="missing", view_registry=make_test_view_registry()
+    )
 
     assert result.success is False
     assert "not found" in (result.error or "").lower()

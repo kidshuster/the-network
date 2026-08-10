@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from view_registry_helpers import make_test_view_registry
 
 from bot.db.repositories import ClientRepository, NetworkRepository
 from bot.domain.client import Client
@@ -208,6 +209,7 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
             context,
             network,
             access_role_name="The Network",
+            view_registry=make_test_view_registry(),
         )
 
     assert relinked == 1

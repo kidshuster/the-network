@@ -10,6 +10,7 @@ from bot.domain.client import Client
 from bot.domain.errors import ProfileValidationError
 from bot.services.client_profile_sync import refresh_client_profile_message
 from bot.services.image_service import normalize_image_bytes, read_profile_image_attachment
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -34,6 +35,7 @@ async def apply_client_profile_edit(
     client_id: int,
     display_name: str,
     profile_image: discord.Attachment | None = None,
+    view_registry: ViewRegistry,
 ) -> ClientProfileUpdateResult:
     client = await context.client_repo.get_by_id(client_id)
     if client is None:
@@ -76,7 +78,13 @@ async def apply_client_profile_edit(
         if emoji_result.delete_emoji_id is not None:
             await emoji_service.delete_emoji(guild, emoji_result.delete_emoji_id)
 
-    await refresh_client_profile_message(bot, context, guild, updated)
+    await refresh_client_profile_message(
+        bot,
+        context,
+        guild,
+        updated,
+        view_registry=view_registry,
+    )
     return ClientProfileUpdateResult(
         success=True,
         client=updated,

@@ -23,6 +23,7 @@ from bot.services.permission_probe import (
 from bot.services.server_request_service import ServerRequestService
 from bot.smoke.resource_guard import guild_test_resource_guard
 from bot.testing.context_factory import create_bot_context
+from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -455,7 +456,7 @@ async def run_join_approval_smoke_flow(
 
     async with guild_test_resource_guard(guild, bot_member=bot_member):
         await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
-        service = ServerRequestService(context, bot)
+        service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
         suffix = secrets.token_hex(3)
         accept_server_name = f"Smoke Accept {suffix}"
         deny_server_name = f"Smoke Deny {suffix}"
@@ -635,6 +636,7 @@ async def ensure_smoke_network_key(
         existing = await context.network_repo.get_by_key(explicit)
         if existing is None:
             from bot.services.network_admin import create_network
+            from bot.ui.persistent_views import PersistentViewRegistry
 
             created = await create_network(
                 context,
@@ -642,6 +644,7 @@ async def ensure_smoke_network_key(
                 guild,
                 key=explicit,
                 display_name=explicit.title(),
+                view_registry=PersistentViewRegistry(bot),
             )
             if not created.success or created.network is None:
                 raise RuntimeError(created.error or f"could not create network {explicit!r}")
@@ -652,6 +655,7 @@ async def ensure_smoke_network_key(
         return networks[0].key
 
     from bot.services.network_admin import create_network
+    from bot.ui.persistent_views import PersistentViewRegistry
 
     created = await create_network(
         context,
@@ -659,6 +663,7 @@ async def ensure_smoke_network_key(
         guild,
         key=default_key,
         display_name=default_key.title(),
+        view_registry=PersistentViewRegistry(bot),
     )
     if not created.success or created.network is None:
         raise RuntimeError(created.error or f"could not create network {default_key!r}")
@@ -712,7 +717,7 @@ async def provision_smoke_client_with_subscription(
 
     suffix = secrets.token_hex(3)
     server_name = f"Smoke Rebuild {suffix}"
-    service = ServerRequestService(context, bot)
+    service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
     if not hasattr(bot, "get_guild"):
         bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[attr-defined]
 
@@ -790,6 +795,9 @@ async def run_hub_rebuild_smoke_flow(
     from bot.services.guild_uninit import uninitialize_guild
     from bot.services.hub_data_reset import reset_hub_layout_data
     from bot.services.network_admin import create_network
+    from bot.ui.persistent_views import PersistentViewRegistry
+
+    view_registry = PersistentViewRegistry(bot)
 
     bot_member = guild.me
     if bot_member is None:
@@ -810,6 +818,7 @@ async def run_hub_rebuild_smoke_flow(
             bot=bot,
             context=context,
             skip_join_smoke=True,
+            view_registry=view_registry,
         )
         if not bootstrap.success:
             raise RuntimeError(bootstrap.reason or "hub bootstrap init failed")
@@ -847,6 +856,7 @@ async def run_hub_rebuild_smoke_flow(
             bot=bot,
             context=context,
             skip_join_smoke=True,
+            view_registry=view_registry,
         )
         if not init.success:
             raise RuntimeError(init.reason or "server init failed")
@@ -857,6 +867,7 @@ async def run_hub_rebuild_smoke_flow(
             guild,
             key=state.network_key,
             display_name=state.network_key.title(),
+            view_registry=view_registry,
         )
         if not create.success or create.network is None:
             raise RuntimeError(create.error or "network recreate failed")

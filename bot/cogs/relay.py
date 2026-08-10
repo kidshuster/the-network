@@ -27,6 +27,7 @@ class RelayCog(commands.Cog):
         from bot.services.subscription_setup_sticky import (
             sync_subscription_setup_by_publish_channel,
         )
+        from bot.ui.persistent_views import PersistentViewRegistry
 
         try:
             await sync_subscription_setup_by_publish_channel(
@@ -34,6 +35,7 @@ class RelayCog(commands.Cog):
                 context,
                 guild,
                 channel.id,
+                view_registry=PersistentViewRegistry(self.bot),
             )
         except Exception:
             logger.exception(

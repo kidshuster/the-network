@@ -7,6 +7,7 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 from request_helpers import make_server_request
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.server_request import ServerRequestStatus
 from bot.services.server_request_service import ServerRequestService
@@ -30,7 +31,7 @@ async def test_submit_request_rejects_duplicate_pending() -> None:
         get_pending_for_requester=AsyncMock(return_value=make_server_request()),
     )
     bot = MagicMock()
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
 
     requester = MagicMock(spec=discord.User, id=555)
     attachment = MagicMock(spec=discord.Attachment)
@@ -54,7 +55,7 @@ async def test_submit_request_rejects_existing_client_name() -> None:
     )
     context.client_repo.get_by_server_name = AsyncMock(return_value=MagicMock())
     bot = MagicMock()
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
 
     requester = MagicMock(spec=discord.User, id=555)
     attachment = MagicMock(spec=discord.Attachment)
@@ -78,7 +79,7 @@ async def test_approve_request_rejects_already_reviewed() -> None:
     )
     bot = MagicMock()
     bot.settings.guild_id = 100
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
@@ -140,7 +141,7 @@ async def test_approve_request_provisions_client_on_success(
     bot.settings.guild_id = 100
     bot.settings.network_access_role_name = "The Network"
     bot.settings.network_operator_role_name = "The Network+"
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
@@ -204,7 +205,7 @@ async def test_approve_request_grants_leaders_access_for_provisioned_role(
     bot.settings.guild_id = 100
     bot.settings.network_access_role_name = "The Network"
     bot.settings.network_operator_role_name = "The Network+"
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
@@ -274,7 +275,7 @@ async def test_approve_request_surfaces_leaders_sync_failures_in_message(
     bot.settings.guild_id = 100
     bot.settings.network_access_role_name = "The Network"
     bot.settings.network_operator_role_name = "The Network+"
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
@@ -308,7 +309,7 @@ async def test_approve_request_surfaces_provisioning_failure(
 
     bot = MagicMock()
     bot.settings.guild_id = 100
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
@@ -345,7 +346,7 @@ async def test_deny_request_resolves_and_notifies(
     bot = MagicMock()
     bot.settings.guild_id = 100
     bot.get_guild = MagicMock(return_value=guild)
-    service = ServerRequestService(context, bot)  # type: ignore[arg-type]
+    service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
     moderator = MagicMock(spec=discord.Member, id=1)
 
     result = await service.deny_request(request_id=7, moderator=moderator)

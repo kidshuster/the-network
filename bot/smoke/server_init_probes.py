@@ -28,6 +28,7 @@ from bot.services.network_provision import (
 )
 from bot.smoke.provision_flow import run_pre_init_smoke_checks
 from bot.smoke.resource_guard import guild_test_resource_guard
+from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -459,6 +460,7 @@ async def probe_reinit_rectifies_clients(
         await _strip_role_overwrite(category, client_role)
         await _strip_role_overwrite(leaders, client_role)
 
+        view_registry = PersistentViewRegistry(bot)
         result = await initialize_guild(
             guild,
             bot_member,
@@ -468,6 +470,7 @@ async def probe_reinit_rectifies_clients(
             bot=bot,
             context=context,
             skip_join_smoke=True,
+            view_registry=view_registry,
         )
         if not result.success:
             return ProbeResult(
@@ -529,6 +532,7 @@ async def probe_leaders_delete_double_reinit(
     async with guild_test_resource_guard(guild, bot_member=bot_member):
         await leaders.delete(reason=_PROBE_REASON)
 
+        view_registry = PersistentViewRegistry(bot)
         first = await initialize_guild(
             guild,
             bot_member,
@@ -538,6 +542,7 @@ async def probe_leaders_delete_double_reinit(
             bot=bot,
             context=context,
             skip_join_smoke=True,
+            view_registry=view_registry,
         )
         if not first.success:
             return ProbeResult(
@@ -577,6 +582,7 @@ async def probe_leaders_delete_double_reinit(
             bot=bot,
             context=context,
             skip_join_smoke=True,
+            view_registry=view_registry,
         )
         if not second.success:
             return ProbeResult(
@@ -616,6 +622,7 @@ async def probe_leaders_idempotent_reinit(
         )
 
     async with guild_test_resource_guard(guild, bot_member=bot_member):
+        view_registry = PersistentViewRegistry(bot)
         for pass_label in ("first", "second"):
             result = await initialize_guild(
                 guild,
@@ -626,6 +633,7 @@ async def probe_leaders_idempotent_reinit(
                 bot=bot,
                 context=context,
                 skip_join_smoke=True,
+                view_registry=view_registry,
             )
             if not result.success:
                 return ProbeResult(

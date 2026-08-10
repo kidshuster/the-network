@@ -13,7 +13,7 @@ from bot.services.subscription_setup import (
     SubscriptionSetupState,
     resolve_setup_state,
 )
-from bot.ui.network_views import NetworkProfileView, SubscriptionModerationView
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -46,6 +46,8 @@ async def refresh_client_profile_message(
     context: BotContext,
     guild: discord.Guild,
     client: Client,
+    *,
+    view_registry: ViewRegistry,
 ) -> None:
     channel = guild.get_channel(client.profile_channel_id)
     if not isinstance(channel, discord.TextChannel):
@@ -74,14 +76,13 @@ async def refresh_client_profile_message(
         network_entries.append((key, status))
 
     all_networks = await context.network_repo.list_all()
-    view = NetworkProfileView(
-        bot,
+    network_keys = [n.key for n in all_networks]
+    view = view_registry.register_client_profile_view(
         client.id,
-        [n.key for n in all_networks],
+        network_keys,
         subscribed_keys=subscribed_keys,
         timecode_enabled=client.timecode_enabled,
     )
-    bot.add_view(view)
 
     embed = build_client_profile_embed(
         server_name=client.server_name,
@@ -104,12 +105,20 @@ async def refresh_all_client_profiles(
     bot: NetworkRelayBot,
     context: BotContext,
     guild: discord.Guild,
+    *,
+    view_registry: ViewRegistry,
 ) -> int:
     updated = 0
     for client in await context.client_repo.list_all():
         if client.guild_id != guild.id:
             continue
-        await refresh_client_profile_message(bot, context, guild, client)
+        await refresh_client_profile_message(
+            bot,
+            context,
+            guild,
+            client,
+            view_registry=view_registry,
+        )
         updated += 1
     return updated
 
@@ -168,20 +177,16 @@ def build_moderation_embed(
 
 
 def _moderation_view(
-    bot: NetworkRelayBot,
+    view_registry: ViewRegistry,
     subscription: ClientSubscription,
     network: Network,
     setup_state: SubscriptionSetupState,
-) -> SubscriptionModerationView:
-    view = SubscriptionModerationView(
-        bot,
-        subscription.id,
-        network.key,
-        show_subscribe_connected=not setup_state.subscribe_confirmed,
-        show_blacklist=setup_state.fully_configured,
+) -> discord.ui.View:
+    return view_registry.register_subscription_moderation_view(
+        subscription,
+        network,
+        setup_state,
     )
-    bot.add_view(view)
-    return view
 
 
 async def post_subscription_moderation_embed(
@@ -194,6 +199,7 @@ async def post_subscription_moderation_embed(
     subscription: ClientSubscription,
     setup_state: SubscriptionSetupState | None = None,
     setup_mode: SetupMode = "create",
+    view_registry: ViewRegistry,
 ) -> None:
     channel = guild.get_channel(client.profile_channel_id)
     if not isinstance(channel, discord.TextChannel):
@@ -216,7 +222,7 @@ async def post_subscription_moderation_embed(
         subscribe_channel.mention if subscribe_channel is not None else "#subscribe"
     )
 
-    view = _moderation_view(bot, subscription, network, setup_state)
+    view = _moderation_view(view_registry, subscription, network, setup_state)
     embed = build_moderation_embed(
         network_display_name=network.display_name,
         network_key=network.key,

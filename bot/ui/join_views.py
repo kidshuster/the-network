@@ -50,8 +50,13 @@ class JoinNetworkModal(discord.ui.Modal):
             return
 
         from bot.services.server_request_service import ServerRequestService
+        from bot.ui.persistent_views import PersistentViewRegistry
 
-        service = ServerRequestService(context, self._bot)
+        service = ServerRequestService(
+            context,
+            self._bot,
+            view_registry=PersistentViewRegistry(self._bot),
+        )
         name = self._fields["name"].component.value.strip()
         result = await service.submit_request(
             validated.guild,
@@ -135,8 +140,13 @@ class ModeratorReviewView(discord.ui.View):
         member = cast(discord.Member, interaction.user)
 
         from bot.services.server_request_service import ServerRequestService
+        from bot.ui.persistent_views import PersistentViewRegistry
 
-        service = ServerRequestService(context, self._bot)
+        service = ServerRequestService(
+            context,
+            self._bot,
+            view_registry=PersistentViewRegistry(self._bot),
+        )
         try:
             if approved:
                 result = await service.approve_request(

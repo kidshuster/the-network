@@ -15,7 +15,7 @@ from bot.services.client_subscription import (
     sync_client_channel_names,
 )
 from bot.services.subscription_setup_sticky import sync_subscription_setup
-from bot.ui.network_views import NetworkProfileView
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -35,6 +35,8 @@ async def _finish_client_reconnect(
     context: BotContext,
     bot_member: discord.Member,
     client: Client,
+    *,
+    view_registry: ViewRegistry,
 ) -> None:
     await _run_reconnect_step(
         "sync channel names",
@@ -62,6 +64,7 @@ async def _finish_client_reconnect(
                 subscription=sub,
                 network=net,
                 setup_mode="reconcile",
+                view_registry=view_registry,
             ),
         )
 
@@ -78,17 +81,19 @@ async def _finish_client_reconnect(
         )
 
     all_networks = await context.network_repo.list_all()
-    bot.add_view(
-        NetworkProfileView(
-            bot,
-            client.id,
-            [network.key for network in all_networks],
-            timecode_enabled=client.timecode_enabled,
-        ),
+    view_registry.register_client_profile_for_client(
+        client,
+        [network.key for network in all_networks],
     )
     await _run_reconnect_step(
         "refresh client profile message",
-        lambda: refresh_client_profile_message(bot, context, guild, client),
+        lambda: refresh_client_profile_message(
+            bot,
+            context,
+            guild,
+            client,
+            view_registry=view_registry,
+        ),
     )
 
 
@@ -103,6 +108,7 @@ async def reconnect_clients_on_init(
     *,
     result: GuildInitResult,
     access_role_name: str | None = None,
+    view_registry: ViewRegistry,
 ) -> None:
     role_name = access_role_name or bot.settings.network_access_role_name
     guild_clients = [client for client in clients if client.guild_id == guild.id]
@@ -135,7 +141,14 @@ async def reconnect_clients_on_init(
             continue
 
         try:
-            await _finish_client_reconnect(guild, bot, context, bot_member, client)
+            await _finish_client_reconnect(
+                guild,
+                bot,
+                context,
+                bot_member,
+                client,
+                view_registry=view_registry,
+            )
             reconnected += 1
         except discord.HTTPException as exc:
             result.rectification_failures.append(
@@ -153,6 +166,7 @@ async def reconnect_clients_on_init(
             context,
             network,
             access_role_name=role_name,
+            view_registry=view_registry,
         )
         if relinked:
             result.rectifications.append(

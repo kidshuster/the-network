@@ -15,6 +15,7 @@ from bot.services.image_service import (
     normalize_image_bytes,
     read_profile_image_attachment,
 )
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -80,9 +81,16 @@ def build_resolved_request_embed(
 
 
 class ServerRequestService:
-    def __init__(self, context: BotContext, bot: NetworkRelayBot) -> None:
+    def __init__(
+        self,
+        context: BotContext,
+        bot: NetworkRelayBot,
+        *,
+        view_registry: ViewRegistry,
+    ) -> None:
         self._context = context
         self._bot = bot
+        self._view_registry = view_registry
 
     async def submit_request(
         self,
@@ -135,7 +143,6 @@ class ServerRequestService:
         )
 
         from bot.services.guild_layout import resolve_join_requests_channel
-        from bot.ui.join_views import ModeratorReviewView
 
         requests_channel = resolve_join_requests_channel(guild)
         if requests_channel is None:
@@ -155,8 +162,7 @@ class ServerRequestService:
                 error=f"The bot cannot post review requests in {requests_channel.mention}.",
             )
 
-        view = ModeratorReviewView(self._bot, request.id)
-        self._bot.add_view(view)
+        view = self._view_registry.register_moderator_review_view(request.id)
         embed = build_moderator_request_embed(
             requester=requester,
             server_name=request.server_name,
@@ -294,7 +300,6 @@ class ServerRequestService:
         from bot.services.client_profile_sync import refresh_client_profile_message
         from bot.services.client_provision import ClientProvisionService
         from bot.services.emoji_service import EmojiService, emoji_sync_target_from_client
-        from bot.ui.network_views import NetworkProfileView
 
         @dataclass
         class ProvisionOutcome:
@@ -318,7 +323,8 @@ class ServerRequestService:
             return ProvisionOutcome(success=False, error=f"Discord API error: {exc}")
 
         networks = await self._context.network_repo.list_all()
-        view = NetworkProfileView(self._bot, 0, [n.key for n in networks])
+        network_keys = [n.key for n in networks]
+        view = self._view_registry.register_client_profile_view(0, network_keys)
         embed = build_client_profile_embed(
             server_name=request.server_name,
             display_name=request.display_name,
@@ -340,8 +346,7 @@ class ServerRequestService:
             profile_message_id=starter.id,
         )
 
-        view = NetworkProfileView(self._bot, client.id, [n.key for n in networks])
-        self._bot.add_view(view)
+        view = self._view_registry.register_client_profile_for_client(client, network_keys)
         await starter.edit(view=view)
 
         emoji_service = EmojiService()
@@ -366,7 +371,13 @@ class ServerRequestService:
             )
             client = await self._context.client_repo.get_by_id(client.id) or client
 
-        await refresh_client_profile_message(self._bot, self._context, guild, client)
+        await refresh_client_profile_message(
+            self._bot,
+            self._context,
+            guild,
+            client,
+            view_registry=self._view_registry,
+        )
         return ProvisionOutcome(
             success=True,
             client_role=provision.client_role,

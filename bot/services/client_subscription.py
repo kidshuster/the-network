@@ -33,6 +33,7 @@ from bot.services.guild_permissions import (
 from bot.services.network_provision import (
     resolve_access_role,
 )
+from bot.services.view_registry import ViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -549,6 +550,7 @@ async def resync_subscriptions_for_network(
     network: Network,
     *,
     access_role_name: str,
+    view_registry: ViewRegistry,
 ) -> int:
     from bot.services.subscription_setup_sticky import sync_subscription_setup
 
@@ -580,6 +582,7 @@ async def resync_subscriptions_for_network(
                 client=client,
                 subscription=existing,
                 network=network,
+                view_registry=view_registry,
             )
             await reorder_client_category_channels(
                 category,
@@ -618,6 +621,7 @@ async def resync_subscriptions_for_network(
                 client=client,
                 subscription=subscription,
                 network=network,
+                view_registry=view_registry,
             )
             relinked += 1
             continue
@@ -657,6 +661,7 @@ async def resync_subscriptions_for_network(
             client=client,
             subscription=subscription,
             network=network,
+            view_registry=view_registry,
         )
         relinked += 1
 

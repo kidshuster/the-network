@@ -22,6 +22,7 @@ from bot.smoke.provision_flow import (
     ensure_smoke_network_key,
 )
 from bot.smoke.resource_guard import guild_test_resource_guard
+from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -57,7 +58,7 @@ async def _provision_smoke_subscriber(
 
     suffix = secrets.token_hex(3)
     server_name = f"{_SMOKE_HUB_SUB_PREFIX}{suffix}"
-    service = ServerRequestService(context, bot)
+    service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
     if not hasattr(bot, "get_guild"):
         bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[attr-defined]
 

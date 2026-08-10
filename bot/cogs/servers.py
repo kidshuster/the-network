@@ -18,7 +18,7 @@ from bot.services.guild_layout import resolve_join_the_network_channel
 from bot.services.guild_uninit import GuildUninitResult, uninitialize_guild
 from bot.services.hub_data_reset import reset_hub_layout_data
 from bot.services.join_requests_sticky import sync_hub_join_sticky
-from bot.ui.join_views import JoinNetworkView
+from bot.ui.persistent_views import PersistentViewRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +206,7 @@ class ServerCog(
                     clients=clients,
                     bot=self.bot,
                     context=self.bot.bot_context,
+                    view_registry=PersistentViewRegistry(self.bot),
                 )
                 await response.send(
                     embed=_server_init_embed(result),
@@ -317,11 +318,13 @@ class ServerCog(
             await interaction.followup.send(render_text("join_channel_missing"), ephemeral=True)
             return
 
+        view_registry = PersistentViewRegistry(self.bot)
+        join_view = view_registry.register_join_network_view()
         result = await sync_hub_join_sticky(
             guild,
             bot_member,
-            self.bot,
             channel,
+            join_view,
             get_setting=context.settings_repo.get,
             set_setting=context.settings_repo.set,
             wipe_channel=True,
@@ -336,7 +339,6 @@ class ServerCog(
             )
             return
 
-        self.bot.add_view(JoinNetworkView(self.bot))
         message_url = result.message.jump_url if result.message is not None else ""
         await interaction.followup.send(
             embed=render_embed(

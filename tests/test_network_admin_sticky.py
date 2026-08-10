@@ -31,19 +31,19 @@ async def test_sync_network_admin_sticky_wipes_before_post(
 
     bot_member = MagicMock(spec=discord.Member)
     bot_member.id = 1
-    bot = MagicMock()
     context = MagicMock()
     context.network_repo.list_all = AsyncMock(return_value=[])
     context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[])
     get_setting = AsyncMock(return_value=None)
     set_setting = AsyncMock()
+    view = MagicMock(spec=discord.ui.View)
 
     result = await sync_network_admin_sticky(
         MagicMock(spec=discord.Guild),
         bot_member,
-        bot,
         channel,
         context,
+        view,
         get_setting=get_setting,
         set_setting=set_setting,
         wipe_channel=True,

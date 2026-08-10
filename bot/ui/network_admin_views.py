@@ -13,6 +13,7 @@ from bot.services.network_admin import create_network, delete_network
 from bot.services.network_admin_sticky import refresh_network_admin_sticky_from_settings
 from bot.ui._auth import validate_hub_modal_context
 from bot.ui.custom_ids import network_create_button, network_delete_button
+from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -41,12 +42,14 @@ class CreateNetworkModal(discord.ui.Modal):
         context = validated.context
         key = self._fields["key"].component.value.strip()
         display_name = self._fields["display_name"].component.value.strip()
+        view_registry = PersistentViewRegistry(self._bot)
         result = await create_network(
             context,
             self._bot,
             guild,
             key=key,
             display_name=display_name,
+            view_registry=view_registry,
         )
         if not result.success or result.network is None:
             await response.send(
@@ -61,7 +64,11 @@ class CreateNetworkModal(discord.ui.Modal):
 
         admin_channel = interaction.channel
         if isinstance(admin_channel, discord.TextChannel):
-            await refresh_network_admin_sticky_from_settings(self._bot, context, guild)
+            await refresh_network_admin_sticky_from_settings(
+                context,
+                guild,
+                view_registry.register_network_admin_view(),
+            )
 
         await response.send(
             embed=render_embed(
@@ -95,7 +102,14 @@ class DeleteNetworkModal(discord.ui.Modal):
         guild = validated.guild
         context = validated.context
         key = self._fields["key"].component.value.strip()
-        result = await delete_network(context, self._bot, guild, key=key)
+        view_registry = PersistentViewRegistry(self._bot)
+        result = await delete_network(
+            context,
+            self._bot,
+            guild,
+            key=key,
+            view_registry=view_registry,
+        )
         if not result.success:
             if result.error and "not found" in result.error.lower():
                 await response.send(result.error, ephemeral=True)
@@ -106,7 +120,11 @@ class DeleteNetworkModal(discord.ui.Modal):
                 )
             return
 
-        await refresh_network_admin_sticky_from_settings(self._bot, context, guild)
+        await refresh_network_admin_sticky_from_settings(
+            context,
+            guild,
+            view_registry.register_network_admin_view(),
+        )
 
         await response.send(
             render_text("network_deleted", key=result.network_key or key),

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
@@ -233,7 +234,6 @@ async def test_reconcile_subscribe_sticky_does_not_create_new() -> None:
     bot.add_view = MagicMock()
 
     result = await _sync_subscribe_setup_sticky(
-        bot,
         guild,
         _subscription(),
         subscribe_channel=subscribe_channel,
@@ -242,6 +242,7 @@ async def test_reconcile_subscribe_sticky_does_not_create_new() -> None:
         bot_user_id=999,
         confirmed=False,
         allow_create=False,
+        view_registry=make_test_view_registry(),
     )
 
     subscribe_channel.send.assert_not_called()

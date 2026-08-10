@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
@@ -97,6 +98,7 @@ async def test_moderation_embed_posts_to_profile_channel() -> None:
         client=_client(),
         network=_network(),
         subscription=_subscription(),
+        view_registry=make_test_view_registry(),
     )
 
     profile_channel.send.assert_awaited_once()
@@ -128,6 +130,7 @@ async def test_moderation_embed_edits_prior_message_in_profile() -> None:
         client=_client(),
         network=_network(),
         subscription=_subscription(moderation_message_id=888),
+        view_registry=make_test_view_registry(),
     )
 
     profile_channel.fetch_message.assert_awaited_once_with(888)
@@ -163,6 +166,7 @@ async def test_moderation_embed_reconcile_skips_when_fully_configured() -> None:
             network_active=True,
         ),
         setup_mode="reconcile",
+        view_registry=make_test_view_registry(),
     )
 
     profile_channel.send.assert_not_called()
@@ -252,6 +256,8 @@ def test_moderation_setup_embed_hides_completed_subscribe_step() -> None:
 async def test_deleted_network_shows_disabled_without_join_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from view_registry_helpers import make_test_view_registry
+
     from bot.services.client_profile_sync import refresh_client_profile_message
 
     profile_channel = MagicMock(spec=discord.TextChannel)
@@ -288,7 +294,9 @@ async def test_deleted_network_shows_disabled_without_join_button(
     bot = MagicMock()
     bot.add_view = MagicMock()
 
-    await refresh_client_profile_message(bot, context, guild, _client())
+    await refresh_client_profile_message(
+        bot, context, guild, _client(), view_registry=make_test_view_registry()
+    )
 
     message.edit.assert_awaited_once()
     embed = message.edit.await_args.kwargs["embed"]

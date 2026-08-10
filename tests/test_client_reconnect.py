@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 from discord_helpers import make_guild_with_roles
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.client import Client
 from bot.services.client_reconnect import reconnect_clients_on_init
@@ -80,6 +81,7 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
     context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
     context.network_repo.list_all = AsyncMock(return_value=[])
 
+    view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)
     await reconnect_clients_on_init(
         guild,
@@ -91,11 +93,12 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
         [client],
         result=result,
         access_role_name="The Network",
+        view_registry=view_registry,
     )
 
     assert any("rectified" in note for note in result.rectifications)
     assert any("refreshed" in note for note in result.rectifications)
-    bot.add_view.assert_called_once()
+    view_registry.register_client_profile_for_client.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -136,6 +139,7 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
     context = MagicMock()
     context.network_repo.list_all = AsyncMock(return_value=[])
 
+    view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)
     await reconnect_clients_on_init(
         guild,
@@ -146,10 +150,11 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
         human_mod,
         [client],
         result=result,
+        view_registry=view_registry,
     )
 
     assert result.rectification_skipped
-    bot.add_view.assert_not_called()
+    view_registry.register_client_profile_for_client.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -188,6 +193,7 @@ async def test_reconnect_records_failure_when_post_rectify_http_error(
     context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
     context.network_repo.list_all = AsyncMock(return_value=[])
 
+    view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)
     await reconnect_clients_on_init(
         guild,
@@ -198,6 +204,7 @@ async def test_reconnect_records_failure_when_post_rectify_http_error(
         human_mod,
         [client],
         result=result,
+        view_registry=view_registry,
     )
 
     assert any("could not finish reconnect" in note for note in result.rectification_failures)
@@ -212,6 +219,7 @@ async def test_reconnect_no_clients_adds_skip_note(
     context = MagicMock()
     result = GuildInitResult(success=True)
 
+    view_registry = make_test_view_registry()
     await reconnect_clients_on_init(
         guild,
         bot,
@@ -221,6 +229,7 @@ async def test_reconnect_no_clients_adds_skip_note(
         human_mod,
         [],
         result=result,
+        view_registry=view_registry,
     )
 
     assert any("none registered" in note for note in result.rectifications)

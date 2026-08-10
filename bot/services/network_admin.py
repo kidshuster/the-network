@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from bot.domain.errors import NetworkValidationError
 from bot.domain.network import Network
+from bot.services.view_registry import ViewRegistry
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ async def create_network(
     *,
     key: str,
     display_name: str,
+    view_registry: ViewRegistry,
 ) -> CreateNetworkResult:
     from bot.services.client_profile_sync import refresh_all_client_profiles
     from bot.services.client_subscription import resync_subscriptions_for_network
@@ -54,11 +56,17 @@ async def create_network(
             context,
             network,
             access_role_name=bot.settings.network_access_role_name,
+            view_registry=view_registry,
         )
         from bot.services.hub_announcements import ensure_hub_announcements_subscription
 
         await ensure_hub_announcements_subscription(guild, bot, context, network)
-        updated = await refresh_all_client_profiles(bot, context, guild)
+        updated = await refresh_all_client_profiles(
+            bot,
+            context,
+            guild,
+            view_registry=view_registry,
+        )
         return CreateNetworkResult(
             success=True,
             network=network,
@@ -80,6 +88,7 @@ async def delete_network(
     guild,
     *,
     key: str,
+    view_registry: ViewRegistry,
 ) -> DeleteNetworkResult:
     from bot.services.client_profile_sync import refresh_all_client_profiles
 
@@ -95,7 +104,12 @@ async def delete_network(
         await context.routing_service.load_cache()
         await context.client_cache.load_cache()
         await context.refresh_network_counts()
-        await refresh_all_client_profiles(bot, context, guild)
+        await refresh_all_client_profiles(
+            bot,
+            context,
+            guild,
+            view_registry=view_registry,
+        )
         return DeleteNetworkResult(success=True, network_key=network.key)
     except NetworkValidationError as exc:
         return DeleteNetworkResult(success=False, error=str(exc))

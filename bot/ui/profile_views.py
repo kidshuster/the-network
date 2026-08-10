@@ -65,6 +65,7 @@ class EditClientProfileModal(discord.ui.Modal):
             profile_image = attachments[0]
 
         from bot.services.client_profile_edit import apply_client_profile_edit
+        from bot.ui.persistent_views import PersistentViewRegistry
 
         result = await apply_client_profile_edit(
             self._bot,
@@ -73,6 +74,7 @@ class EditClientProfileModal(discord.ui.Modal):
             client_id=self._client_id,
             display_name=display_name,
             profile_image=profile_image,
+            view_registry=PersistentViewRegistry(self._bot),
         )
         if not result.success or result.client is None:
             await response.send(

@@ -37,15 +37,15 @@ async def test_sync_hub_join_sticky_wipes_before_post(
 
     bot_member = MagicMock(spec=discord.Member)
     bot_member.id = 1
-    bot = MagicMock()
     get_setting = AsyncMock(return_value=None)
     set_setting = AsyncMock()
+    view = MagicMock(spec=discord.ui.View)
 
     result = await sync_hub_join_sticky(
         MagicMock(spec=discord.Guild),
         bot_member,
-        bot,
         channel,
+        view,
         get_setting=get_setting,
         set_setting=set_setting,
         wipe_channel=True,

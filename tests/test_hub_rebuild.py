@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 from context_helpers import make_test_context
+from view_registry_helpers import make_test_view_registry
 
 from bot.services.client_subscription import resync_subscriptions_for_network
 from bot.services.hub_data_reset import reset_hub_layout_data
@@ -107,6 +108,7 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
             context,
             network,
             access_role_name="The Network",
+            view_registry=make_test_view_registry(),
         )
 
     assert relinked == 1

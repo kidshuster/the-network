@@ -11,7 +11,6 @@ from bot.messages import render_embed
 from bot.services.sticky_sync import StoredStickySyncResult, sync_stored_embed_sticky
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
@@ -58,18 +57,14 @@ async def build_network_admin_embed(context: BotContext) -> discord.Embed:
 
 
 async def refresh_network_admin_message(
-    bot: NetworkRelayBot,
     context: BotContext,
     guild: discord.Guild,
     channel: discord.TextChannel,
+    view: discord.ui.View,
     *,
     message_id: int | None = None,
 ) -> discord.Message | None:
-    from bot.ui.network_admin_views import NetworkAdminView
-
     embed = await build_network_admin_embed(context)
-    view = NetworkAdminView(bot)
-    bot.add_view(view)
 
     if message_id is not None:
         try:
@@ -83,9 +78,9 @@ async def refresh_network_admin_message(
 
 
 async def refresh_network_admin_sticky_from_settings(
-    bot: NetworkRelayBot,
     context: BotContext,
     guild: discord.Guild,
+    view: discord.ui.View,
 ) -> None:
     from bot.services.guild_layout import resolve_network_admin_channel
 
@@ -102,10 +97,10 @@ async def refresh_network_admin_sticky_from_settings(
             message_id = None
 
     message = await refresh_network_admin_message(
-        bot,
         context,
         guild,
         channel,
+        view,
         message_id=message_id,
     )
     if message is not None:
@@ -128,23 +123,18 @@ def _network_admin_result(result: StoredStickySyncResult) -> NetworkAdminStickyR
 async def sync_network_admin_sticky(
     guild: discord.Guild,
     bot_member: discord.Member,
-    bot: NetworkRelayBot,
     channel: discord.TextChannel,
     context: BotContext,
+    view: discord.ui.View,
     *,
     get_setting: Callable[[str], Awaitable[str | None]],
     set_setting: Callable[[str, str], Awaitable[None]],
     wipe_channel: bool = False,
 ) -> NetworkAdminStickyResult:
-    from bot.ui.network_admin_views import NetworkAdminView
-
     desired_embed = await build_network_admin_embed(context)
     footer = build_network_admin_footer()
     if desired_embed.footer and desired_embed.footer.text:
         footer = desired_embed.footer.text
-
-    view = NetworkAdminView(bot)
-    bot.add_view(view)
 
     async def refresh_current(
         message: discord.Message,
