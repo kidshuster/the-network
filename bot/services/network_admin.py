@@ -55,6 +55,9 @@ async def create_network(
             network,
             access_role_name=bot.settings.network_access_role_name,
         )
+        from bot.services.hub_announcements import ensure_hub_announcements_subscription
+
+        await ensure_hub_announcements_subscription(guild, bot, context, network)
         updated = await refresh_all_client_profiles(bot, context, guild)
         return CreateNetworkResult(
             success=True,

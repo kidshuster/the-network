@@ -8,7 +8,7 @@ fields:
     value: |
       1. On **your server**, open **Server Settings → Enable Community** and complete the setup checklist (rules, verification, and a public updates channel).
       2. Create an **announcement channel** (megaphone icon).
-      3. In that announcement channel, click **Follow**, select **this hub server**, and choose {publish_mention}.
+      3. In that announcement channel, click **Follow**, select **this hub server**, and choose {publish_mention}. **Channel Follow is only available in the Discord desktop app** (not mobile or web).
       4. Post a test message in your announcement channel to verify it appears here.
     inline: false
 footer: "The Network • publish setup • remove this card automatically when connected"

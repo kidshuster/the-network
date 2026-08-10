@@ -59,6 +59,18 @@ def test_publish_setup_instructions_covers_community_and_follow() -> None:
     assert "Enable Community" in body
     assert "announcement channel" in body.lower()
     assert "#publish" in body
+    assert "Discord desktop app" in body
+
+
+def test_subscribe_setup_instructions_suggests_network_channel_name() -> None:
+    embed = render_embed(
+        "subscribe_setup_instructions",
+        subscribe_mention="#subscribe",
+        network_channel_name="🌐-Stingers",
+    )
+    body = " ".join(field.value or "" for field in embed.fields)
+    assert "🌐-Stingers" in body
+    assert "#subscribe" in body
 
 
 def test_hub_rules_embed() -> None:

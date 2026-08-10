@@ -260,6 +260,9 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
     bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
 
     context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(
+        return_value=_subscription(),
+    )
     context.client_repo.update_activation_welcome_message_id = AsyncMock(
         side_effect=lambda _sub_id, msg_id: _subscription(activation_welcome_message_id=msg_id)
     )
@@ -330,6 +333,7 @@ async def test_network_member_welcome_broadcasts_to_other_subscribe_channels() -
         return_value=[joining_sub, other_sub],
     )
     context.client_cache.get_client = MagicMock(return_value=other_client)
+    context.client_repo.is_blacklisted = AsyncMock(return_value=False)
 
     await _broadcast_network_member_welcome(
         bot,
@@ -345,6 +349,112 @@ async def test_network_member_welcome_broadcasts_to_other_subscribe_channels() -
     broadcast_embed = other_channel.send.await_args.kwargs["embed"]
     assert broadcast_embed.title == "New member on Stingers"
     assert broadcast_embed.author.icon_url == "https://cdn.discordapp.com/avatars/1/a.png"
+
+
+@pytest.mark.asyncio
+async def test_network_member_welcome_skips_blacklisted_destination() -> None:
+    bot = MagicMock()
+    bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
+
+    other_sub = _subscription(id=2, client_id=2, subscribe_channel_id=502)
+    joining_sub = _subscription(id=1, client_id=1, subscribe_channel_id=501)
+
+    other_channel = MagicMock(spec=discord.TextChannel)
+    other_channel.send = AsyncMock()
+
+    guild = MagicMock()
+    guild.get_channel = MagicMock(side_effect=lambda cid: other_channel if cid == 502 else None)
+
+    other_client = Client(
+        id=2,
+        guild_id=100,
+        server_name="other-server",
+        display_name="Other",
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        timecode_enabled=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    context = MagicMock()
+    context.routing_service.list_network_subscriptions = MagicMock(
+        return_value=[joining_sub, other_sub],
+    )
+    context.client_cache.get_client = MagicMock(return_value=other_client)
+    context.client_repo.is_blacklisted = AsyncMock(return_value=True)
+
+    await _broadcast_network_member_welcome(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        subscription=joining_sub,
+        network=_network(),
+    )
+
+    other_channel.send.assert_not_called()
+    context.client_repo.is_blacklisted.assert_awaited_once_with(other_sub.id, 1)
+
+
+@pytest.mark.asyncio
+async def test_network_member_welcome_skips_joining_subscribe_channel() -> None:
+    bot = MagicMock()
+    bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
+
+    shared_channel_id = 501
+    joining_sub = _subscription(id=1, client_id=1, subscribe_channel_id=shared_channel_id)
+    other_sub_same_channel = _subscription(
+        id=2,
+        client_id=2,
+        subscribe_channel_id=shared_channel_id,
+    )
+
+    shared_channel = MagicMock(spec=discord.TextChannel)
+    shared_channel.send = AsyncMock()
+
+    other_client = Client(
+        id=2,
+        guild_id=100,
+        server_name="other-server",
+        display_name="Other",
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        timecode_enabled=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    guild = MagicMock()
+    guild.get_channel = MagicMock(return_value=shared_channel)
+
+    context = MagicMock()
+    context.routing_service.list_network_subscriptions = MagicMock(
+        return_value=[joining_sub, other_sub_same_channel],
+    )
+    context.client_cache.get_client = MagicMock(return_value=other_client)
+    context.client_repo.is_blacklisted = AsyncMock(return_value=False)
+
+    await _broadcast_network_member_welcome(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        subscription=joining_sub,
+        network=_network(),
+    )
+
+    shared_channel.send.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -383,11 +493,16 @@ async def test_activation_welcome_skips_when_already_sent() -> None:
         network_active=True,
     )
 
+    context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(
+        return_value=_subscription(activation_welcome_message_id=999),
+    )
+
     await _maybe_post_activation_welcome(
         MagicMock(),
         _subscription(activation_welcome_message_id=999),
         subscribe_channel=subscribe_channel,
-        context=MagicMock(),
+        context=context,
         guild=MagicMock(),
         network=_network(),
         client=_client(),

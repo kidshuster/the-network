@@ -1,0 +1,12 @@
+kind: embed
+title: "Network-wide announcements"
+colour: blurple
+description: |
+  Post here to relay announcements through **The Network Announcements** client.
+fields:
+  - name: Targeting
+    value: |
+      • **All networks** — post your message normally.
+      • **One network** — start with `[network_key]` on the first line, then your message.
+    inline: false
+footer: "The Network • hub announcements guide"

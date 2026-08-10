@@ -4,6 +4,7 @@ import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
+import pytest
 
 from bot.services.guild_permissions import (
     create_text_channel_with_overwrites,
@@ -17,6 +18,7 @@ def test_client_approval_grants_leaders_channel_access() -> None:
 
     source = inspect.getsource(ServerRequestService.approve_request)
     assert "grant_leaders_channel_access" in source
+    assert "Leaders access sync reported issues" in source
 
 
 def test_guild_init_syncs_leaders_for_all_client_roles() -> None:
@@ -148,6 +150,160 @@ async def test_sync_channel_permission_overwrites_refreshes_from_category_on_fai
     assert edit_kwargs[2]["sync_permissions"] is False
 
 
+async def test_apply_client_role_leaders_overwrites_targets_layout_channels() -> None:
+    from bot.services.leaders_channel import _apply_client_role_leaders_overwrites
+
+    guild = MagicMock(spec=discord.Guild)
+    category = MagicMock(spec=discord.CategoryChannel)
+    category.set_permissions = AsyncMock()
+    leaders = MagicMock(spec=discord.TextChannel)
+    leaders.set_permissions = AsyncMock()
+    changelog = MagicMock(spec=discord.TextChannel)
+    changelog.set_permissions = AsyncMock()
+
+    client_role = MagicMock(spec=discord.Role)
+    client_role.id = 101
+    client_role.name = "Client: Acme"
+    client_role.position = 2
+    client_role.is_default.return_value = False
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock(position=20)
+
+    import bot.services.guild_layout as guild_layout
+    import bot.services.leaders_channel as leaders_module
+
+    originals = {
+        "resolve_leaders_category": leaders_module.resolve_leaders_category,
+        "resolve_leaders_channel": leaders_module.resolve_leaders_channel,
+        "resolve_changelog_channel": leaders_module.resolve_changelog_channel,
+    }
+    leaders_module.resolve_leaders_category = MagicMock(return_value=category)
+    leaders_module.resolve_leaders_channel = MagicMock(return_value=leaders)
+    leaders_module.resolve_changelog_channel = MagicMock(return_value=changelog)
+
+    try:
+        failures = await _apply_client_role_leaders_overwrites(
+            guild,
+            bot_member,
+            client_role,
+            reason="test",
+        )
+    finally:
+        leaders_module.resolve_leaders_category = originals["resolve_leaders_category"]
+        leaders_module.resolve_leaders_channel = originals["resolve_leaders_channel"]
+        leaders_module.resolve_changelog_channel = originals["resolve_changelog_channel"]
+
+    assert failures == []
+    category.set_permissions.assert_awaited_once()
+    leaders.set_permissions.assert_awaited_once()
+    changelog.set_permissions.assert_awaited_once()
+
+    for call in (
+        category.set_permissions.await_args,
+        leaders.set_permissions.await_args,
+        changelog.set_permissions.await_args,
+    ):
+        assert call is not None
+        assert call.args[0] is client_role
+        assert call.kwargs["overwrite"].view_channel is True
+
+
+async def test_apply_client_role_leaders_overwrites_reports_missing_layout() -> None:
+    from bot.services.leaders_channel import _apply_client_role_leaders_overwrites
+
+    guild = MagicMock(spec=discord.Guild)
+    client_role = MagicMock(spec=discord.Role)
+    client_role.id = 101
+    client_role.name = "Client: Acme"
+    client_role.position = 2
+    client_role.is_default.return_value = False
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock(position=20)
+
+    import bot.services.leaders_channel as leaders_module
+
+    originals = {
+        "resolve_leaders_category": leaders_module.resolve_leaders_category,
+        "resolve_leaders_channel": leaders_module.resolve_leaders_channel,
+        "resolve_changelog_channel": leaders_module.resolve_changelog_channel,
+    }
+    leaders_module.resolve_leaders_category = MagicMock(return_value=None)
+    leaders_module.resolve_leaders_channel = MagicMock(return_value=None)
+    leaders_module.resolve_changelog_channel = MagicMock(return_value=None)
+
+    try:
+        failures = await _apply_client_role_leaders_overwrites(
+            guild,
+            bot_member,
+            client_role,
+            reason="test",
+        )
+    finally:
+        leaders_module.resolve_leaders_category = originals["resolve_leaders_category"]
+        leaders_module.resolve_leaders_channel = originals["resolve_leaders_channel"]
+        leaders_module.resolve_changelog_channel = originals["resolve_changelog_channel"]
+
+    assert len(failures) == 3
+    assert all("not found" in failure for failure in failures)
+
+
+async def test_grant_leaders_channel_access_runs_incremental_before_full_resync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bot.services.leaders_channel import LeadersSyncResult, grant_leaders_channel_access
+
+    guild = MagicMock(spec=discord.Guild)
+    bot_member = MagicMock(spec=discord.Member)
+    client_role = MagicMock(spec=discord.Role, id=101, name="Client: Acme")
+    context = MagicMock()
+
+    calls: list[str] = []
+
+    async def _incremental(*_args: object, **_kwargs: object) -> list[str]:
+        calls.append("incremental")
+        return []
+
+    async def _ensure(*_args: object, **_kwargs: object) -> tuple[None, None, LeadersSyncResult]:
+        calls.append("ensure")
+        return None, None, LeadersSyncResult(roles_synced=["Client: Acme"])
+
+    monkeypatch.setattr(
+        "bot.services.leaders_channel._apply_client_role_leaders_overwrites",
+        _incremental,
+    )
+    monkeypatch.setattr(
+        "bot.services.leaders_channel.ensure_leaders_channels",
+        _ensure,
+    )
+    monkeypatch.setattr(
+        "bot.services.network_provision.resolve_access_role",
+        MagicMock(return_value=MagicMock(spec=discord.Role)),
+    )
+    monkeypatch.setattr(
+        "bot.services.network_provision.resolve_operator_role_by_name",
+        MagicMock(return_value=MagicMock(spec=discord.Role)),
+    )
+    monkeypatch.setattr(
+        "bot.services.guild_layout.resolve_human_moderator_role",
+        MagicMock(return_value=None),
+    )
+
+    result = await grant_leaders_channel_access(
+        guild,
+        bot_member,
+        context,
+        client_role,
+        access_role_name="The Network",
+        operator_role_name="The Network+",
+    )
+
+    assert calls == ["incremental", "ensure"]
+    assert result.failures == []
+    assert result.roles_synced == ["Client: Acme"]
+
+
 async def test_grant_leaders_channel_access_sets_permissions_on_existing_channels() -> None:
     from bot.domain.client import Client
     from bot.services.leaders_channel import grant_leaders_channel_access
@@ -163,6 +319,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     category.id = 500
     category.name = "Leaders"
     category.edit = AsyncMock()
+    category.set_permissions = AsyncMock()
 
     leaders = MagicMock(spec=discord.TextChannel)
     leaders.id = 501
@@ -235,6 +392,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     context = MagicMock()
     context.client_repo.list_all = AsyncMock(return_value=[client])
     context.settings_repo.get = AsyncMock(return_value=None)
+    context.settings_repo.set = AsyncMock()
 
     import bot.services.guild_layout as guild_layout
     import bot.services.leaders_channel as leaders_module
@@ -257,7 +415,7 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     guild_layout.resolve_human_moderator_role = MagicMock(return_value=None)
 
     try:
-        await grant_leaders_channel_access(
+        result = await grant_leaders_channel_access(
             guild,
             bot_member,
             context,
@@ -290,5 +448,9 @@ async def test_grant_leaders_channel_access_sets_permissions_on_existing_channel
     assert new_role in leaders_targets
     assert existing_role in changelog_targets
     assert new_role in changelog_targets
+    assert result.failures == []
+    category.set_permissions.assert_awaited()
+    leaders.set_permissions.assert_awaited()
+    changelog.set_permissions.assert_awaited()
     leaders.edit.assert_awaited()
     changelog.edit.assert_awaited()

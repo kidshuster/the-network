@@ -319,6 +319,7 @@ async def ensure_leaders_channels(
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
     operator_role: discord.Role | None = None,
+    extra_client_role: discord.Role | None = None,
     reason: str = "The Network guild init",
 ) -> tuple[discord.TextChannel | None, discord.TextChannel | None, LeadersSyncResult]:
     """Create or sync Leaders category channels for client roles."""
@@ -329,6 +330,7 @@ async def ensure_leaders_channels(
         access_role=access_role,
         human_moderator_role=human_moderator_role,
         operator_role=operator_role,
+        extra_client_role=extra_client_role,
         reason=reason,
     )
     if leaders is not None:
@@ -358,6 +360,47 @@ async def ensure_leaders_channel(
     return leaders
 
 
+async def _apply_client_role_leaders_overwrites(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    client_role: discord.Role,
+    *,
+    reason: str,
+) -> list[str]:
+    """Grant one client role access on the live Leaders layout (category + channels)."""
+    from bot.services.guild_permissions import (
+        _can_configure_role,
+        build_client_changelog_readonly_overwrite,
+        build_client_leader_category_overwrite,
+        build_client_leader_channel_overwrite,
+    )
+
+    if not _can_configure_role(bot_member, client_role):
+        return [
+            f"bot role hierarchy prevents Leaders overwrites for **{client_role.name}**",
+        ]
+
+    category = resolve_leaders_category(guild)
+    leaders = resolve_leaders_channel(guild)
+    changelog = resolve_changelog_channel(guild)
+    targets: list[tuple[str, discord.abc.GuildChannel | None, discord.PermissionOverwrite]] = [
+        (CATEGORY_LEADERS, category, build_client_leader_category_overwrite()),
+        (CHANNEL_LEADERS, leaders, build_client_leader_channel_overwrite()),
+        (CHANNEL_CHANGELOG, changelog, build_client_changelog_readonly_overwrite()),
+    ]
+
+    failures: list[str] = []
+    for label, target, overwrite in targets:
+        if target is None:
+            failures.append(f"{label} not found — run `/server init` first")
+            continue
+        try:
+            await target.set_permissions(client_role, overwrite=overwrite, reason=reason)
+        except discord.HTTPException as exc:
+            failures.append(f"could not grant {label} ({exc})")
+    return failures
+
+
 async def grant_leaders_channel_access(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -366,23 +409,29 @@ async def grant_leaders_channel_access(
     *,
     access_role_name: str,
     operator_role_name: str,
-) -> None:
-    """Add a newly approved client role to the Leaders category and channel."""
+) -> LeadersSyncResult:
+    """Add a newly approved client role to the Leaders category and channels."""
     from bot.services.network_provision import (
         resolve_access_role,
         resolve_operator_role_by_name,
     )
 
     access_role = resolve_access_role(guild, role_name=access_role_name)
-    if access_role is None:
-        return
 
     from bot.services.guild_layout import resolve_human_moderator_role
 
     human_moderator_role = resolve_human_moderator_role(guild)
     operator_role = resolve_operator_role_by_name(guild, role_name=operator_role_name)
 
-    _category, channel, _changelog, sync_result = await _sync_leaders_permissions(
+    reason = "The Network client approved"
+    incremental_failures = await _apply_client_role_leaders_overwrites(
+        guild,
+        bot_member,
+        client_role,
+        reason=reason,
+    )
+
+    _leaders, _changelog, sync_result = await ensure_leaders_channels(
         guild,
         bot_member,
         context,
@@ -390,15 +439,12 @@ async def grant_leaders_channel_access(
         human_moderator_role=human_moderator_role,
         operator_role=operator_role,
         extra_client_role=client_role,
-        reason="The Network client approved",
+        reason=reason,
     )
-    if channel is None:
+    sync_result.failures = incremental_failures + sync_result.failures
+    if sync_result.failures:
         logger.warning(
-            "Could not grant leaders access for new client role",
-            extra={"role_id": client_role.id},
-        )
-    elif sync_result.failures:
-        logger.warning(
-            "Leaders access partially failed for new client role",
+            "Leaders access sync reported failures for new client role",
             extra={"role_id": client_role.id, "failures": sync_result.failures},
         )
+    return sync_result

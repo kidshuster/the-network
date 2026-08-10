@@ -35,6 +35,14 @@ class Settings(BaseSettings):
         default=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
         alias="NETWORK_OPERATOR_ROLE_NAME",
     )
+    hub_announcements_server_name: str = Field(
+        default="the-network-announcements",
+        alias="HUB_ANNOUNCEMENTS_SERVER_NAME",
+    )
+    hub_announcements_display_name: str = Field(
+        default="The Network Announcements",
+        alias="HUB_ANNOUNCEMENTS_DISPLAY_NAME",
+    )
 
     @property
     def network_bot_role_name(self) -> str:

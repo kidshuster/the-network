@@ -1,4 +1,24 @@
 releases:
+  "1.2.14":
+    summary: "Hub-owned announcements client for moderator network-wide broadcasts."
+    changes:
+      - "Provision The Network Announcements client on server init with bot avatar; auto-subscribe to all networks."
+      - "Add moderator-only #network-announcements — posts relay to all networks unless prefixed with [network_key]."
+      - "Hub client is write-only (no inbound relays, no setup stickies or member welcome spam)."
+      - "Live smoke for hub inject relay, mod dispatch, and write-only guard."
+  "1.2.13":
+    summary: "Single setup welcome per channel, blacklist-aware broadcasts, clearer setup cards."
+    changes:
+      - "Post one activation welcome on the joining client's subscribe channel; skip duplicate member broadcast to the same channel."
+      - "Suppress network member welcome on servers that blacklisted the joining client."
+      - "Subscribe setup suggests a 🌐-<network name> channel; publish setup notes Channel Follow is desktop-only."
+      - "Add live smoke for setup sticky copy and welcome/blacklist behavior."
+  "1.2.12":
+    summary: "Hub profile channel create fix, operator Create Expressions check, live smoke regressions."
+    changes:
+      - "Create hub profile channels without overwrites at create time, then sync (fixes 50013 in client categories)."
+      - "Require Create Expressions on the operator role during provisioning validation."
+      - "Add Testwork live smoke orchestrator and pytest regressions for leaders drift and init degradation."
   "1.2.11":
     summary: "Clarify init probe failures for outdated deploys vs permission issues."
     changes:

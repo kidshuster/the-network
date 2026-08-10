@@ -54,6 +54,10 @@ async def _broadcast_network_member_welcome(
     network: Network,
 ) -> None:
     """Notify other network members that a client finished connecting."""
+    from bot.services.hub_announcements import is_hub_announcements_client
+
+    if is_hub_announcements_client(client, context.settings):
+        return
     embed = render_embed(
         "network_member_connected",
         author_icon_url=_bot_author_icon_url(bot),
@@ -62,10 +66,21 @@ async def _broadcast_network_member_welcome(
         client_server_name=client.server_name,
     )
     for dest_sub in context.routing_service.list_network_subscriptions(network.id):
-        if dest_sub.id == subscription.id or not dest_sub.enabled:
+        if (
+            dest_sub.id == subscription.id
+            or dest_sub.client_id == client.id
+            or dest_sub.subscribe_channel_id == subscription.subscribe_channel_id
+            or not dest_sub.enabled
+        ):
+            continue
+        if await context.client_repo.is_blacklisted(dest_sub.id, client.id):
             continue
         dest_client = context.client_cache.get_client(dest_sub.client_id)
         if dest_client is None or not dest_client.enabled:
+            continue
+        from bot.services.hub_announcements import is_hub_announcements_client
+
+        if is_hub_announcements_client(dest_client, context.settings):
             continue
         channel = guild.get_channel(dest_sub.subscribe_channel_id)
         if channel is None or not hasattr(channel, "send"):
@@ -258,6 +273,7 @@ async def _sync_subscribe_setup_sticky(
     embed = render_embed(
         "subscribe_setup_instructions",
         subscribe_mention=subscribe_channel.mention,
+        network_channel_name=f"🌐-{network.display_name}",
     )
     view = _subscribe_setup_view(bot, subscription, network)
     message = await _resolve_setup_sticky_message(
@@ -303,11 +319,20 @@ async def _maybe_post_activation_welcome(
     setup_state: SubscriptionSetupState,
 ) -> ClientSubscription:
     """Post a one-time server-connected embed when a network subscription first activates."""
+    from bot.services.hub_announcements import is_hub_announcements_client
+
+    if is_hub_announcements_client(client, context.settings):
+        return subscription
     if not setup_state.fully_configured:
         return subscription
-    if subscription.activation_welcome_message_id is not None:
-        return subscription
     if not hasattr(subscribe_channel, "send"):
+        return subscription
+
+    fresh = await context.client_repo.get_subscription_by_id(subscription.id)
+    if fresh is None:
+        return subscription
+    subscription = fresh
+    if subscription.activation_welcome_message_id is not None:
         return subscription
 
     embed = render_embed(
@@ -365,13 +390,16 @@ async def sync_subscription_setup(
     allow_create = setup_mode == "create"
     bot_user_id = bot.user.id if bot.user is not None else 0
     network_active = network is not None and network.enabled
+    from bot.services.hub_announcements import is_hub_announcements_client
+
+    hub_client = is_hub_announcements_client(client, bot.settings)
     state = await resolve_setup_state(
         guild,
         subscription,
         network_active=network_active,
     )
 
-    if network is not None and network_active and bot_user_id:
+    if network is not None and network_active and bot_user_id and not hub_client:
         publish_channel = guild.get_channel(subscription.publish_channel_id)
         subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
         if isinstance(publish_channel, discord.TextChannel):

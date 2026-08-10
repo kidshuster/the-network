@@ -28,6 +28,7 @@ _REQUIRED_OPERATOR_PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("read_message_history", "Read Message History"),
     ("manage_messages", "Manage Messages"),
     ("manage_emojis_and_stickers", "Manage Emojis and Stickers"),
+    ("create_expressions", "Create Expressions"),
 )
 
 
@@ -118,6 +119,8 @@ def _operator_has_permission(
             or getattr(permissions, "manage_expressions", False)
             or getattr(permissions, "manage_emojis", False)
         )
+    if attr == "create_expressions":
+        return bool(getattr(permissions, "create_expressions", False))
     return bool(getattr(permissions, attr, False))
 
 

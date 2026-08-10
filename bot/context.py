@@ -74,8 +74,16 @@ class BotContext:
 
     async def refresh_client_counts(self) -> None:
         await self.client_cache.load_cache()
-        self.client_count = self.client_cache.client_count
-        self.enabled_client_count = self.client_cache.enabled_client_count
+        from bot.services.hub_announcements import is_hub_announcements_client
+
+        clients = await self.client_repo.list_all()
+        visible = [
+            client
+            for client in clients
+            if not is_hub_announcements_client(client, self.settings)
+        ]
+        self.client_count = len(visible)
+        self.enabled_client_count = sum(1 for client in visible if client.enabled)
 
     def uptime_label(self) -> str:
         delta = datetime.now(tz=UTC) - self.started_at

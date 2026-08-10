@@ -747,7 +747,12 @@ async def create_text_channel_with_overwrites(
     topic: str | None = None,
     news: bool = False,
 ) -> discord.TextChannel:
-    """Create a text channel with overwrites applied at creation time."""
+    """Create a text channel and apply overwrites.
+
+    When ``category`` is set, create with category sync first — Discord returns
+    50013 if overwrites are supplied at creation time inside a permissioned
+    category.
+    """
     from bot.services.guild_notifications import ensure_guild_only_mention_notifications
 
     await ensure_guild_only_mention_notifications(
@@ -756,13 +761,30 @@ async def create_text_channel_with_overwrites(
         reason=reason,
     )
     safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
+    if category is not None:
+        create_kwargs: dict[str, object] = {
+            "name": name,
+            "category": category,
+            "reason": reason,
+        }
+        if topic is not None:
+            create_kwargs["topic"] = topic
+        if news:
+            create_kwargs["news"] = True
+        channel = await guild.create_text_channel(**create_kwargs)  # type: ignore[arg-type]
+        await sync_channel_permission_overwrites(
+            channel,
+            bot_member,
+            safe,
+            reason=reason,
+        )
+        return channel
+
     kwargs: dict[str, object] = {
         "name": name,
         "reason": reason,
         "overwrites": safe,
     }
-    if category is not None:
-        kwargs["category"] = category
     if topic is not None:
         kwargs["topic"] = topic
     if news:

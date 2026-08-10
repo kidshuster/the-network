@@ -163,6 +163,10 @@ class RelayService:
             subscriber = self._clients.get_client(dest_sub.client_id)
             if subscriber is None or not subscriber.enabled:
                 continue
+            from bot.services.hub_announcements import is_hub_announcements_client
+
+            if is_hub_announcements_client(subscriber, self._settings):
+                continue
             if await self._client_repo.is_relay_blocked(
                 publisher_subscription_id=publisher_sub.id,
                 publisher_client_id=publisher.id,

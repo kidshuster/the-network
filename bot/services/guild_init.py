@@ -402,7 +402,7 @@ async def _reorder_moderation_channels(
     *,
     result: GuildInitResult,
 ) -> None:
-    order = ["moderator-only", "join-requests", "commands"]
+    order = ["moderator-only", "network-announcements", "join-requests", "commands"]
     channels = [
         ch for ch in moderation.channels if isinstance(ch, discord.TextChannel)
     ]
@@ -734,6 +734,16 @@ async def initialize_guild(
             )
 
         await _reorder_moderation_channels(moderation, result=result)
+
+        if clients is not None and bot is not None and context is not None:
+            from bot.services.hub_announcements import ensure_hub_announcements_client
+
+            await ensure_hub_announcements_client(
+                guild,
+                bot,
+                context,
+                result=result,
+            )
 
         guild_clients = [
             client for client in (clients or []) if client.guild_id == guild.id

@@ -72,6 +72,10 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
         "resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
+    monkeypatch.setattr(
+        "bot.services.hub_announcements.ensure_hub_announcements_subscription",
+        AsyncMock(return_value=False),
+    )
 
     result = await create_network(
         context,

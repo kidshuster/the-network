@@ -252,7 +252,7 @@ class ServerRequestService:
         if result.client_role is not None:
             from bot.services.leaders_channel import grant_leaders_channel_access
 
-            await grant_leaders_channel_access(
+            leaders_sync = await grant_leaders_channel_access(
                 guild,
                 bot_member,
                 self._context,
@@ -260,11 +260,19 @@ class ServerRequestService:
                 access_role_name=self._bot.settings.network_access_role_name,
                 operator_role_name=self._bot.settings.network_operator_role_name,
             )
+        else:
+            leaders_sync = None
         await self._finalize_review_message(guild, request, moderator, ServerRequestStatus.APPROVED)
 
         summary = "Client category created."
         if result.profile_channel is not None:
             summary = f"Created {result.profile_channel.mention}."
+        if leaders_sync is not None and leaders_sync.failures:
+            summary += (
+                " Leaders access sync reported issues: "
+                + "; ".join(leaders_sync.failures[:3])
+                + ("…" if len(leaders_sync.failures) > 3 else "")
+            )
         if requester is not None:
             await self._notify_requester(
                 requester,

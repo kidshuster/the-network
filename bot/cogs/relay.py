@@ -47,6 +47,11 @@ class RelayCog(commands.Cog):
         if context is None:
             return
 
+        from bot.services.hub_announcements import handle_network_announcements_message
+
+        if message.guild is not None and message.guild.id == self.bot.settings.guild_id:
+            await handle_network_announcements_message(self.bot, message)
+
         relay_service = context.relay_service
         if relay_service.is_potential_feed_message(message):
             try:

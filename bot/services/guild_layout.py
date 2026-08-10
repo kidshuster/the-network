@@ -20,6 +20,7 @@ CHANNEL_CHANGELOG = "changelog"
 CHANNEL_JOIN_REQUESTS = "join-requests"
 CHANNEL_MODERATOR_ONLY = "moderator-only"
 CHANNEL_COMMANDS = "commands"
+CHANNEL_NETWORK_ANNOUNCEMENTS = "network-announcements"
 
 # Legacy names kept for cleanup/migration
 CATEGORY_SUBSCRIBE = "Subscribe To Me!"
@@ -143,6 +144,21 @@ def resolve_network_admin_channel(guild: discord.Guild) -> discord.TextChannel |
         if match is not None:
             return match
     return resolve_text_channel_in_category(guild, name=CHANNEL_COMMANDS)
+
+
+def resolve_network_announcements_channel(
+    guild: discord.Guild,
+) -> discord.TextChannel | None:
+    mod_category = resolve_moderation_category(guild)
+    if mod_category is not None:
+        match = resolve_text_channel_in_category(
+            guild,
+            name=CHANNEL_NETWORK_ANNOUNCEMENTS,
+            category_id=mod_category.id,
+        )
+        if match is not None:
+            return match
+    return resolve_text_channel_in_category(guild, name=CHANNEL_NETWORK_ANNOUNCEMENTS)
 
 
 def resolve_network_announcement_channel(

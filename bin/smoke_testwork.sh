@@ -24,10 +24,12 @@ Steps:
   1. smoke_button_commands     — slash/view parity
   2. smoke_provision_flow --probe-only
   3. smoke_provision_flow      — join-approval E2E (+ subscribe when network exists)
-  4. ensure smoke network + hub rebuild smoke
-  5. smoke_server_init --stress
-  6. smoke_cleanup_artifacts
-  7. restart bot (unless --no-restart)
+  4. smoke_setup_welcome       — setup sticky copy + welcome/blacklist behavior
+  5. smoke_hub_announcements   — hub client relay + write-only guard
+  6. ensure smoke network + hub rebuild smoke
+  7. smoke_server_init --stress
+  8. smoke_cleanup_artifacts
+  9. restart bot (unless --no-restart)
 
 Prerequisites: hub initialized via /server init; operator role fully permissioned.
 EOF
@@ -60,6 +62,10 @@ run_step "pre-flight artifact cleanup" "$ROOT/bin/smoke_cleanup_artifacts.sh"
 run_step "button/command parity" "$ROOT/bin/smoke_button_commands.sh"
 run_step "pre-init provision probe" "$ROOT/bin/smoke_provision_flow.sh" --probe-only
 run_step "join-approval E2E" "$ROOT/bin/smoke_provision_flow.sh"
+
+run_step "setup sticky + welcome smoke" "$ROOT/bin/smoke_setup_welcome.sh"
+
+run_step "hub announcements smoke" "$ROOT/bin/smoke_hub_announcements.sh"
 
 run_step "ensure smoke network + hub rebuild" python - <<'PY'
 import asyncio

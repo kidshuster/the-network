@@ -6,7 +6,7 @@ description: |
 fields:
   - name: Steps
     value: |
-      1. On **your server**, pick or create the channel that should **receive** network announcements.
+      1. On **your server**, create an announcement channel named **{network_channel_name}** (or pick an existing one that should receive network posts).
       2. In **that channel**, click **Follow**, select **this hub server**, and choose {subscribe_mention}.
       3. Click **Subscribed channel connected** below (also available on your **network-profile** moderation card).
     inline: false

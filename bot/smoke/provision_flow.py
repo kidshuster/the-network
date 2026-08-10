@@ -495,12 +495,33 @@ async def run_join_approval_smoke_flow(
             if client is None:
                 raise RuntimeError("Smoke accept did not register a client.")
 
+            if "Leaders access sync reported issues" in (approve.message or ""):
+                raise RuntimeError(
+                    f"Smoke accept Leaders sync failed: {approve.message}",
+                )
+
+            client_role = guild.get_role(client.client_role_id)
+            if client_role is None:
+                raise RuntimeError("Smoke accept client role is missing from the guild.")
+
+            from bot.smoke.server_init_probes import _collect_leaders_access_gaps
+
+            leaders_gaps = [
+                gap
+                for gap in await _collect_leaders_access_gaps(guild, context)
+                if accept_server_name in gap
+            ]
+            if leaders_gaps:
+                raise RuntimeError(
+                    "Smoke accept did not grant Leaders access: "
+                    + "; ".join(leaders_gaps),
+                )
+
             profile_channel_id = client.profile_channel_id
             channel = guild.get_channel(profile_channel_id)
             if channel is None:
                 raise RuntimeError("Smoke accept profile channel is missing from the guild.")
 
-            client_role = guild.get_role(client.client_role_id)
             if client_role is not None and client_role in bot_member.roles:
                 guard_role = client_role
             else:
@@ -601,13 +622,56 @@ async def run_join_approval_smoke_flow(
             await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
 
 
+async def ensure_smoke_network_key(
+    context: BotContext,
+    bot: NetworkRelayBot,
+    guild: discord.Guild,
+    *,
+    default_key: str = "smoke",
+) -> str:
+    """Return a network key for subscribe/rebuild smokes, creating one if needed."""
+    explicit = os.environ.get("SMOKE_NETWORK_KEY", "").strip().lower()
+    if explicit:
+        existing = await context.network_repo.get_by_key(explicit)
+        if existing is None:
+            from bot.services.network_admin import create_network
+
+            created = await create_network(
+                context,
+                bot,
+                guild,
+                key=explicit,
+                display_name=explicit.title(),
+            )
+            if not created.success or created.network is None:
+                raise RuntimeError(created.error or f"could not create network {explicit!r}")
+        return explicit
+
+    networks = await context.network_repo.list_all()
+    if networks:
+        return networks[0].key
+
+    from bot.services.network_admin import create_network
+
+    created = await create_network(
+        context,
+        bot,
+        guild,
+        key=default_key,
+        display_name=default_key.title(),
+    )
+    if not created.success or created.network is None:
+        raise RuntimeError(created.error or f"could not create network {default_key!r}")
+    return created.network.key
+
+
 def resolve_smoke_network_key(context: BotContext) -> str:
     explicit = os.environ.get("SMOKE_NETWORK_KEY", "").strip().lower()
     if explicit:
         return explicit
     raise RuntimeError(
         "Set SMOKE_NETWORK_KEY to a network nkey for network-subscribe smoke, "
-        "or create at least one network so the default network can be used."
+        "or run ensure_smoke_network_key() first."
     )
 
 
@@ -717,6 +781,8 @@ async def run_hub_rebuild_smoke_flow(
     guild: discord.Guild,
     bot: NetworkRelayBot,
     context: BotContext,
+    *,
+    skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
     from bot.services.guild_init import initialize_guild
@@ -853,15 +919,16 @@ async def run_hub_rebuild_smoke_flow(
 
         return state
     finally:
-        manual = await cleanup_all_hub_rebuild_smoke_clients(guild, context, bot_member)
-        if manual:
-            print(
-                f"WARN: {len(manual)} channel(s) need manual deletion in Discord "
-                "(Server Settings → Channels):",
-                flush=True,
-            )
-            for item in manual:
-                print(f"  - {item}", flush=True)
+        if not skip_cleanup:
+            manual = await cleanup_all_hub_rebuild_smoke_clients(guild, context, bot_member)
+            if manual:
+                print(
+                    f"WARN: {len(manual)} channel(s) need manual deletion in Discord "
+                    "(Server Settings → Channels):",
+                    flush=True,
+                )
+                for item in manual:
+                    print(f"  - {item}", flush=True)
 
 
 async def run_hub_onboard_smoke_flow(
