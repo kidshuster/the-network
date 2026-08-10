@@ -119,3 +119,30 @@ def test_partner_feed_overwrite_allows_webhooks_only() -> None:
     assert partner.manage_webhooks is True
     assert partner.send_messages is False
     assert partner.create_public_threads is False
+
+
+def test_prepare_category_create_overwrites_omits_bot_and_operator() -> None:
+    from bot.services.guild_permissions import prepare_category_create_overwrites
+
+    everyone = MagicMock(spec=discord.Role)
+    everyone.is_default.return_value = True
+    client = MagicMock(spec=discord.Role, id=10)
+    operator = MagicMock(spec=discord.Role, id=50)
+    bot = MagicMock(spec=discord.Member, id=999)
+    bot.top_role = operator
+    overwrite = discord.PermissionOverwrite(view_channel=True)
+
+    prepared = prepare_category_create_overwrites(
+        bot,
+        {
+            everyone: overwrite,
+            client: overwrite,
+            bot: overwrite,
+            operator: overwrite,
+        },
+    )
+
+    assert everyone in prepared
+    assert client in prepared
+    assert bot not in prepared
+    assert operator not in prepared

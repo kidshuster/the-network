@@ -9,6 +9,11 @@ from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 from bot.services.client_profile_post import build_client_profile_embed
+from bot.services.client_resources import (
+    fetch_publish_channel,
+    fetch_subscribe_channel,
+    resolve_client_profile_channel,
+)
 from bot.services.subscription_setup import (
     SubscriptionSetupState,
     resolve_setup_state,
@@ -49,8 +54,8 @@ async def refresh_client_profile_message(
     *,
     view_registry: ViewRegistry,
 ) -> None:
-    channel = guild.get_channel(client.profile_channel_id)
-    if not isinstance(channel, discord.TextChannel):
+    channel = await resolve_client_profile_channel(guild, client)
+    if channel is None:
         return
 
     subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
@@ -201,8 +206,8 @@ async def post_subscription_moderation_embed(
     setup_mode: SetupMode = "create",
     view_registry: ViewRegistry,
 ) -> None:
-    channel = guild.get_channel(client.profile_channel_id)
-    if not isinstance(channel, discord.TextChannel):
+    channel = await resolve_client_profile_channel(guild, client)
+    if channel is None:
         return
 
     if setup_state is None:
@@ -215,8 +220,8 @@ async def post_subscription_moderation_embed(
     if setup_mode == "reconcile" and setup_state.fully_configured:
         return
 
-    publish_channel = guild.get_channel(subscription.publish_channel_id)
-    subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
+    publish_channel = await fetch_publish_channel(guild, subscription)
+    subscribe_channel = await fetch_subscribe_channel(guild, subscription)
     publish_mention = publish_channel.mention if publish_channel is not None else "#publish"
     subscribe_mention = (
         subscribe_channel.mention if subscribe_channel is not None else "#subscribe"

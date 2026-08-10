@@ -21,16 +21,18 @@ from bot.services.permission_probe import (
     verify_provision_permissions_live,
 )
 from bot.services.server_request_service import ServerRequestService
-from bot.smoke.resource_guard import guild_test_resource_guard
+from bot.smoke.constants import SMOKE_CLEANUP_REASON
+from bot.smoke.resource_guard import delete_guild_channel_for_cleanup, guild_test_resource_guard
 from bot.testing.context_factory import create_bot_context
 from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
+    from bot.db.connection import Database
 
 logger = logging.getLogger(__name__)
 
-_PROBE_REASON = "The Network smoke cleanup (auto-deleted)"
+_PROBE_REASON = SMOKE_CLEANUP_REASON
 
 _SMOKE_JOIN_REQUEST_PREFIXES = ("Smoke Accept ", "Smoke Deny ", "Smoke Rebuild ")
 
@@ -47,9 +49,9 @@ def _is_smoke_join_request_message(
         return False
     embed = message.embeds[0]
     for field in embed.fields:
-        if field.name.casefold() != "name":
+        if (field.name or "").casefold() != "name":
             continue
-        return _is_smoke_server_name(field.value.strip())
+        return _is_smoke_server_name((field.value or "").strip())
     return False
 
 
@@ -79,43 +81,12 @@ async def _delete_smoke_channel_object(
     reason: str,
     bot_member: discord.Member | None = None,
 ) -> None:
-    if (
-        bot_member is not None
-        and channel.category is not None
-        and not channel.permissions_for(bot_member).manage_channels
-    ):
-        try:
-            await channel.edit(sync_permissions=True, reason=reason)
-        except discord.HTTPException:
-            pass
-
-    if isinstance(channel, discord.TextChannel) and not channel.is_news():
-        try:
-            webhooks = await channel.webhooks()
-        except discord.HTTPException:
-            webhooks = []
-        for webhook in webhooks:
-            try:
-                await webhook.delete(reason=reason)
-            except discord.HTTPException:
-                logger.warning(
-                    "Smoke cleanup: could not delete webhook",
-                    extra={"channel_id": channel.id, "webhook_id": webhook.id},
-                )
-
-    try:
-        await channel.delete(reason=reason)
-    except discord.NotFound:
-        return
-    except discord.HTTPException as exc:
-        logger.warning(
-            "Smoke cleanup: could not delete channel",
-            extra={
-                "channel_id": channel.id,
-                "status": exc.status,
-                "text": exc.text,
-            },
-        )
+    await delete_guild_channel_for_cleanup(
+        channel,
+        reason=reason,
+        bot_member=bot_member,
+        delete_webhooks=True,
+    )
 
 
 async def _delete_smoke_channel(
@@ -125,17 +96,20 @@ async def _delete_smoke_channel(
     reason: str,
     bot_member: discord.Member | None = None,
 ) -> None:
-    channel = guild.get_channel(channel_id)
-    if channel is None:
+    channel_obj: discord.abc.GuildChannel | None = guild.get_channel(channel_id)
+    if channel_obj is None:
         try:
-            channel = await guild.fetch_channel(channel_id)
+            fetched = await guild.fetch_channel(channel_id)
         except discord.NotFound:
             return
         except discord.Forbidden:
             return
+        if not isinstance(fetched, discord.abc.GuildChannel):
+            return
+        channel_obj = fetched
 
     await _delete_smoke_channel_object(
-        channel,
+        channel_obj,
         reason=reason,
         bot_member=bot_member,
     )
@@ -162,7 +136,7 @@ class SmokeFlowResult:
 
 class _SmokeProfileAttachment:
     filename = "smoke-profile.png"
-    content_type = "image/png"
+    content_type: str | None = "image/png"
     url = "https://cdn.discordapp.com/attachments/0/0/smoke-profile.png"
 
     def __init__(self, data: bytes) -> None:
@@ -188,6 +162,9 @@ async def run_guild_init_smoke_checks(
         access_role,
         operator_role_name=operator_role_name,
     )
+    from bot.smoke.pacing import pause_between_probe_phases
+
+    await pause_between_probe_phases()
     provision_steps = await verify_provision_permissions_live(
         guild,
         bot_member,
@@ -264,7 +241,9 @@ async def run_post_init_join_smoke(
     )
 
 
-async def create_smoke_context(settings: Settings):
+async def create_smoke_context(
+    settings: Settings,
+) -> tuple[Database, BotContext]:
     return await create_bot_context(settings)
 
 
@@ -719,7 +698,7 @@ async def provision_smoke_client_with_subscription(
     server_name = f"Smoke Rebuild {suffix}"
     service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
     if not hasattr(bot, "get_guild"):
-        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[attr-defined]
+        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
     stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
     if stale is not None:
@@ -915,11 +894,14 @@ async def run_hub_rebuild_smoke_flow(
                 )
 
         category = guild.get_channel(state.category_id)
-        if category is None:
+        if not isinstance(category, discord.CategoryChannel):
             try:
-                category = await guild.fetch_channel(state.category_id)
+                fetched = await guild.fetch_channel(state.category_id)
             except discord.NotFound:
-                category = None
+                fetched = None
+            category = (
+                fetched if isinstance(fetched, discord.CategoryChannel) else None
+            )
         if category is None:
             raise RuntimeError("Client category was removed during hub rebuild.")
 

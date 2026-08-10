@@ -78,7 +78,7 @@ def _patch_init_roles(
         MagicMock(return_value=operator_role),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init.resolve_human_moderator_role",
+        "bot.services.guild_init_reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
@@ -95,7 +95,7 @@ def _patch_init_roles(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init._ensure_human_moderator_role",
+        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
 
@@ -128,7 +128,7 @@ async def test_initialize_guild_survives_category_sync_50013(
         return None
 
     monkeypatch.setattr(
-        "bot.services.guild_init.resolve_category",
+        "bot.services.guild_init_reconcilers.resolve_category",
         resolve_cat,
     )
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
@@ -212,7 +212,7 @@ async def test_initialize_guild_survives_rules_channel_50013(
             "Moderation": moderation,
         }.get(name)
 
-    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     guild.create_text_channel = AsyncMock()
     guild.create_category = AsyncMock()
@@ -250,7 +250,7 @@ async def test_initialize_guild_survives_client_category_sync_50013(
         guild.categories.append(cat)
 
     monkeypatch.setattr(
-        "bot.services.guild_init.resolve_category",
+        "bot.services.guild_init_reconcilers.resolve_category",
         lambda _guild, name: next((c for c in guild.categories if c.name == name), None),
     )
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
@@ -340,10 +340,10 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
             "Leaders": leaders_cat,
         }.get(name)
 
-    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     monkeypatch.setattr(
-        "bot.services.guild_init._ensure_human_moderator_role",
+        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     monkeypatch.setattr(

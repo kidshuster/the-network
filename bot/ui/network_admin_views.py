@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
 from bot.cogs._checks import ensure_manage_guild
 from bot.cogs._responses import defer_ephemeral
 from bot.messages import modal_spec, render_embed, render_text
-from bot.messages.modals_builder import add_modal_fields
+from bot.messages.modals_builder import add_modal_fields, modal_text_value
 from bot.services.network_admin import create_network, delete_network
 from bot.services.network_admin_sticky import refresh_network_admin_sticky_from_settings
 from bot.ui._auth import validate_hub_modal_context
+from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import network_create_button, network_delete_button
 from bot.ui.persistent_views import PersistentViewRegistry
 
@@ -40,8 +41,8 @@ class CreateNetworkModal(discord.ui.Modal):
 
         guild = validated.guild
         context = validated.context
-        key = self._fields["key"].component.value.strip()
-        display_name = self._fields["display_name"].component.value.strip()
+        key = modal_text_value(self._fields["key"])
+        display_name = modal_text_value(self._fields["display_name"])
         view_registry = PersistentViewRegistry(self._bot)
         result = await create_network(
             context,
@@ -101,7 +102,7 @@ class DeleteNetworkModal(discord.ui.Modal):
 
         guild = validated.guild
         context = validated.context
-        key = self._fields["key"].component.value.strip()
+        key = modal_text_value(self._fields["key"])
         view_registry = PersistentViewRegistry(self._bot)
         result = await delete_network(
             context,
@@ -137,20 +138,20 @@ class NetworkAdminView(discord.ui.View):
         super().__init__(timeout=None)
         self._bot = bot
 
-        create = discord.ui.Button(
+        create: discord.ui.Button[Any] = discord.ui.Button(
             label="Create Network",
             style=discord.ButtonStyle.success,
             custom_id=network_create_button(),
         )
-        create.callback = self._create_callback
+        bind_item_callback(create, self._create_callback)
         self.add_item(create)
 
-        delete = discord.ui.Button(
+        delete: discord.ui.Button[Any] = discord.ui.Button(
             label="Delete Network",
             style=discord.ButtonStyle.danger,
             custom_id=network_delete_button(),
         )
-        delete.callback = self._delete_callback
+        bind_item_callback(delete, self._delete_callback)
         self.add_item(delete)
 
     async def _create_callback(self, interaction: discord.Interaction) -> None:

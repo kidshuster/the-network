@@ -13,7 +13,7 @@ from bot.constants import (
     MAX_PROFILE_IMAGE_DOWNLOAD_BYTES,
 )
 from bot.domain.errors import ProfileValidationError
-from bot.domain.profile_image import ProfileImage
+from bot.domain.profile_image import ProfileImage, ProfileImageAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ _SUPPORTED_CONTENT_TYPES = {
 _SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
-def _is_supported_attachment(attachment: discord.Attachment) -> bool:
+def _is_supported_attachment(attachment: ProfileImageAttachment) -> bool:
     content_type = (attachment.content_type or "").lower()
     if content_type.startswith("image/") and "svg" in content_type:
         return False
@@ -82,7 +82,9 @@ def _save_png(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-async def read_profile_image_attachment(attachment: discord.Attachment) -> ProfileImage:
+async def read_profile_image_attachment(
+    attachment: ProfileImageAttachment,
+) -> ProfileImage:
     max_mb = MAX_PROFILE_IMAGE_DOWNLOAD_BYTES // (1024 * 1024)
     if attachment.size and attachment.size > MAX_PROFILE_IMAGE_DOWNLOAD_BYTES:
         raise ProfileValidationError(f"Profile image exceeds the {max_mb}MB limit.")

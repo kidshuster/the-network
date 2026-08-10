@@ -214,7 +214,7 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 5. ~~`client_deletion.py` partial failure cleanup~~ — unsubscribe failure abort test added
 6. ~~`NetworkRelayBot` startup and persistent view registration~~ — `_register_persistent_views` covered
 7. Interaction response state machine (defer failure, followup failure) — partial via `ensure_sent` HTTPException test
-8. Permission overwrite effective access comparison tests
+8. ~~Permission overwrite effective access comparison tests~~ — `test_permission_effective_access.py` (hub/client/leaders truth tables)
 
 ---
 

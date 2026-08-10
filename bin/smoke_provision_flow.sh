@@ -37,9 +37,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(".env"))
 
-import discord
-
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import (
     create_smoke_context,
     run_join_approval_smoke_flow,
@@ -68,9 +67,7 @@ async def main() -> None:
     settings = Settings()
     probe_only = ${PROBE_ONLY}
 
-    intents = discord.Intents.default()
-    intents.members = True
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client(members=True)
     smoke_bot = _SmokeBot(settings)
     result_holder: dict[str, object] = {}
     ready = asyncio.Event()
@@ -138,13 +135,14 @@ async def main() -> None:
         await client.start(settings.discord_token)
 
     client_task = asyncio.create_task(_run_client())
-    timeout = 180.0 if probe_only else 300.0
+    timeout = 180.0
     try:
         await asyncio.wait_for(ready.wait(), timeout=timeout)
     except asyncio.TimeoutError as exc:
         client_task.cancel()
         raise SystemExit(
-            "FAIL: timed out waiting for Discord (stop the running bot and retry)"
+            "FAIL: timed out waiting for smoke probes (Discord rate limits can stall "
+            "role creation — wait a few minutes and retry)"
         ) from exc
     await client_task
     if failure:

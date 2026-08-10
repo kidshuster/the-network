@@ -19,6 +19,7 @@ from bot.services.guild_permissions import (
     build_leaders_category_overwrites,
     build_leaders_channel_overwrites,
     filter_configurable_overwrites,
+    prepare_category_create_overwrites,
     sync_channel_permission_overwrites,
 )
 
@@ -191,9 +192,44 @@ async def _ensure_leaders_text_channel(
             **move_kwargs,
         )
     except discord.HTTPException as exc:
-        sync_result.failures.append(
-            f"Leaders: could not sync {channel.mention} permissions ({exc})."
+        from bot.services.guild_permissions import (
+            _can_configure_role,
+            filter_configurable_overwrites,
         )
+
+        safe = filter_configurable_overwrites(
+            bot_member,
+            overwrites,
+            for_channel=True,
+        )
+        per_role_failures: list[str] = []
+        for target, overwrite in safe.items():
+            if isinstance(target, discord.Object):
+                continue
+            if isinstance(target, discord.Role) and (
+                target.is_default() or target.id == bot_member.top_role.id
+            ):
+                continue
+            if isinstance(target, discord.Role) and not _can_configure_role(
+                bot_member,
+                target,
+            ):
+                continue
+            try:
+                await channel.set_permissions(
+                    target,
+                    overwrite=overwrite,
+                    reason=reason,
+                )
+            except discord.HTTPException as role_exc:
+                label = getattr(target, "name", str(target))
+                per_role_failures.append(f"{label}: {role_exc}")
+        if per_role_failures:
+            sync_result.failures.append(
+                f"Leaders: could not sync {channel.mention} permissions ({exc})."
+                + "; "
+                + "; ".join(per_role_failures[:3]),
+            )
     return channel
 
 
@@ -263,7 +299,10 @@ async def _sync_leaders_permissions(
         try:
             category = await guild.create_category(
                 name=CATEGORY_LEADERS,
-                overwrites=category_overwrites,
+                overwrites=prepare_category_create_overwrites(
+                    bot_member,
+                    category_overwrites,
+                ),
                 reason=reason,
             )
         except discord.HTTPException as exc:

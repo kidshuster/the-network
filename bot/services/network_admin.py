@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import discord
+
+from bot.client import NetworkRelayBot
+from bot.context import BotContext
 from bot.domain.errors import NetworkValidationError
 from bot.domain.network import Network
 from bot.services.view_registry import ViewRegistry
@@ -24,9 +28,9 @@ class DeleteNetworkResult:
 
 
 async def create_network(
-    context,
-    bot,
-    guild,
+    context: BotContext,
+    bot: NetworkRelayBot,
+    guild: discord.Guild,
     *,
     key: str,
     display_name: str,
@@ -83,9 +87,9 @@ async def create_network(
 
 
 async def delete_network(
-    context,
-    bot,
-    guild,
+    context: BotContext,
+    bot: NetworkRelayBot,
+    guild: discord.Guild,
     *,
     key: str,
     view_registry: ViewRegistry,

@@ -16,17 +16,14 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(".env"))
 
-import discord
-
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.services.guild_uninit import uninitialize_guild
 
 
 async def main() -> None:
     settings = Settings()
-    intents = discord.Intents.default()
-    intents.members = True
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client(members=True)
     failure: list[BaseException] = []
     ready = asyncio.Event()
 

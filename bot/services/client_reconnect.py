@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.domain.client import Client
+from bot.domain.client_subscription import ClientSubscription
+from bot.domain.network import Network
 from bot.services.client_permission_rectification import rectify_client_permissions
 from bot.services.client_profile_sync import refresh_client_profile_message
+from bot.services.client_resources import resolve_client_category
 from bot.services.client_subscription import (
     reorder_client_category_channels,
     resync_subscriptions_for_network,
@@ -51,12 +54,18 @@ async def _finish_client_reconnect(
 
     subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
     for subscription in subscriptions:
-        network = await context.network_repo.get_by_id(subscription.network_id)
+        network_id = subscription.network_id
+        if network_id is None:
+            continue
+        network = await context.network_repo.get_by_id(network_id)
         if network is None:
             continue
-        await _run_reconnect_step(
-            f"sync subscription setup for {network.key}",
-            lambda sub=subscription, net=network: sync_subscription_setup(
+
+        async def _sync_setup(
+            sub: ClientSubscription = subscription,
+            net: Network = network,
+        ) -> None:
+            await sync_subscription_setup(
                 bot,
                 context,
                 guild,
@@ -65,11 +74,15 @@ async def _finish_client_reconnect(
                 network=net,
                 setup_mode="reconcile",
                 view_registry=view_registry,
-            ),
+            )
+
+        await _run_reconnect_step(
+            f"sync subscription setup for {network.key}",
+            _sync_setup,
         )
 
-    category = guild.get_channel(client.category_id)
-    if isinstance(category, discord.CategoryChannel):
+    category = await resolve_client_category(guild, client)
+    if category is not None:
         await _run_reconnect_step(
             "reorder client category channels",
             lambda: reorder_client_category_channels(
@@ -136,8 +149,8 @@ async def reconnect_clients_on_init(
         if rectified.skipped and not rectified.synced:
             continue
 
-        category = guild.get_channel(client.category_id)
-        if not isinstance(category, discord.CategoryChannel):
+        category = await resolve_client_category(guild, client)
+        if category is None:
             continue
 
         try:

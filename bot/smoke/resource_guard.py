@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.smoke.constants import TEST_CLEANUP_REASON
+
 if TYPE_CHECKING:
     from bot.context import BotContext
 
 logger = logging.getLogger(__name__)
 
-CLEANUP_REASON = "The Network test cleanup (auto-deleted)"
+CLEANUP_REASON = TEST_CLEANUP_REASON
 
 PROBE_PREFIX = "network-perm-probe"
 DIAG_PREFIX = "diag"
@@ -101,7 +103,6 @@ class GuildTestResourceGuard:
 
     async def __aexit__(self, *_exc: object) -> None:
         await self.cleanup()
-        await cleanup_guild_test_artifacts(self.guild)
 
     def track_webhook(self, webhook: discord.Webhook) -> discord.Webhook:
         self._webhooks.append(webhook)
@@ -185,7 +186,6 @@ async def guild_test_resource_guard(
         yield guard
     finally:
         await guard.cleanup()
-        await cleanup_guild_test_artifacts(guild)
 
 
 async def cleanup_guild_test_artifacts(guild: discord.Guild) -> list[str]:
@@ -352,25 +352,57 @@ async def cleanup_stale_probe_resources(guild: discord.Guild) -> list[str]:
     return await cleanup_guild_test_artifacts(guild)
 
 
-async def _delete_channel(
+async def delete_guild_channel_for_cleanup(
     channel: discord.abc.GuildChannel,
     *,
+    reason: str,
     bot_member: discord.Member | None = None,
+    delete_webhooks: bool = False,
 ) -> None:
-    name = getattr(channel, "name", str(channel.id))
+    """Delete a guild channel, optionally clearing webhooks and syncing category perms."""
     if (
         bot_member is not None
         and channel.category is not None
         and not channel.permissions_for(bot_member).manage_channels
     ):
         try:
-            await channel.edit(sync_permissions=True, reason=CLEANUP_REASON)
+            await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
         except discord.HTTPException:
             pass
+
+    if delete_webhooks and isinstance(channel, discord.TextChannel) and not channel.is_news():
+        try:
+            webhooks = await channel.webhooks()
+        except discord.HTTPException:
+            webhooks = []
+        for webhook in webhooks:
+            try:
+                await webhook.delete(reason=reason)
+            except discord.HTTPException:
+                logger.warning(
+                    "Test cleanup: could not delete webhook",
+                    extra={"channel_id": channel.id, "webhook_id": webhook.id},
+                )
+
+    name = getattr(channel, "name", str(channel.id))
     try:
-        await channel.delete(reason=CLEANUP_REASON)
+        await channel.delete(reason=reason)
+    except discord.NotFound:
+        return
     except discord.HTTPException:
         logger.warning("Test cleanup: could not delete channel", extra={"channel": name})
+
+
+async def _delete_channel(
+    channel: discord.abc.GuildChannel,
+    *,
+    bot_member: discord.Member | None = None,
+) -> None:
+    await delete_guild_channel_for_cleanup(
+        channel,
+        reason=CLEANUP_REASON,
+        bot_member=bot_member,
+    )
 
 
 async def _delete_category(category: discord.CategoryChannel) -> None:

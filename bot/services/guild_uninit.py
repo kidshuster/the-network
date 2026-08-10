@@ -175,8 +175,9 @@ async def _detach_preserved_channels(
         if channel.category_id is None:
             continue
 
-        async def _detach(ch: discord.TextChannel = channel) -> None:
+        async def _detach(ch: discord.TextChannel = channel) -> bool:
             await ch.edit(category=None, reason="The Network guild uninit")
+            return True
 
         if await _run_uninit_step(
             result,
@@ -220,10 +221,13 @@ async def uninitialize_guild(
         if channel.id in seen_channel_ids:
             continue
         seen_channel_ids.add(channel.id)
+        async def _delete_step(ch: discord.abc.GuildChannel = channel) -> bool:
+            return await delete_channel(guild, ch.id, label="guild uninit")
+
         deleted = await _run_uninit_step(
             result,
             f"delete {_channel_label(channel)}",
-            lambda ch=channel: delete_channel(guild, ch.id, label="guild uninit"),
+            _delete_step,
         )
         if deleted:
             result.deleted_channels.append(_channel_label(channel))
@@ -233,20 +237,28 @@ async def uninitialize_guild(
         if category.id in seen_category_ids:
             continue
         seen_category_ids.add(category.id)
+        async def _delete_category_step(
+            cat: discord.CategoryChannel = category,
+        ) -> bool:
+            return await delete_channel(guild, cat.id, label="guild uninit category")
+
         deleted = await _run_uninit_step(
             result,
             f"delete category {category.name}",
-            lambda cat=category: delete_channel(guild, cat.id, label="guild uninit category"),
+            _delete_category_step,
         )
         if deleted:
             result.deleted_categories.append(category.name)
 
     if perms.manage_roles:
         for role in sorted(roles, key=lambda r: r.position):
+            async def _delete_role_step(r: discord.Role = role) -> bool:
+                return await delete_role(guild, r.id, label="guild uninit role")
+
             deleted = await _run_uninit_step(
                 result,
                 f"delete role {role.name}",
-                lambda r=role: delete_role(guild, r.id, label="guild uninit role"),
+                _delete_role_step,
             )
             if deleted:
                 result.deleted_roles.append(role.name)

@@ -30,10 +30,14 @@ doc/          Design spec and planning (reference only)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python -m bot.main          # run bot
-ruff check .                # lint
-mypy bot                    # type check
-pytest                      # tests
+./test --dev                # ruff + mypy + pytest (default)
+./test --full               # dev gate + live Testwork smoke (pre-deploy)
+ruff check .                # lint only
+mypy bot                    # type check only
+pytest                      # tests only
 ```
+
+See `docs/smoke-testing.md` for staging guild setup and smoke pacing.
 
 ## Conventions
 

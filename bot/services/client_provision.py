@@ -15,6 +15,7 @@ from bot.services.guild_permissions import (
     build_client_profile_channel_overwrites,
     create_text_channel_with_overwrites,
     filter_configurable_overwrites,
+    prepare_category_create_overwrites,
 )
 from bot.services.network_provision import (
     resolve_access_role,
@@ -87,14 +88,17 @@ class ClientProvisionService:
             reason=f"Client access for {server_name}",
         )
 
-        category_overwrites = filter_configurable_overwrites(
+        category_overwrites = prepare_category_create_overwrites(
             bot_member,
-            build_client_category_overwrites(
-                guild,
+            filter_configurable_overwrites(
                 bot_member,
-                client_role,
-                access_role,
-                human_moderator_role,
+                build_client_category_overwrites(
+                    guild,
+                    bot_member,
+                    client_role,
+                    access_role,
+                    human_moderator_role,
+                ),
             ),
         )
         from bot.services.guild_notifications import ensure_guild_only_mention_notifications

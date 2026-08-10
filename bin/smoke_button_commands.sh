@@ -65,9 +65,10 @@ print("  network-profile view -> Edit Profile + network subscribe buttons")
 async def main() -> None:
     from bot.config import Settings
 
+    from bot.smoke.discord_client import create_smoke_discord_client
+
     settings = Settings()
-    intents = discord.Intents.default()
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client()
     ready = asyncio.Event()
     failure: list[BaseException] = []
 

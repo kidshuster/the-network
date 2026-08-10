@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Unified test entry point — local quality gate and optional live Discord smoke.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+MODE=""
+SMOKE_RESTART=0
+
+usage() {
+  cat <<'EOF'
+Usage: ./test [--dev | --full] [--smoke-restart]
+
+Modes:
+  --dev           Local only — ruff, mypy, pytest (default; ~1 minute)
+  --full          --dev, then live Testwork smoke suite (~15–30 minutes)
+
+Options:
+  --smoke-restart After live smoke, restart the bot (default: leave stopped)
+  -h, --help      Show this help
+
+Live smoke uses the guild in .env. Stop the running bot first (one gateway
+session per token). For aggressive probe runs, use a burn-in guild:
+
+  cp .env.example .env.staging   # separate GUILD_ID + DATABASE_PATH
+  bin/use-staging-env.sh staging
+
+See docs/smoke-testing.md for rate-limit pacing env vars and workflow.
+
+Examples:
+  ./test              # same as ./test --dev
+  ./test --dev
+  ./test --full
+  SMOKE_STEP_DELAY_SEC=12 ./test --full
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --dev) MODE="dev" ;;
+    --full) MODE="full" ;;
+    --smoke-restart) SMOKE_RESTART=1 ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  MODE="dev"
+fi
+
+if [[ ! -d "$ROOT/.venv" ]]; then
+  echo "Missing .venv — run: python3 -m venv .venv && source .venv/bin/activate && pip install -e \".[dev]\"" >&2
+  exit 1
+fi
+# shellcheck disable=SC1091
+source "$ROOT/.venv/bin/activate"
+
+run_dev() {
+  echo ""
+  echo "==> ruff"
+  ruff check .
+
+  echo ""
+  echo "==> mypy"
+  mypy bot
+
+  echo ""
+  echo "==> pytest"
+  pytest -q
+
+  echo ""
+  echo "OK: dev gate passed (ruff, mypy, pytest)"
+}
+
+run_full_smoke() {
+  if pgrep -f "python -m bot.main" >/dev/null 2>&1; then
+    echo "ERROR: bot is running — stop it before live smoke (one gateway session per token)." >&2
+    echo "  pkill -f \"python -m bot.main\"  or  bin/stop.sh" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$ROOT/.env" ]]; then
+    echo "ERROR: missing .env — copy .env.example and set DISCORD_TOKEN + GUILD_ID." >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "==> live smoke (bin/smoke_testwork.sh)"
+  echo "    guild: $(grep '^GUILD_ID=' "$ROOT/.env" | cut -d= -f2-)"
+  smoke_args=(--no-restart)
+  if [[ "$SMOKE_RESTART" -eq 1 ]]; then
+    smoke_args=()
+  fi
+  bin/smoke_testwork.sh "${smoke_args[@]}"
+
+  echo ""
+  echo "OK: full gate passed (dev + live smoke)"
+}
+
+case "$MODE" in
+  dev)
+    run_dev
+    ;;
+  full)
+    run_dev
+    run_full_smoke
+    ;;
+  *)
+    echo "Unknown mode: $MODE" >&2
+    exit 2
+    ;;
+esac

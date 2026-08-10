@@ -60,7 +60,7 @@ async def _provision_smoke_subscriber(
     server_name = f"{_SMOKE_HUB_SUB_PREFIX}{suffix}"
     service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
     if not hasattr(bot, "get_guild"):
-        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[attr-defined]
+        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
     stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
     if stale is not None:
@@ -201,7 +201,12 @@ async def run_hub_announcements_smoke_flow(
     subscriber_name = ""
 
     async with guild_test_resource_guard(guild, bot_member=bot_member):
-        hub_client = await ensure_hub_announcements_client(guild, bot, context)
+        hub_client = await ensure_hub_announcements_client(
+            guild,
+            bot,
+            context,
+            view_registry=PersistentViewRegistry(bot),
+        )
         if hub_client is None:
             raise RuntimeError("Hub announcements client could not be ensured")
 

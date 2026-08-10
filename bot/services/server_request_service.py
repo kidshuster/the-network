@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.domain.errors import ProfileValidationError
-from bot.domain.profile_image import ProfileImage
+from bot.domain.profile_image import ProfileImage, ProfileImageAttachment
 from bot.domain.server_request import ServerRequest, ServerRequestStatus
 from bot.services.image_service import (
     download_profile_image_from_url,
@@ -80,6 +80,14 @@ def build_resolved_request_embed(
     return resolved
 
 
+@dataclass
+class _ProvisionOutcome:
+    success: bool
+    client_role: discord.Role | None = None
+    profile_channel: discord.TextChannel | None = None
+    error: str | None = None
+
+
 class ServerRequestService:
     def __init__(
         self,
@@ -98,7 +106,7 @@ class ServerRequestService:
         *,
         requester: discord.abc.User,
         server_name: str,
-        profile_image: discord.Attachment,
+        profile_image: ProfileImageAttachment,
         display_name: str | None = None,
     ) -> SubmitRequestResult:
         name = server_name.strip()
@@ -293,20 +301,11 @@ class ServerRequestService:
         bot_member: discord.Member,
         request: ServerRequest,
         image: ProfileImage,
-    ):
-        from dataclasses import dataclass
-
+    ) -> _ProvisionOutcome:
         from bot.services.client_profile_post import build_client_profile_embed
         from bot.services.client_profile_sync import refresh_client_profile_message
         from bot.services.client_provision import ClientProvisionService
         from bot.services.emoji_service import EmojiService, emoji_sync_target_from_client
-
-        @dataclass
-        class ProvisionOutcome:
-            success: bool
-            client_role: discord.Role | None = None
-            profile_channel: discord.TextChannel | None = None
-            error: str | None = None
 
         provision_service = ClientProvisionService()
         try:
@@ -318,9 +317,9 @@ class ServerRequestService:
                 operator_role_name=self._bot.settings.network_operator_role_name,
             )
         except ProfileValidationError as exc:
-            return ProvisionOutcome(success=False, error=str(exc))
+            return _ProvisionOutcome(success=False, error=str(exc))
         except discord.HTTPException as exc:
-            return ProvisionOutcome(success=False, error=f"Discord API error: {exc}")
+            return _ProvisionOutcome(success=False, error=f"Discord API error: {exc}")
 
         networks = await self._context.network_repo.list_all()
         network_keys = [n.key for n in networks]
@@ -378,7 +377,7 @@ class ServerRequestService:
             client,
             view_registry=self._view_registry,
         )
-        return ProvisionOutcome(
+        return _ProvisionOutcome(
             success=True,
             client_role=provision.client_role,
             profile_channel=provision.profile_channel,

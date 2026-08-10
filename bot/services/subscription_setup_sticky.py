@@ -9,6 +9,13 @@ from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 from bot.messages import render_embed
+from bot.services.client_resources import fetch_publish_channel, fetch_subscribe_channel
+from bot.services.sticky_sync import (
+    SETUP_STICKY_HISTORY_LIMIT,
+    find_embed_sticky_by_footer_scan,
+    resolve_embed_sticky_message,
+    sync_footer_marker_embed_sticky,
+)
 from bot.services.subscription_setup import SubscriptionSetupState, resolve_setup_state
 from bot.services.view_registry import ViewRegistry
 
@@ -22,7 +29,7 @@ SetupMode = Literal["create", "reconcile"]
 
 _PUBLISH_SETUP_FOOTER = "publish setup"
 _SUBSCRIBE_SETUP_FOOTER = "subscribe setup"
-_SETUP_HISTORY_LIMIT = 50
+_SETUP_HISTORY_LIMIT = SETUP_STICKY_HISTORY_LIMIT
 
 
 def _bot_author_icon_url(bot: NetworkRelayBot) -> str:
@@ -121,44 +128,8 @@ def _supports_setup_sticky(channel: discord.abc.GuildChannel) -> bool:
     return hasattr(channel, "history") and hasattr(channel, "send")
 
 
-async def _find_setup_sticky_by_scan(
-    channel: discord.abc.GuildChannel,
-    *,
-    bot_user_id: int,
-    footer_marker: str,
-) -> discord.Message | None:
-    if not hasattr(channel, "history"):
-        return None
-    marker = footer_marker.casefold()
-    try:
-        async for message in channel.history(limit=_SETUP_HISTORY_LIMIT):
-            if message.author.id != bot_user_id or not message.embeds:
-                continue
-            footer = (message.embeds[0].footer.text or "").casefold()
-            if marker in footer:
-                return message
-    except discord.HTTPException:
-        return None
-    return None
-
-
-async def _resolve_setup_sticky_message(
-    channel: discord.abc.GuildChannel,
-    *,
-    bot_user_id: int,
-    message_id: int | None,
-    footer_marker: str,
-) -> discord.Message | None:
-    if message_id is not None and hasattr(channel, "fetch_message"):
-        try:
-            return await channel.fetch_message(message_id)
-        except discord.HTTPException:
-            pass
-    return await _find_setup_sticky_by_scan(
-        channel,
-        bot_user_id=bot_user_id,
-        footer_marker=footer_marker,
-    )
+_find_setup_sticky_by_scan = find_embed_sticky_by_footer_scan
+_resolve_setup_sticky_message = resolve_embed_sticky_message
 
 
 async def _sync_publish_setup_sticky(
@@ -171,58 +142,33 @@ async def _sync_publish_setup_sticky(
     configured: bool,
     allow_create: bool,
 ) -> ClientSubscription:
-    if configured:
-        message = await _resolve_setup_sticky_message(
-            publish_channel,
-            bot_user_id=bot_user_id,
-            message_id=subscription.publish_setup_message_id,
-            footer_marker=_PUBLISH_SETUP_FOOTER,
-        )
-        if message is not None:
-            try:
-                await message.delete()
-            except discord.HTTPException:
-                pass
+    result = await sync_footer_marker_embed_sticky(
+        publish_channel,
+        bot_user_id=bot_user_id,
+        stored_message_id=subscription.publish_setup_message_id,
+        footer_marker=_PUBLISH_SETUP_FOOTER,
+        embed=render_embed(
+            "publish_setup_instructions",
+            publish_mention=publish_channel.mention,
+        ),
+        allow_create=allow_create,
+        remove=configured,
+    )
+    if result.removed:
         if subscription.publish_setup_message_id is not None:
             return await context.client_repo.update_publish_setup_message_id(
                 subscription.id,
                 None,
             )
         return subscription
-
-    embed = render_embed(
-        "publish_setup_instructions",
-        publish_mention=publish_channel.mention,
-    )
-    message = await _resolve_setup_sticky_message(
-        publish_channel,
-        bot_user_id=bot_user_id,
-        message_id=subscription.publish_setup_message_id,
-        footer_marker=_PUBLISH_SETUP_FOOTER,
-    )
-    if message is not None:
-        try:
-            await message.edit(embed=embed)
-            if subscription.publish_setup_message_id != message.id:
-                return await context.client_repo.update_publish_setup_message_id(
-                    subscription.id,
-                    message.id,
-                )
-            return subscription
-        except discord.HTTPException:
-            logger.warning(
-                "Could not refresh publish setup sticky",
-                extra={"subscription_id": subscription.id, "message_id": message.id},
-            )
-
-    if not allow_create:
+    if result.message is None:
         return subscription
-
-    message = await publish_channel.send(embed=embed, silent=True)
-    return await context.client_repo.update_publish_setup_message_id(
-        subscription.id,
-        message.id,
-    )
+    if subscription.publish_setup_message_id != result.message.id:
+        return await context.client_repo.update_publish_setup_message_id(
+            subscription.id,
+            result.message.id,
+        )
+    return subscription
 
 
 async def _sync_subscribe_setup_sticky(
@@ -238,18 +184,16 @@ async def _sync_subscribe_setup_sticky(
     view_registry: ViewRegistry,
 ) -> ClientSubscription:
     if confirmed:
-        message = await _resolve_setup_sticky_message(
+        result = await sync_footer_marker_embed_sticky(
             subscribe_channel,
             bot_user_id=bot_user_id,
-            message_id=subscription.subscribe_setup_message_id,
+            stored_message_id=subscription.subscribe_setup_message_id,
             footer_marker=_SUBSCRIBE_SETUP_FOOTER,
+            embed=discord.Embed(),
+            allow_create=False,
+            remove=True,
         )
-        if message is not None:
-            try:
-                await message.delete()
-            except discord.HTTPException:
-                pass
-        if subscription.subscribe_setup_message_id is not None:
+        if result.removed and subscription.subscribe_setup_message_id is not None:
             return await context.client_repo.update_subscribe_setup_message_id(
                 subscription.id,
                 None,
@@ -265,35 +209,24 @@ async def _sync_subscribe_setup_sticky(
         network_channel_name=f"🌐-{network.display_name}",
     )
     view = view_registry.register_subscribe_setup_view(subscription.id, network.key)
-    message = await _resolve_setup_sticky_message(
+    result = await sync_footer_marker_embed_sticky(
         subscribe_channel,
         bot_user_id=bot_user_id,
-        message_id=subscription.subscribe_setup_message_id,
+        stored_message_id=subscription.subscribe_setup_message_id,
         footer_marker=_SUBSCRIBE_SETUP_FOOTER,
+        embed=embed,
+        view=view,
+        allow_create=allow_create,
+        remove=False,
     )
-    if message is not None:
-        try:
-            await message.edit(embed=embed, view=view)
-            if subscription.subscribe_setup_message_id != message.id:
-                return await context.client_repo.update_subscribe_setup_message_id(
-                    subscription.id,
-                    message.id,
-                )
-            return subscription
-        except discord.HTTPException:
-            logger.warning(
-                "Could not refresh subscribe setup sticky",
-                extra={"subscription_id": subscription.id, "message_id": message.id},
-            )
-
-    if not allow_create:
+    if result.message is None:
         return subscription
-
-    message = await subscribe_channel.send(embed=embed, view=view, silent=True)
-    return await context.client_repo.update_subscribe_setup_message_id(
-        subscription.id,
-        message.id,
-    )
+    if subscription.subscribe_setup_message_id != result.message.id:
+        return await context.client_repo.update_subscribe_setup_message_id(
+            subscription.id,
+            result.message.id,
+        )
+    return subscription
 
 
 async def _maybe_post_activation_welcome(
@@ -390,8 +323,8 @@ async def sync_subscription_setup(
     )
 
     if network is not None and network_active and bot_user_id and not hub_client:
-        publish_channel = guild.get_channel(subscription.publish_channel_id)
-        subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
+        publish_channel = await fetch_publish_channel(guild, subscription)
+        subscribe_channel = await fetch_subscribe_channel(guild, subscription)
         if isinstance(publish_channel, discord.TextChannel):
             subscription = await _sync_publish_setup_sticky(
                 guild,

@@ -26,6 +26,7 @@ from bot.services.network_provision import (
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.smoke.constants import SERVER_INIT_PROBE_REASON
 from bot.smoke.provision_flow import run_pre_init_smoke_checks
 from bot.smoke.resource_guard import guild_test_resource_guard
 from bot.ui.persistent_views import PersistentViewRegistry
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PROBE_REASON = "The Network server-init live probe (auto-reverted)"
+_PROBE_REASON = SERVER_INIT_PROBE_REASON
 
 
 @dataclass
@@ -343,11 +344,10 @@ async def _strip_role_overwrite(
     channel: discord.abc.GuildChannel,
     role: discord.Role,
 ) -> None:
-    overwrites = dict(channel.overwrites)
-    if role not in overwrites:
+    """Remove one role overwrite without forcing sync_permissions=False (avoids bot lockout)."""
+    if role not in channel.overwrites:
         return
-    del overwrites[role]
-    await channel.edit(overwrites=overwrites, sync_permissions=False, reason=_PROBE_REASON)  # type: ignore[attr-defined]
+    await channel.set_permissions(role, overwrite=None, reason=_PROBE_REASON)
 
 
 async def probe_leaders_drift_resync(

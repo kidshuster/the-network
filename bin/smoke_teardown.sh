@@ -21,16 +21,15 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(".env"))
 
-import discord
-
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import create_smoke_context
 from bot.smoke.teardown import teardown_smoke_guild
 
 
 async def main() -> None:
     settings = Settings()
-    client = discord.Client(intents=discord.Intents.default())
+    client = create_smoke_discord_client()
     ready = asyncio.Event()
     failure: list[BaseException] = []
 
@@ -85,7 +84,7 @@ async def main() -> None:
 
     task = asyncio.create_task(client.start(settings.discord_token))
     try:
-        await asyncio.wait_for(ready.wait(), timeout=180.0)
+        await asyncio.wait_for(ready.wait(), timeout=300.0)
     except TimeoutError as exc:
         task.cancel()
         raise SystemExit(

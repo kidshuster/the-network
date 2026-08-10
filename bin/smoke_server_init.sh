@@ -58,9 +58,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(".env"))
 
-import discord
-
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import create_smoke_context
 from bot.smoke.server_init_probes import (
     format_probe_report,
@@ -92,9 +91,7 @@ async def main() -> None:
     settings = Settings()
     mode = "${MODE}"
 
-    intents = discord.Intents.default()
-    intents.members = True
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client(members=True)
     probe_bot = _ProbeBot(settings)
     ready = asyncio.Event()
     failure: list[BaseException] = []
@@ -170,7 +167,7 @@ async def main() -> None:
             await client.close()
 
     client_task = asyncio.create_task(client.start(settings.discord_token))
-    timeout = 600.0 if mode == "stress" else 180.0
+    timeout = 900.0 if mode == "stress" else 300.0
     try:
         await asyncio.wait_for(ready.wait(), timeout=timeout)
     except asyncio.TimeoutError as exc:

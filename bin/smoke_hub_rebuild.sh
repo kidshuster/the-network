@@ -24,6 +24,7 @@ load_dotenv(Path(".env"))
 import discord
 
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import create_smoke_context, run_hub_rebuild_smoke_flow
 
 
@@ -45,9 +46,7 @@ class _SmokeBot:
 
 async def main() -> None:
     settings = Settings()
-    intents = discord.Intents.default()
-    intents.members = True
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client(members=True)
     smoke_bot = _SmokeBot(settings)
     ready = asyncio.Event()
     failure: list[BaseException] = []

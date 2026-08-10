@@ -391,8 +391,9 @@ async def _migration_v8(db: Database) -> None:
 
     # Migrate profiles -> clients + subscriptions (one client per server_name per guild)
     cursor = await db.connection.execute("SELECT COUNT(*) FROM clients")
-    client_count = (await cursor.fetchone())[0]
+    count_row = await cursor.fetchone()
     await cursor.close()
+    client_count = int(count_row[0]) if count_row is not None else 0
     if client_count == 0:
         profile_cursor = await db.connection.execute("SELECT * FROM profiles")
         profiles = await profile_cursor.fetchall()
@@ -432,7 +433,10 @@ async def _migration_v8(db: Database) -> None:
                         now,
                     ),
                 )
-                client_id = ins.lastrowid
+                new_client_id = ins.lastrowid
+                if new_client_id is None:
+                    continue
+                client_id = new_client_id
                 client_by_name[key] = client_id
             if client_id is None:
                 continue

@@ -6,6 +6,13 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.domain.client import Client
+from bot.services.client_resources import (
+    fetch_client_role,
+    fetch_publish_channel,
+    fetch_subscribe_channel,
+    resolve_client_category,
+    resolve_client_profile_channel,
+)
 from bot.services.client_subscription import (
     resolve_subscription_channels_in_category,
     sync_client_profile_channel_permissions,
@@ -50,12 +57,12 @@ async def rectify_client_permissions(
     """Validate a stored client profile and sync missing channel permissions."""
     outcome = ClientRectificationResult(server_name=client.server_name)
 
-    category = guild.get_channel(client.category_id)
-    if not isinstance(category, discord.CategoryChannel):
+    category = await resolve_client_category(guild, client)
+    if category is None:
         outcome.skipped.append("category missing in Discord")
         return outcome
 
-    client_role = guild.get_role(client.client_role_id)
+    client_role = await fetch_client_role(guild, client)
     if client_role is None:
         outcome.skipped.append("client role missing in Discord")
         return outcome
@@ -73,8 +80,8 @@ async def rectify_client_permissions(
     except discord.HTTPException as exc:
         outcome.failures.append(f"could not sync category permissions ({exc})")
 
-    profile = guild.get_channel(client.profile_channel_id)
-    if isinstance(profile, discord.TextChannel):
+    profile = await resolve_client_profile_channel(guild, client)
+    if profile is not None:
         try:
             await sync_client_profile_channel_permissions(
                 guild,
@@ -90,15 +97,21 @@ async def rectify_client_permissions(
 
     subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
     for subscription in subscriptions:
-        network = await context.network_repo.get_by_id(subscription.network_id)
+        network_id = subscription.network_id
+        if network_id is None:
+            outcome.skipped.append(
+                "subscription network id missing from database"
+            )
+            continue
+        network = await context.network_repo.get_by_id(network_id)
         if network is None:
             outcome.skipped.append(
-                f"subscription network id {subscription.network_id} missing from database"
+                f"subscription network id {network_id} missing from database"
             )
             continue
 
-        publish = guild.get_channel(subscription.publish_channel_id)
-        subscribe = guild.get_channel(subscription.subscribe_channel_id)
+        publish = await fetch_publish_channel(guild, subscription)
+        subscribe = await fetch_subscribe_channel(guild, subscription)
         if publish is None or subscribe is None:
             publish, subscribe = resolve_subscription_channels_in_category(
                 guild,

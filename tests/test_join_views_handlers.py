@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
@@ -10,6 +11,30 @@ from bot.messages import render_text
 from bot.ui.join_views import JoinNetworkModal, ModeratorReviewView
 
 _DEFAULT_CONTEXT = object()
+
+
+class _TestTextInput(discord.ui.TextInput):
+    """TextInput stub with a preset value for unit tests."""
+
+    def __init__(self, value: str) -> None:
+        super().__init__(required=True)
+        self._test_value = value
+
+    @property
+    def value(self) -> str:
+        return self._test_value
+
+
+class _TestFileUpload(discord.ui.FileUpload):
+    """FileUpload stub that exposes preset attachment values in unit tests."""
+
+    def __init__(self, values: list[MagicMock]) -> None:
+        super().__init__(required=True)
+        self._test_values = values
+
+    @property
+    def values(self) -> list[MagicMock]:
+        return self._test_values
 
 
 def _join_bot(
@@ -33,10 +58,15 @@ def _join_modal(
     attachments: list[MagicMock] | None = None,
 ) -> JoinNetworkModal:
     modal = JoinNetworkModal(bot)
-    name_field = MagicMock()
-    name_field.component.value = name
-    image_field = MagicMock()
-    image_field.component.values = attachments if attachments is not None else [MagicMock()]
+    name_field = discord.ui.Label(
+        text="Name",
+        component=_TestTextInput(name),
+    )
+    upload_values = attachments if attachments is not None else [MagicMock()]
+    image_field = discord.ui.Label(
+        text="Profile image",
+        component=_TestFileUpload(upload_values),
+    )
     modal._fields = {"name": name_field, "profile_image": image_field}
     return modal
 

@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 import discord
 
-from bot.services.sticky_sync import sticky_channel_manage_messages_error
+from bot.services.sticky_sync import (
+    format_sticky_message_id_only,
+    sticky_channel_manage_messages_error,
+    sync_stored_embed_sticky,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,22 +69,32 @@ async def sync_rules_sticky(
             ),
         )
 
-    permission_error = sticky_channel_manage_messages_error(rules_channel, bot_member)
-    if permission_error is not None:
-        return RulesStickyResult(
-            success=False,
-            skipped=True,
-            reason=permission_error,
-        )
+    async def _noop_refresh(
+        _message: discord.Message,
+        _embed: discord.Embed,
+        _view: discord.ui.View | None,
+    ) -> None:
+        return None
 
-    from bot.services.discord_cleanup import wipe_text_channel
-
-    _deleted, wipe_error = await wipe_text_channel(rules_channel, bot_member)
-    if wipe_error is not None:
-        return RulesStickyResult(success=False, reason=wipe_error)
-
-    embed = build_rules_embed()
-    message = await rules_channel.send(embed=embed, silent=True)
-    await _pin_if_possible(message)
-    await set_setting(RULES_STICKY_SETTINGS_KEY, str(message.id))
-    return RulesStickyResult(success=True, message=message, updated=True)
+    result = await sync_stored_embed_sticky(
+        rules_channel,
+        bot_member,
+        get_setting=get_setting,
+        set_setting=set_setting,
+        settings_key=RULES_STICKY_SETTINGS_KEY,
+        desired_embed=build_rules_embed(),
+        view=None,
+        is_current=lambda _embed: False,
+        refresh_current=_noop_refresh,
+        wipe_channel=True,
+        permission_check=sticky_channel_manage_messages_error,
+        format_setting_value=format_sticky_message_id_only,
+        after_send=_pin_if_possible,
+    )
+    return RulesStickyResult(
+        success=result.success,
+        message=result.message,
+        updated=result.updated,
+        skipped=result.skipped,
+        reason=result.reason,
+    )

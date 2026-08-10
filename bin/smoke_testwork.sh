@@ -32,6 +32,12 @@ Steps:
   9. restart bot (unless --no-restart)
 
 Prerequisites: hub initialized via /server init; operator role fully permissioned.
+
+Environment (optional):
+  SMOKE_STEP_DELAY_SEC            Pause between suite steps (default: 8)
+  SMOKE_DUPLICATE_PROBE_DELAY_SEC Extra pause after probe-only before E2E (default: 15)
+  SMOKE_PROBE_PHASE_DELAY_SEC     Pause between operator/provision probes (default: 2)
+  SMOKE_ROLE_CREATE_DELAY_SEC     Pause before each probe role create (default: 1.5)
 EOF
       exit 0
       ;;
@@ -53,14 +59,19 @@ run_step() {
   echo "==> $1"
   shift
   "$@"
-  # Let Discord release the gateway session before the next live smoke step.
-  sleep 3
+  # Let Discord release the gateway session and rate-limit buckets between steps.
+  delay="${SMOKE_STEP_DELAY_SEC:-8}"
+  echo "Waiting ${delay}s before next step (SMOKE_STEP_DELAY_SEC)..."
+  sleep "$delay"
 }
 
 run_step "pre-flight artifact cleanup" "$ROOT/bin/smoke_cleanup_artifacts.sh"
 
 run_step "button/command parity" "$ROOT/bin/smoke_button_commands.sh"
 run_step "pre-init provision probe" "$ROOT/bin/smoke_provision_flow.sh" --probe-only
+dup_delay="${SMOKE_DUPLICATE_PROBE_DELAY_SEC:-15}"
+echo "Waiting ${dup_delay}s before join E2E (pre-init probes ran in previous step)..."
+sleep "$dup_delay"
 run_step "join-approval E2E" "$ROOT/bin/smoke_provision_flow.sh"
 
 run_step "setup sticky + welcome smoke" "$ROOT/bin/smoke_setup_welcome.sh"
@@ -80,6 +91,7 @@ load_dotenv(Path(".env"))
 import discord
 
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import (
     create_smoke_context,
     ensure_smoke_network_key,
@@ -105,9 +117,7 @@ class _SmokeBot:
 
 async def main() -> None:
     settings = Settings()
-    intents = discord.Intents.default()
-    intents.members = True
-    client = discord.Client(intents=intents)
+    client = create_smoke_discord_client(members=True)
     smoke_bot = _SmokeBot(settings)
     ready = asyncio.Event()
     failure: list[BaseException] = []
@@ -145,7 +155,7 @@ async def main() -> None:
 
     client_task = asyncio.create_task(client.start(settings.discord_token))
     try:
-        await asyncio.wait_for(ready.wait(), timeout=300.0)
+        await asyncio.wait_for(ready.wait(), timeout=600.0)
     except asyncio.TimeoutError as exc:
         client_task.cancel()
         raise SystemExit("FAIL: timed out during hub rebuild smoke") from exc
@@ -158,6 +168,8 @@ asyncio.run(main())
 PY
 
 export SMOKE_NETWORK_KEY="${SMOKE_NETWORK_KEY:-smoke}"
+echo "Waiting 30s before server-init stress (Discord rate-limit cooldown)..."
+sleep 30
 run_step "server init stress probes" "$ROOT/bin/smoke_server_init.sh" --stress
 run_step "cleanup smoke artifacts" "$ROOT/bin/smoke_teardown.sh"
 

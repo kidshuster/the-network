@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 
 from bot.context import BotContext
+from bot.db.connection import Database
 from bot.services.join_requests_sticky import HOW_TO_JOIN_SETTINGS_KEY
 from bot.services.network_admin_sticky import NETWORK_ADMIN_SETTINGS_KEY
 from bot.services.rules_sticky import RULES_STICKY_SETTINGS_KEY
@@ -50,7 +51,7 @@ def _as_int(value: object | None) -> int:
     return int(str(value))
 
 
-async def _table_exists(db, name: str) -> bool:
+async def _table_exists(db: Database, name: str) -> bool:
     row = await db.fetchone(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
         (name,),

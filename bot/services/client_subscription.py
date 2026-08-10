@@ -21,6 +21,14 @@ from bot.services.channel_names import (
     publish_channel_name_candidates,
     subscribe_channel_name_candidates,
 )
+from bot.services.client_resources import (
+    fetch_client_role,
+    fetch_publish_channel,
+    fetch_subscribe_channel,
+    resolve_client_category,
+    resolve_client_profile_channel,
+    resolve_client_resources,
+)
 from bot.services.guild_layout import resolve_human_moderator_role
 from bot.services.guild_permissions import (
     build_client_profile_channel_overwrites,
@@ -97,7 +105,9 @@ def resolve_subscription_channels_in_category(
     client: Client,
 ) -> tuple[discord.TextChannel | None, discord.abc.GuildChannel | None]:
     publish = guild.get_channel(subscription.publish_channel_id)
-    subscribe = guild.get_channel(subscription.subscribe_channel_id)
+    subscribe: discord.abc.GuildChannel | None = guild.get_channel(
+        subscription.subscribe_channel_id
+    )
     if not isinstance(publish, discord.TextChannel):
         publish = None
     if publish is not None and subscribe is not None:
@@ -125,12 +135,12 @@ async def sync_subscription_channel_permissions(
 ) -> None:
     access_role = resolve_access_role(guild, role_name=access_role_name)
     human_moderator_role = resolve_human_moderator_role(guild)
-    client_role = guild.get_role(client.client_role_id)
+    client_role = await fetch_client_role(guild, client)
     if client_role is None:
         return
 
-    publish = guild.get_channel(subscription.publish_channel_id)
-    subscribe = guild.get_channel(subscription.subscribe_channel_id)
+    publish = await fetch_publish_channel(guild, subscription)
+    subscribe = await fetch_subscribe_channel(guild, subscription)
     publish_overwrites = filter_configurable_overwrites(
         bot_member,
         build_client_publish_channel_overwrites(
@@ -191,11 +201,11 @@ async def sync_client_profile_channel_permissions(
 ) -> None:
     access_role = resolve_access_role(guild, role_name=access_role_name)
     human_moderator_role = resolve_human_moderator_role(guild)
-    client_role = guild.get_role(client.client_role_id)
+    client_role = await fetch_client_role(guild, client)
     if client_role is None:
         return
-    profile = guild.get_channel(client.profile_channel_id)
-    if not isinstance(profile, discord.TextChannel):
+    profile = await resolve_client_profile_channel(guild, client)
+    if profile is None:
         return
     overwrites = filter_configurable_overwrites(
         bot_member,
@@ -241,13 +251,15 @@ class ClientSubscriptionService:
 
         access_role = resolve_access_role(guild, role_name=access_role_name)
         human_moderator_role = resolve_human_moderator_role(guild)
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None:
+        resources = await resolve_client_resources(guild, client)
+        if resources.role is None:
             return SubscribeResult(success=False, error="Client role was not found.")
 
-        category = guild.get_channel(client.category_id)
-        if not isinstance(category, discord.CategoryChannel):
+        category = resources.category
+        if category is None:
             return SubscribeResult(success=False, error="Client category was not found.")
+
+        client_role = resources.role
 
         publish_name = build_client_publish_channel_base(client.server_name, network_key)
         subscribe_name = build_client_subscribe_channel_base(client.server_name, network_key)
@@ -330,6 +342,7 @@ class ClientSubscriptionService:
                     moderation_message_id=None,
                     publish_setup_message_id=None,
                     subscribe_setup_message_id=None,
+                    activation_welcome_message_id=None,
                     subscribe_confirmed=False,
                     enabled=True,
                 ),
@@ -369,9 +382,9 @@ class ClientSubscriptionService:
         client_repo: ClientRepository,
         network_repo: NetworkRepository,
     ) -> UnsubscribeResult:
-        profile = guild.get_channel(client.profile_channel_id)
+        profile = await resolve_client_profile_channel(guild, client)
         if (
-            isinstance(profile, discord.TextChannel)
+            profile is not None
             and subscription.moderation_message_id is not None
         ):
             try:
@@ -380,7 +393,7 @@ class ClientSubscriptionService:
             except discord.HTTPException:
                 pass
 
-        publish = guild.get_channel(subscription.publish_channel_id)
+        publish = await fetch_publish_channel(guild, subscription)
         if isinstance(publish, discord.TextChannel):
             try:
                 for webhook in await publish.webhooks():
@@ -398,7 +411,7 @@ class ClientSubscriptionService:
                     extra={"channel_id": publish.id},
                 )
 
-        subscribe = guild.get_channel(subscription.subscribe_channel_id)
+        subscribe = await fetch_subscribe_channel(guild, subscription)
         if subscribe is not None:
             try:
                 await subscribe.delete(reason=f"Left network {network_key}")
@@ -413,8 +426,8 @@ class ClientSubscriptionService:
         if deleted is None:
             return UnsubscribeResult(success=False, error="Subscription was not found.")
 
-        category = guild.get_channel(client.category_id)
-        if isinstance(category, discord.CategoryChannel):
+        category = await resolve_client_category(guild, client)
+        if category is not None:
             await reorder_client_category_channels(
                 category,
                 client=client,
@@ -441,8 +454,8 @@ async def sync_client_channel_names(
     client_repo: ClientRepository,
     network_repo: NetworkRepository,
 ) -> None:
-    profile = guild.get_channel(client.profile_channel_id)
-    if isinstance(profile, discord.TextChannel):
+    profile = await resolve_client_profile_channel(guild, client)
+    if profile is not None:
         target = build_client_profile_channel_base(client.server_name)
         if profile.name.casefold() != target.casefold():
             try:
@@ -461,8 +474,8 @@ async def sync_client_channel_names(
                 key = network.key
         if not key:
             continue
-        publish = guild.get_channel(subscription.publish_channel_id)
-        subscribe = guild.get_channel(subscription.subscribe_channel_id)
+        publish = await fetch_publish_channel(guild, subscription)
+        subscribe = await fetch_subscribe_channel(guild, subscription)
         publish_target = build_client_publish_channel_base(client.server_name, key)
         subscribe_target = build_client_subscribe_channel_base(
             client.server_name,
@@ -478,7 +491,7 @@ async def sync_client_channel_names(
                 )
         if subscribe is not None and subscribe.name.casefold() != subscribe_target.casefold():
             try:
-                await subscribe.edit(
+                await subscribe.edit(  # type: ignore[attr-defined]
                     name=subscribe_target,
                     reason="The Network client channel rename",
                 )
@@ -532,7 +545,7 @@ async def reorder_client_category_channels(
         if channel is None:
             continue
         try:
-            await channel.edit(
+            await channel.edit(  # type: ignore[attr-defined]
                 position=index,
                 reason="The Network client channel order",
             )
@@ -562,8 +575,8 @@ async def resync_subscriptions_for_network(
     for client in await context.client_repo.list_all():
         if client.guild_id != guild.id:
             continue
-        category = guild.get_channel(client.category_id)
-        if not isinstance(category, discord.CategoryChannel):
+        category = await resolve_client_category(guild, client)
+        if category is None:
             continue
 
         existing = await context.client_repo.get_subscription(client.id, network.id)

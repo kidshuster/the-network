@@ -189,6 +189,51 @@ async def test_sync_channel_permission_overwrites_falls_back_to_incremental() ->
     )
 
 
+async def test_sync_channel_permission_overwrites_skips_operator_top_role_incremental() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock(
+        side_effect=[
+            discord.HTTPException(MagicMock(), "Forbidden"),
+            None,
+            discord.HTTPException(MagicMock(), "Forbidden"),
+        ]
+    )
+    channel.set_permissions = AsyncMock()
+
+    operator_role = MagicMock(spec=discord.Role)
+    operator_role.id = 50
+    operator_role.position = 10
+    operator_role.is_default.return_value = False
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = operator_role
+
+    client_role = MagicMock(spec=discord.Role)
+    client_role.id = 101
+    client_role.position = 1
+    client_role.is_default.return_value = False
+
+    client_overwrite = discord.PermissionOverwrite(view_channel=True)
+    operator_overwrite = discord.PermissionOverwrite(manage_channels=True)
+
+    await sync_channel_permission_overwrites(
+        channel,
+        bot_member,
+        {
+            client_role: client_overwrite,
+            operator_role: operator_overwrite,
+        },
+        reason="test",
+    )
+
+    channel.set_permissions.assert_awaited_once_with(
+        client_role,
+        overwrite=client_overwrite,
+        reason="test",
+    )
+
+
 async def test_apply_client_role_leaders_overwrites_targets_layout_channels() -> None:
     from bot.services.leaders_channel import _apply_client_role_leaders_overwrites
 

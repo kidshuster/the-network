@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import discord
 
@@ -43,7 +43,7 @@ async def verify_operator_permissions_live(
         step = "starting"
         try:
             step = "create category"
-            category = await _run_probe_step(
+            category: discord.CategoryChannel = await _run_probe_step(
                 step,
                 guild.create_category(
                     name=f"{PROBE_PREFIX}-cat-{suffix}",
@@ -54,7 +54,7 @@ async def verify_operator_permissions_live(
             guard.track_category(category)
 
             step = "create text channel"
-            channel = await _run_probe_step(
+            channel: discord.TextChannel = await _run_probe_step(
                 step,
                 guild.create_text_channel(
                     name=f"{PROBE_PREFIX}-ch-{suffix}",
@@ -77,7 +77,10 @@ async def verify_operator_permissions_live(
             )
 
             step = "create role"
-            role = await _run_probe_step(
+            from bot.smoke.pacing import pause_before_role_create
+
+            await pause_before_role_create()
+            role: discord.Role = await _run_probe_step(
                 step,
                 guild.create_role(
                     name=f"{PROBE_PREFIX}-role-{suffix}"[:100],
@@ -88,7 +91,7 @@ async def verify_operator_permissions_live(
             guard.track_role(role)
 
             step = "create webhook"
-            webhook = await _run_probe_step(
+            webhook: discord.Webhook = await _run_probe_step(
                 step,
                 channel.create_webhook(
                     name=f"{PROBE_PREFIX}-{suffix}"[:32],
@@ -107,7 +110,7 @@ async def verify_operator_permissions_live(
 
             step = "create emoji"
             emoji_name = f"tnprobe{suffix}"[:32]
-            emoji = await _run_probe_step(
+            emoji: discord.Emoji = await _run_probe_step(
                 step,
                 guild.create_custom_emoji(
                     name=emoji_name,
@@ -149,6 +152,7 @@ async def verify_provision_permissions_live(
         build_client_role_name,
         create_text_channel_with_overwrites,
         filter_configurable_overwrites,
+        prepare_category_create_overwrites,
     )
     from bot.services.network_provision import (
         resolve_operator_role_by_name,
@@ -170,7 +174,10 @@ async def verify_provision_permissions_live(
         step = "starting"
         try:
             step = "create client role"
-            client_role = await _run_probe_step(
+            from bot.smoke.pacing import pause_before_role_create
+
+            await pause_before_role_create()
+            client_role: discord.Role = await _run_probe_step(
                 step,
                 guild.create_role(
                     name=f"{PROBE_PREFIX}-client-{suffix}"[:100],
@@ -184,17 +191,20 @@ async def verify_provision_permissions_live(
             guard.track_role(client_role)
 
             step = "create client category with hub overwrites"
-            category_overwrites = filter_configurable_overwrites(
+            category_overwrites = prepare_category_create_overwrites(
                 bot_member,
-                build_client_category_overwrites(
-                    guild,
+                filter_configurable_overwrites(
                     bot_member,
-                    client_role,
-                    access_role,
-                    human_moderator_role,
+                    build_client_category_overwrites(
+                        guild,
+                        bot_member,
+                        client_role,
+                        access_role,
+                        human_moderator_role,
+                    ),
                 ),
             )
-            category = await _run_probe_step(
+            category: discord.CategoryChannel = await _run_probe_step(
                 step,
                 guild.create_category(
                     name=f"{PROBE_PREFIX}-client-cat-{suffix}",
@@ -218,7 +228,7 @@ async def verify_provision_permissions_live(
                 for_channel=True,
             )
             step = "create network-profile channel"
-            profile_channel = await _run_probe_step(
+            profile_channel: discord.TextChannel = await _run_probe_step(
                 step,
                 create_text_channel_with_overwrites(
                     guild,
@@ -245,7 +255,7 @@ async def verify_provision_permissions_live(
                 for_channel=True,
             )
             step = "create client publish channel with webhook overwrites"
-            publish_channel = await _run_probe_step(
+            publish_channel: discord.TextChannel = await _run_probe_step(
                 step,
                 create_text_channel_with_overwrites(
                     guild,
@@ -286,7 +296,7 @@ async def verify_provision_permissions_live(
                 f"create webhook on publish channel as "
                 f"{build_client_role_name('probe').split(':')[0]}"
             )
-            webhook = await _run_probe_step(
+            webhook: discord.Webhook = await _run_probe_step(
                 step,
                 publish_channel.create_webhook(
                     name=f"{PROBE_PREFIX}-{suffix}"[:32],
@@ -308,7 +318,7 @@ async def verify_provision_permissions_live(
 
 async def _run_probe_step[T](
     label: str,
-    coro,
+    coro: Awaitable[T],
     guard: GuildTestResourceGuard,
     *,
     failure_for_step: Callable[[str, list[str], BaseException], NetworkValidationError]
@@ -330,6 +340,16 @@ def _probe_failure_detail(exc: BaseException) -> tuple[str, str]:
     from bot.services.changelog import installed_version
 
     version = installed_version()
+    if isinstance(exc, discord.RateLimited):
+        retry = getattr(exc, "retry_after", None)
+        wait_hint = f" Retry in **{retry:.0f}s**." if retry is not None else ""
+        failure = f"Discord rate limit.{wait_hint}"
+        guidance = (
+            "Too many smoke/probe runs hit the guild **role-creation** bucket. "
+            "Wait for the retry window, then rerun — or use `bin/smoke_cleanup_artifacts.sh` "
+            "and avoid back-to-back full suites."
+        )
+        return failure, guidance
     if isinstance(exc, discord.HTTPException):
         code = getattr(exc, "code", None)
         detail = f" ({code})" if code is not None else ""

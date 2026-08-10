@@ -20,13 +20,14 @@ load_dotenv(Path(".env"))
 import discord
 
 from bot.config import Settings
+from bot.smoke.discord_client import create_smoke_discord_client
 from bot.smoke.provision_flow import cleanup_all_hub_rebuild_smoke_clients, create_smoke_context
 from bot.smoke.resource_guard import cleanup_guild_test_artifacts
 
 
 async def main() -> None:
     settings = Settings()
-    client = discord.Client(intents=discord.Intents.default())
+    client = create_smoke_discord_client()
     ready = asyncio.Event()
     failure: list[BaseException] = []
 

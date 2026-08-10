@@ -6,12 +6,12 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 from test_guild_init import _patch_init_roles
+from view_registry_helpers import make_test_view_registry
 
 from bot.domain.client import Client
 from bot.domain.errors import NetworkValidationError
 from bot.services.guild_init import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
-from view_registry_helpers import make_test_view_registry
 
 
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
@@ -61,7 +61,7 @@ async def test_init_moves_channel_from_wrong_category(
     def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
         return categories.get(name)
 
-    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
         "bot.services.guild_init.run_guild_init_smoke_checks",
@@ -73,7 +73,7 @@ async def test_init_moves_channel_from_wrong_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init._ensure_human_moderator_role",
+        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -110,7 +110,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
     def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
         return categories.get(name)
 
-    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
         "bot.services.guild_init.run_guild_init_smoke_checks",
@@ -122,7 +122,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init._ensure_human_moderator_role",
+        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -162,7 +162,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
     def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
         return categories.get(name)
 
-    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    monkeypatch.setattr("bot.services.guild_init_reconcilers.resolve_category", resolve_cat)
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
         "bot.services.guild_init.run_guild_init_smoke_checks",
@@ -174,7 +174,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
         ),
     )
     monkeypatch.setattr(
-        "bot.services.guild_init._ensure_human_moderator_role",
+        "bot.services.guild_init_reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     reconnect = AsyncMock()

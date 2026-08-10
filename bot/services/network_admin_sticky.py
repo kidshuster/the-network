@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.messages import render_embed
-from bot.services.sticky_sync import StoredStickySyncResult, sync_stored_embed_sticky
+from bot.services.sticky_sync import (
+    StoredStickyDefinition,
+    StoredStickySyncResult,
+    sync_stored_sticky,
+)
 
 if TYPE_CHECKING:
     from bot.context import BotContext
@@ -143,20 +147,21 @@ async def sync_network_admin_sticky(
     ) -> None:
         await message.edit(embed=embed, view=sticky_view)
 
-    def is_current(existing_embed: discord.Embed) -> bool:
-        existing_footer = existing_embed.footer.text if existing_embed.footer else ""
-        return existing_footer == footer
-
-    result = await sync_stored_embed_sticky(
+    definition = StoredStickyDefinition(
+        settings_key=NETWORK_ADMIN_SETTINGS_KEY,
+        build_embed=lambda: desired_embed,
+        is_current=lambda existing_embed: (
+            (existing_embed.footer.text if existing_embed.footer else "") == footer
+        ),
+        refresh_current=refresh_current,
+    )
+    result = await sync_stored_sticky(
         channel,
         bot_member,
+        view,
         get_setting=get_setting,
         set_setting=set_setting,
-        settings_key=NETWORK_ADMIN_SETTINGS_KEY,
-        desired_embed=desired_embed,
-        view=view,
-        is_current=is_current,
-        refresh_current=refresh_current,
+        definition=definition,
         wipe_channel=wipe_channel,
     )
     return _network_admin_result(result)

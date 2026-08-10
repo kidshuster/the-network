@@ -99,7 +99,7 @@ async def _provision_smoke_welcome_client(
     server_name = f"{_SMOKE_WELCOME_PREFIX}{suffix}"
     service = ServerRequestService(context, bot, view_registry=PersistentViewRegistry(bot))
     if not hasattr(bot, "get_guild"):
-        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[attr-defined]
+        bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
     stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
     if stale is not None:

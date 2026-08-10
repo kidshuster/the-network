@@ -4,7 +4,7 @@ import io
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
     from bot.context import BotContext
     from bot.domain.client_subscription import ClientSubscription
-    from bot.services.guild_init import GuildInitResult
+    from bot.services.guild_init_result import GuildInitResult
 
 logger = logging.getLogger(__name__)
 
@@ -117,17 +117,20 @@ async def _ensure_mod_announcements_channel(
     *,
     result: GuildInitResult | None = None,
 ) -> discord.TextChannel | None:
-    from bot.services.guild_init import GuildInitResult, _ensure_announcement_channel
+    from bot.services.guild_init_reconcilers import _ensure_announcement_channel
+    from bot.services.guild_init_result import GuildInitResult
 
     moderation = resolve_moderation_category(guild)
     if moderation is None:
         return None
 
-    overwrites = build_moderation_staff_overwrites(
-        guild,
-        bot_member,
-        human_moderator_role,
-        for_announcement=True,
+    overwrites = dict(
+        build_moderation_staff_overwrites(
+            guild,
+            bot_member,
+            human_moderator_role,
+            for_announcement=True,
+        ),
     )
     operator = resolve_operator_role_by_name(
         guild,
@@ -505,7 +508,7 @@ async def inject_hub_announcement(
 ) -> discord.Message:
     webhook = await _get_or_create_inject_webhook(publish_channel)
     try:
-        kwargs: dict[str, object] = {
+        kwargs: dict[str, Any] = {
             "content": content or None,
             "wait": True,
             "silent": True,
@@ -514,7 +517,9 @@ async def inject_hub_announcement(
             kwargs["embeds"] = embeds
         if files:
             kwargs["files"] = files
-        return await webhook.send(**kwargs)  # type: ignore[arg-type]
+        message = await webhook.send(**kwargs)
+        assert isinstance(message, discord.Message)
+        return message
     except discord.HTTPException as exc:
         raise RuntimeError(f"Webhook inject failed: {exc}") from exc
 

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from typing import Any
+
 import discord
 
 
 def apply_silent_delivery(
-    kwargs: dict[str, object],
+    kwargs: dict[str, Any],
     *,
     notify: bool = False,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Suppress mobile/desktop push notifications for a channel message."""
     if not notify:
         kwargs["silent"] = True
@@ -16,9 +18,9 @@ def apply_silent_delivery(
 
 def build_moderator_join_request_send_kwargs(
     human_moderator_role: discord.Role | None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Notify moderators about a new join request without pinging @everyone."""
-    kwargs: dict[str, object] = {"silent": False}
+    kwargs: dict[str, Any] = {"silent": False}
     if human_moderator_role is not None:
         kwargs["content"] = human_moderator_role.mention
         kwargs["allowed_mentions"] = discord.AllowedMentions(

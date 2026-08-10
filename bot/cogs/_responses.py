@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import discord
 
-from bot.messages import render_embed
+from bot.messages import render_embed, render_text
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,30 @@ class DeferredEphemeralResponse:
         self._interaction = interaction
         self.sent = False
 
-    async def send(self, *args, **kwargs) -> None:
+    async def send(self, *args: Any, **kwargs: Any) -> None:
         await self._interaction.followup.send(*args, **kwargs)
         self.sent = True
+
+    async def send_text(
+        self,
+        key: str,
+        *,
+        ephemeral: bool | None = True,
+        **kwargs: Any,
+    ) -> None:
+        await self.send(render_text(key, **kwargs), ephemeral=ephemeral)
+
+    async def send_embed_message(
+        self,
+        key: str,
+        *,
+        ephemeral: bool | None = True,
+        **kwargs: Any,
+    ) -> None:
+        await self.send(
+            embed=render_embed(key, **kwargs),
+            ephemeral=ephemeral,
+        )
 
     async def send_failure(self, title: str, description: str) -> None:
         await self.send(

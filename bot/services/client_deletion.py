@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.services.client_resources import fetch_client_role, resolve_client_category
+
 if TYPE_CHECKING:
     from bot.context import BotContext
     from bot.db.repositories import ClientRepository, NetworkRepository
@@ -34,7 +36,7 @@ async def _delete_client_channel(
         and not channel.permissions_for(bot_member).manage_channels
     ):
         try:
-            await channel.edit(sync_permissions=True, reason=reason)
+            await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
         except discord.HTTPException:
             pass
 
@@ -70,13 +72,16 @@ async def _delete_client_channel_by_id(
     bot_member: discord.Member | None,
     reason: str = _DELETE_REASON,
 ) -> None:
-    channel = guild.get_channel(channel_id)
-    if channel is None:
+    channel_obj: discord.abc.GuildChannel | None = guild.get_channel(channel_id)
+    if channel_obj is None:
         try:
-            channel = await guild.fetch_channel(channel_id)
+            fetched = await guild.fetch_channel(channel_id)
         except (discord.NotFound, discord.Forbidden):
             return
-    await _delete_client_channel(channel, bot_member=bot_member, reason=reason)
+        if not isinstance(fetched, discord.abc.GuildChannel):
+            return
+        channel_obj = fetched
+    await _delete_client_channel(channel_obj, bot_member=bot_member, reason=reason)
 
 
 class ClientDeletionService:
@@ -124,12 +129,7 @@ class ClientDeletionService:
                         extra={"client_id": client.id},
                     )
 
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None:
-            try:
-                client_role = await guild.fetch_role(client.client_role_id)
-            except (discord.NotFound, discord.Forbidden):
-                client_role = None
+        client_role = await fetch_client_role(guild, client)
 
         if client_role is not None:
             for member in guild.members:
@@ -143,15 +143,9 @@ class ClientDeletionService:
                         )
 
         channel_ids = {client.profile_channel_id}
-        category = guild.get_channel(client.category_id)
-        if not isinstance(category, discord.CategoryChannel):
-            try:
-                fetched = await guild.fetch_channel(client.category_id)
-            except (discord.NotFound, discord.Forbidden):
-                fetched = None
-            category = fetched if isinstance(fetched, discord.CategoryChannel) else None
+        category = await resolve_client_category(guild, client)
 
-        if isinstance(category, discord.CategoryChannel):
+        if category is not None:
             for channel in list(category.channels):
                 channel_ids.add(channel.id)
                 await _delete_client_channel(

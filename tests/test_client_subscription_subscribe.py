@@ -176,6 +176,7 @@ async def test_subscribe_client_fails_when_client_role_missing(
     client = _client()
     category = MagicMock(spec=discord.CategoryChannel, id=10)
     guild.get_role = MagicMock(return_value=None)
+    guild.fetch_role = AsyncMock(side_effect=discord.NotFound(MagicMock(), ""))
     guild.get_channel = MagicMock(return_value=category)
 
     monkeypatch.setattr(

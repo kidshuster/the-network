@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
 from bot.cogs._responses import defer_ephemeral
 from bot.messages import modal_spec, render_embed, render_text
-from bot.messages.modals_builder import add_modal_fields
-from bot.ui._auth import ensure_client_access, validate_client_modal_context
+from bot.messages.modals_builder import add_modal_fields, modal_file_attachments, modal_text_value
+from bot.ui._auth import MembershipPolicy, ensure_client_access, validate_client_modal_context
+from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import profile_edit_button
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ class EditClientProfileModal(discord.ui.Modal):
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await response.send(render_text("client_not_found"))
+            await response.send_text("client_not_found")
             return
 
         if not await ensure_client_access(
@@ -52,15 +53,15 @@ class EditClientProfileModal(discord.ui.Modal):
             validated.guild,
             client,
             popup_key="client_role_required_edit",
+            membership_policy=MembershipPolicy.ALLOW_NON_MEMBER,
             via="followup",
-            allow_non_member=True,
             ephemeral=None,
         ):
             return
 
-        display_name = self._fields["display_name"].component.value.strip()
+        display_name = modal_text_value(self._fields["display_name"])
         profile_image: discord.Attachment | None = None
-        attachments = self._fields["profile_image"].component.values
+        attachments = modal_file_attachments(self._fields["profile_image"])
         if attachments:
             profile_image = attachments[0]
 
@@ -107,12 +108,12 @@ class EditProfileView(discord.ui.View):
         super().__init__(timeout=None)
         self._bot = bot
         self._client_id = client_id
-        button = discord.ui.Button(
+        button: discord.ui.Button[Any] = discord.ui.Button(
             label="Edit Profile",
             style=discord.ButtonStyle.primary,
             custom_id=profile_edit_button(client_id),
         )
-        button.callback = self._edit_callback
+        bind_item_callback(button, self._edit_callback)
         self.add_item(button)
 
     async def _edit_callback(self, interaction: discord.Interaction) -> None:
@@ -149,22 +150,22 @@ class DeleteClientConfirmView(discord.ui.View):
     async def confirm(
         self,
         interaction: discord.Interaction,
-        button: discord.ui.Button,
+        button: discord.ui.Button[Any],
     ) -> None:
         response = await defer_ephemeral(interaction)
         guild = interaction.guild
         if guild is None:
-            await response.send(render_text("invalid_guild"))
+            await response.send_text("invalid_guild")
             return
 
         context = self._bot.bot_context
         if context is None:
-            await response.send(render_text("bot_not_ready"))
+            await response.send_text("bot_not_ready")
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await response.send(render_text("client_not_found"))
+            await response.send_text("client_not_found")
             return
 
         if not await ensure_client_access(
@@ -172,15 +173,15 @@ class DeleteClientConfirmView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_delete",
+            membership_policy=MembershipPolicy.REQUIRED,
             via="followup",
-            require_member=True,
             ephemeral=None,
         ):
             return
 
         bot_member = guild.me
         if bot_member is None:
-            await response.send(render_text("bot_member_unavailable_brief"))
+            await response.send_text("bot_member_unavailable_brief")
             return
 
         from bot.services.client_deletion import ClientDeletionService
@@ -216,7 +217,7 @@ class DeleteClientConfirmView(discord.ui.View):
     async def cancel(
         self,
         interaction: discord.Interaction,
-        button: discord.ui.Button,
+        button: discord.ui.Button[Any],
     ) -> None:
         await interaction.response.edit_message(
             content=render_text("delete_client_cancelled"),

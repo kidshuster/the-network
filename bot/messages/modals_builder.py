@@ -29,6 +29,20 @@ def apply_modal_spec(
     return add_modal_fields(modal, spec)
 
 
+def modal_text_value(field: discord.ui.Label[Any]) -> str:
+    component = field.component
+    if not isinstance(component, discord.ui.TextInput):
+        raise TypeError("Expected a text input modal field")
+    return component.value.strip()
+
+
+def modal_file_attachments(field: discord.ui.Label[Any]) -> list[discord.Attachment]:
+    component = field.component
+    if not isinstance(component, discord.ui.FileUpload):
+        return []
+    return list(component.values)
+
+
 def _build_modal_item(field: ModalFieldSpec) -> discord.ui.Label[Any]:
     if field.type == "file_upload":
         return discord.ui.Label(

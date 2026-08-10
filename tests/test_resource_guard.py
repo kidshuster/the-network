@@ -5,6 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.smoke.constants import (
+    SERVER_INIT_PROBE_REASON,
+    SMOKE_CLEANUP_REASON,
+    TEST_CLEANUP_REASON,
+)
 from bot.smoke.resource_guard import (
     cleanup_guild_test_artifacts,
     guild_test_resource_guard,
@@ -12,6 +17,12 @@ from bot.smoke.resource_guard import (
     is_test_channel_name,
     is_test_role_name,
 )
+
+
+def test_smoke_cleanup_constants() -> None:
+    assert TEST_CLEANUP_REASON.startswith("The Network test cleanup")
+    assert SMOKE_CLEANUP_REASON.startswith("The Network smoke cleanup")
+    assert SERVER_INIT_PROBE_REASON.startswith("The Network server-init live probe")
 
 
 def test_name_matchers() -> None:
@@ -100,6 +111,26 @@ async def test_guild_test_resource_guard_cleans_up_after_failure() -> None:
             raise RuntimeError("boom")
 
     category.delete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_guild_test_resource_guard_does_not_sweep_guild_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.emojis = []
+    guild.roles = []
+    guild.channels = []
+    sweep = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "bot.smoke.resource_guard.cleanup_guild_test_artifacts",
+        sweep,
+    )
+
+    async with guild_test_resource_guard(guild):
+        pass
+
+    sweep.assert_not_called()
 
 
 @pytest.mark.asyncio

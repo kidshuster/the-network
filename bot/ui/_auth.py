@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 
@@ -15,6 +16,12 @@ if TYPE_CHECKING:
 ResponseVia = Literal["followup", "response"]
 
 
+class MembershipPolicy(Enum):
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+    ALLOW_NON_MEMBER = "allow_non_member"
+
+
 async def _send_auth_message(
     interaction: discord.Interaction,
     content: str,
@@ -22,7 +29,7 @@ async def _send_auth_message(
     via: ResponseVia,
     ephemeral: bool | None = True,
 ) -> None:
-    kwargs: dict[str, object] = {}
+    kwargs: dict[str, Any] = {}
     if ephemeral is not None:
         kwargs["ephemeral"] = ephemeral
     if via == "followup":
@@ -37,13 +44,12 @@ async def ensure_client_access(
     client: Client,
     *,
     popup_key: str,
+    membership_policy: MembershipPolicy,
     via: ResponseVia = "followup",
-    require_member: bool = False,
-    allow_non_member: bool = False,
     ephemeral: bool | None = True,
 ) -> bool:
     member = interaction.user
-    if require_member:
+    if membership_policy is MembershipPolicy.REQUIRED:
         if not isinstance(member, discord.Member):
             await _send_auth_message(
                 interaction,
@@ -52,9 +58,16 @@ async def ensure_client_access(
                 ephemeral=ephemeral,
             )
             return False
-    elif allow_non_member and not isinstance(member, discord.Member):
+    elif membership_policy is MembershipPolicy.ALLOW_NON_MEMBER and not isinstance(
+        member, discord.Member
+    ):
         return True
-    elif not isinstance(member, discord.Member):
+    elif membership_policy is MembershipPolicy.OPTIONAL and not isinstance(
+        member, discord.Member
+    ):
+        return True
+
+    if not isinstance(member, discord.Member):
         return True
 
     client_role = guild.get_role(client.client_role_id)

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
 from bot.cogs._checks import ensure_manage_guild
 from bot.cogs._responses import defer_ephemeral
-from bot.messages import modal_spec, render_embed, render_text
-from bot.messages.modals_builder import add_modal_fields
+from bot.messages import modal_spec, render_embed
+from bot.messages.modals_builder import add_modal_fields, modal_file_attachments, modal_text_value
 from bot.ui._auth import validate_hub_modal_context
+from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import join_network_button, request_approve_button, request_deny_button
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class JoinNetworkModal(discord.ui.Modal):
 
         context = validated.context
 
-        attachments = self._fields["profile_image"].component.values
+        attachments = modal_file_attachments(self._fields["profile_image"])
         if not attachments:
             await response.send(
                 embed=render_embed(
@@ -57,7 +58,7 @@ class JoinNetworkModal(discord.ui.Modal):
             self._bot,
             view_registry=PersistentViewRegistry(self._bot),
         )
-        name = self._fields["name"].component.value.strip()
+        name = modal_text_value(self._fields["name"])
         result = await service.submit_request(
             validated.guild,
             requester=interaction.user,
@@ -87,12 +88,12 @@ class JoinNetworkView(discord.ui.View):
     def __init__(self, bot: NetworkRelayBot) -> None:
         super().__init__(timeout=None)
         self._bot = bot
-        button = discord.ui.Button(
+        button: discord.ui.Button[Any] = discord.ui.Button(
             label="Join Network",
             style=discord.ButtonStyle.success,
             custom_id=join_network_button(),
         )
-        button.callback = self._join_callback
+        bind_item_callback(button, self._join_callback)
         self.add_item(button)
 
     async def _join_callback(self, interaction: discord.Interaction) -> None:
@@ -105,20 +106,20 @@ class ModeratorReviewView(discord.ui.View):
         self._bot = bot
         self._request_id = request_id
 
-        approve = discord.ui.Button(
+        approve: discord.ui.Button[Any] = discord.ui.Button(
             label="Accept",
             style=discord.ButtonStyle.success,
             custom_id=request_approve_button(request_id),
         )
-        approve.callback = self._approve_callback
+        bind_item_callback(approve, self._approve_callback)
         self.add_item(approve)
 
-        deny = discord.ui.Button(
+        deny: discord.ui.Button[Any] = discord.ui.Button(
             label="Deny",
             style=discord.ButtonStyle.danger,
             custom_id=request_deny_button(request_id),
         )
-        deny.callback = self._deny_callback
+        bind_item_callback(deny, self._deny_callback)
         self.add_item(deny)
 
     async def _approve_callback(self, interaction: discord.Interaction) -> None:
@@ -134,7 +135,7 @@ class ModeratorReviewView(discord.ui.View):
         response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         if context is None:
-            await response.send(render_text("bot_not_ready"))
+            await response.send_text("bot_not_ready")
             return
 
         member = cast(discord.Member, interaction.user)

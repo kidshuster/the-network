@@ -7,8 +7,9 @@ from dataclasses import dataclass
 import discord
 
 from bot.services.sticky_sync import (
+    StoredStickyDefinition,
     embed_content_signature,
-    sync_stored_embed_sticky,
+    sync_stored_sticky,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,23 +83,23 @@ async def sync_hub_join_sticky(
     ) -> None:
         await message.edit(view=sticky_view)
 
-    def is_current(existing_embed: discord.Embed) -> bool:
-        footer = existing_embed.footer.text if existing_embed.footer else ""
-        return (
-            footer == build_how_to_join_footer()
+    definition = StoredStickyDefinition(
+        settings_key=HOW_TO_JOIN_SETTINGS_KEY,
+        build_embed=build_how_to_join_embed,
+        is_current=lambda existing_embed: (
+            (existing_embed.footer.text if existing_embed.footer else "")
+            == build_how_to_join_footer()
             and embed_content_signature(existing_embed) == desired_signature
-        )
-
-    result = await sync_stored_embed_sticky(
+        ),
+        refresh_current=refresh_current,
+    )
+    result = await sync_stored_sticky(
         channel,
         bot_member,
+        view,
         get_setting=get_setting,
         set_setting=set_setting,
-        settings_key=HOW_TO_JOIN_SETTINGS_KEY,
-        desired_embed=desired_embed,
-        view=view,
-        is_current=is_current,
-        refresh_current=refresh_current,
+        definition=definition,
         wipe_channel=wipe_channel,
     )
     return HowToJoinStickyResult(

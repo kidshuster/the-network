@@ -11,7 +11,7 @@ from bot.cogs._responses import defer_ephemeral
 from bot.domain.client import Client
 from bot.messages import render_text
 from bot.services.sticky_sync import embed_content_signature, sticky_channel_embed_permission_error
-from bot.ui._auth import ensure_client_access, validate_hub_modal_context
+from bot.ui._auth import MembershipPolicy, ensure_client_access, validate_hub_modal_context
 
 
 def _client() -> Client:
@@ -47,8 +47,8 @@ async def test_ensure_client_access_allows_admin_without_client_role() -> None:
         guild,
         client,
         popup_key="client_role_required_subscribe",
+        membership_policy=MembershipPolicy.ALLOW_NON_MEMBER,
         via="followup",
-        allow_non_member=True,
     )
 
     assert allowed is True
@@ -67,8 +67,8 @@ async def test_ensure_client_access_skips_check_for_non_member_when_allowed() ->
         guild,
         client,
         popup_key="client_role_required_subscribe",
+        membership_policy=MembershipPolicy.ALLOW_NON_MEMBER,
         via="followup",
-        allow_non_member=True,
     )
 
     assert allowed is True

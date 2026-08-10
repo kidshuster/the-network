@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 from discord.abc import Messageable
@@ -184,7 +184,7 @@ class RelayService:
                 first_dest_channel_id = dest_sub.subscribe_channel_id
 
             try:
-                send_kwargs: dict[str, object] = {
+                send_kwargs: dict[str, Any] = {
                     "embed": payload.embed,
                     "allowed_mentions": discord.AllowedMentions.none(),
                     "silent": True,

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
 import discord
 
 from bot.cogs._responses import defer_ephemeral
 from bot.messages import render_embed, render_text
-from bot.ui._auth import ensure_client_access
+from bot.ui._auth import MembershipPolicy, ensure_client_access
+from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import (
     blacklist_button,
     delete_client_button,
@@ -46,43 +48,45 @@ class NetworkProfileView(discord.ui.View):
         subscribed = subscribed_keys or set()
         for key in network_keys[:MAX_PROFILE_NETWORK_BUTTONS]:
             already_subscribed = key in subscribed
-            button = discord.ui.Button(
+            button: discord.ui.Button[Any] = discord.ui.Button(
                 label=f"Join {key}",
                 style=discord.ButtonStyle.primary,
                 custom_id=subscribe_network_button(client_id, key),
                 disabled=already_subscribed,
             )
-            button.callback = self._make_subscribe_callback(key)
+            bind_item_callback(button, self._make_subscribe_callback(key))
             self.add_item(button)
         timecode_style = (
             discord.ButtonStyle.success if timecode_enabled else discord.ButtonStyle.secondary
         )
-        timecode = discord.ui.Button(
+        timecode: discord.ui.Button[Any] = discord.ui.Button(
             label="Timecodes: On" if timecode_enabled else "Timecodes: Off",
             style=timecode_style,
             custom_id=timecode_toggle_button(client_id),
             row=4,
         )
-        timecode.callback = self._timecode_toggle_callback
+        bind_item_callback(timecode, self._timecode_toggle_callback)
         self.add_item(timecode)
-        edit = discord.ui.Button(
+        edit: discord.ui.Button[Any] = discord.ui.Button(
             label="Edit Profile",
             style=discord.ButtonStyle.secondary,
             custom_id=profile_edit_button(client_id),
             row=4,
         )
-        edit.callback = self._edit_callback
+        bind_item_callback(edit, self._edit_callback)
         self.add_item(edit)
-        delete = discord.ui.Button(
+        delete: discord.ui.Button[Any] = discord.ui.Button(
             label="Delete Client",
             style=discord.ButtonStyle.danger,
             custom_id=delete_client_button(client_id),
             row=4,
         )
-        delete.callback = self._delete_callback
+        bind_item_callback(delete, self._delete_callback)
         self.add_item(delete)
 
-    def _make_subscribe_callback(self, network_key: str):
+    def _make_subscribe_callback(
+        self, network_key: str
+    ) -> Callable[[discord.Interaction], Coroutine[Any, Any, None]]:
         async def callback(interaction: discord.Interaction) -> None:
             await self._handle_subscribe(interaction, network_key)
 
@@ -97,12 +101,12 @@ class NetworkProfileView(discord.ui.View):
         context = self._bot.bot_context
         guild = interaction.guild
         if context is None or guild is None:
-            await response.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send_text("bot_not_ready")
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await response.send(render_text("client_not_found"), ephemeral=True)
+            await response.send_text("client_not_found")
             return
 
         if not await ensure_client_access(
@@ -110,25 +114,19 @@ class NetworkProfileView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_subscribe",
+            membership_policy=MembershipPolicy.ALLOW_NON_MEMBER,
             via="followup",
-            allow_non_member=True,
         ):
             return
 
         network = await context.network_repo.get_by_key(network_key)
         if network is None:
-            await response.send(
-                render_text("network_not_found", network_key=network_key),
-                ephemeral=True,
-            )
+            await response.send_text("network_not_found", network_key=network_key)
             return
 
         bot_member = guild.me
         if bot_member is None:
-            await response.send(
-                render_text("bot_member_unavailable_brief"),
-                ephemeral=True,
-            )
+            await response.send_text("bot_member_unavailable_brief")
             return
 
         from bot.services.client_subscription import ClientSubscriptionService
@@ -199,12 +197,12 @@ class NetworkProfileView(discord.ui.View):
         context = self._bot.bot_context
         guild = interaction.guild
         if context is None or guild is None:
-            await response.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send_text("bot_not_ready")
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await response.send(render_text("client_not_found"), ephemeral=True)
+            await response.send_text("client_not_found")
             return
 
         if not await ensure_client_access(
@@ -212,8 +210,8 @@ class NetworkProfileView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_edit",
+            membership_policy=MembershipPolicy.ALLOW_NON_MEMBER,
             via="followup",
-            allow_non_member=True,
             ephemeral=None,
         ):
             return
@@ -287,8 +285,8 @@ class NetworkProfileView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_delete",
+            membership_policy=MembershipPolicy.REQUIRED,
             via="response",
-            require_member=True,
         ):
             return
 
@@ -315,31 +313,22 @@ async def handle_subscribe_connected(
     context = bot.bot_context
     guild = interaction.guild
     if context is None or guild is None:
-        await response.send(render_text("bot_not_ready"), ephemeral=True)
+        await response.send_text("bot_not_ready")
         return
 
     subscription = await context.client_repo.get_subscription_by_id(subscription_id)
     if subscription is None:
-        await response.send(
-            render_text("subscription_not_found"),
-            ephemeral=True,
-        )
+        await response.send_text("subscription_not_found")
         return
 
     client = await context.client_repo.get_by_id(subscription.client_id)
     if client is None:
-        await response.send(
-            render_text("client_was_not_found"),
-            ephemeral=True,
-        )
+        await response.send_text("client_was_not_found")
         return
 
     network = await context.network_repo.get_by_id(subscription.network_id or 0)
     if network is None:
-        await response.send(
-            render_text("network_not_found", network_key=network_key),
-            ephemeral=True,
-        )
+        await response.send_text("network_not_found", network_key=network_key)
         return
 
     from bot.services.subscription_setup_sticky import sync_subscription_setup
@@ -384,12 +373,12 @@ class SubscribeSetupView(discord.ui.View):
         self._subscription_id = subscription_id
         self._network_key = network_key
 
-        connected = discord.ui.Button(
+        connected: discord.ui.Button[Any] = discord.ui.Button(
             label=SUBSCRIBED_CHANNEL_CONNECTED_LABEL,
             style=discord.ButtonStyle.success,
             custom_id=subscribe_connected_button(subscription_id),
         )
-        connected.callback = self._subscribe_connected_callback
+        bind_item_callback(connected, self._subscribe_connected_callback)
         self.add_item(connected)
 
     async def _subscribe_connected_callback(self, interaction: discord.Interaction) -> None:
@@ -417,29 +406,29 @@ class SubscriptionModerationView(discord.ui.View):
         self._network_key = network_key
 
         if show_subscribe_connected:
-            connected = discord.ui.Button(
+            connected: discord.ui.Button[Any] = discord.ui.Button(
                 label=SUBSCRIBED_CHANNEL_CONNECTED_LABEL,
                 style=discord.ButtonStyle.success,
                 custom_id=subscribe_connected_button(subscription_id),
             )
-            connected.callback = self._subscribe_connected_callback
+            bind_item_callback(connected, self._subscribe_connected_callback)
             self.add_item(connected)
 
         if show_blacklist:
-            blacklist = discord.ui.Button(
+            blacklist: discord.ui.Button[Any] = discord.ui.Button(
                 label="Blacklist",
                 style=discord.ButtonStyle.danger,
                 custom_id=blacklist_button(subscription_id),
             )
-            blacklist.callback = self._blacklist_callback
+            bind_item_callback(blacklist, self._blacklist_callback)
             self.add_item(blacklist)
 
-        leave = discord.ui.Button(
+        leave: discord.ui.Button[Any] = discord.ui.Button(
             label=f"Leave {network_key}",
             style=discord.ButtonStyle.secondary,
             custom_id=leave_network_button(subscription_id),
         )
-        leave.callback = self._leave_callback
+        bind_item_callback(leave, self._leave_callback)
         self.add_item(leave)
 
     async def _subscribe_connected_callback(self, interaction: discord.Interaction) -> None:
@@ -454,35 +443,29 @@ class SubscriptionModerationView(discord.ui.View):
         response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         if context is None:
-            await response.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send_text("bot_not_ready")
             return
 
         subscription = await context.client_repo.get_subscription_by_id(
             self._subscription_id,
         )
         if subscription is None:
-            await response.send(
-                render_text("subscription_not_found"),
-                ephemeral=True,
-            )
+            await response.send_text("subscription_not_found")
             return
 
         member = interaction.user
         if not isinstance(member, discord.Member):
-            await response.send(render_text("invalid_member"), ephemeral=True)
+            await response.send_text("invalid_member")
             return
 
         client = await context.client_repo.get_by_id(subscription.client_id)
         if client is None:
-            await response.send(
-                render_text("client_was_not_found"),
-                ephemeral=True,
-            )
+            await response.send_text("client_was_not_found")
             return
 
         guild = interaction.guild
         if guild is None:
-            await response.send(render_text("invalid_guild"), ephemeral=True)
+            await response.send_text("invalid_guild")
             return
 
         if not await ensure_client_access(
@@ -490,8 +473,8 @@ class SubscriptionModerationView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_leave",
+            membership_policy=MembershipPolicy.REQUIRED,
             via="followup",
-            require_member=True,
         ):
             return
 
@@ -506,10 +489,7 @@ class SubscriptionModerationView(discord.ui.View):
 
         bot_member = guild.me
         if bot_member is None:
-            await response.send(
-                render_text("bot_member_unavailable_brief"),
-                ephemeral=True,
-            )
+            await response.send_text("bot_member_unavailable_brief")
             return
 
         from bot.services.client_profile_sync import refresh_client_profile_message
@@ -592,8 +572,8 @@ class SubscriptionModerationView(discord.ui.View):
             guild,
             client,
             popup_key="client_role_required_blacklist",
+            membership_policy=MembershipPolicy.REQUIRED,
             via="response",
-            require_member=True,
         ):
             return
 
@@ -658,13 +638,13 @@ class BlacklistSelectView(discord.ui.View):
         super().__init__(timeout=120)
         self._bot = bot
         self._subscription_id = subscription_id
-        select = discord.ui.Select(
+        select: discord.ui.Select[Any] = discord.ui.Select(
             placeholder="Clients to blacklist",
             min_values=0,
             max_values=max(len(options), 1),
             options=options,
         )
-        select.callback = self._select_callback
+        bind_item_callback(select, self._select_callback)
         self.add_item(select)
 
     async def _select_callback(self, interaction: discord.Interaction) -> None:
@@ -685,10 +665,18 @@ class BlacklistSelectView(discord.ui.View):
             )
             return
 
+        network_id = subscription.network_id
+        if network_id is None:
+            await interaction.response.send_message(
+                render_text("subscription_not_found"),
+                ephemeral=True,
+            )
+            return
+
         other_ids = {
             sub.client_id
             for sub in await context.client_repo.list_subscriptions_by_network(
-                subscription.network_id,
+                network_id,
             )
             if sub.client_id != subscription.client_id
         }

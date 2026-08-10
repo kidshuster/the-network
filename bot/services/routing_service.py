@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.domain.client_subscription import ClientSubscription
 from bot.domain.errors import RoutingError
 from bot.domain.network import Network
 from bot.services.client_cache import ClientCache
@@ -63,12 +64,14 @@ class RoutingService:
             raise RoutingError(f"Network '{key}' was not found.")
         return network
 
-    def resolve_publish_subscription(self, publish_channel_id: int):
+    def resolve_publish_subscription(
+        self, publish_channel_id: int
+    ) -> ClientSubscription | None:
         if self._client_cache is None:
             return None
         return self._client_cache.get_enabled_subscription_by_publish(publish_channel_id)
 
-    def list_network_subscriptions(self, network_id: int):
+    def list_network_subscriptions(self, network_id: int) -> list[ClientSubscription]:
         if self._client_cache is None:
             return []
         return self._client_cache.list_subscriptions_for_network(network_id)
