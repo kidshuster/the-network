@@ -116,6 +116,188 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
     assert profile.edit.await_args.kwargs.get("sync_permissions") is False
 
 
+async def test_rectify_client_permissions_skips_when_category_missing() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.get_channel = MagicMock(return_value=None)
+    guild.get_role = MagicMock(return_value=MagicMock(spec=discord.Role))
+    bot = MagicMock(spec=discord.Member)
+    context = MagicMock()
+    client = Client(
+        id=1,
+        guild_id=1,
+        server_name="Acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=20,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        timecode_enabled=False,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    result = await rectify_client_permissions(
+        guild,
+        bot,
+        context,
+        client,
+        access_role=MagicMock(spec=discord.Role),
+        human_moderator_role=None,
+        access_role_name="The Network",
+    )
+
+    assert result.skipped == ["category missing in Discord"]
+    assert not result.synced
+
+
+async def test_rectify_client_permissions_records_category_http_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from discord_helpers import http_50013
+
+    guild = MagicMock(spec=discord.Guild)
+    category = MagicMock(spec=discord.CategoryChannel, id=10)
+    client_role = MagicMock(spec=discord.Role, id=20)
+    guild.get_channel = MagicMock(return_value=category)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    monkeypatch.setattr(
+        "bot.services.client_permission_rectification.sync_client_category_permissions",
+        AsyncMock(side_effect=http_50013()),
+    )
+    monkeypatch.setattr(
+        "bot.services.client_permission_rectification.sync_client_profile_channel_permissions",
+        AsyncMock(),
+    )
+
+    context = MagicMock()
+    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
+
+    client = Client(
+        id=1,
+        guild_id=1,
+        server_name="Acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=20,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        timecode_enabled=False,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    result = await rectify_client_permissions(
+        guild,
+        MagicMock(spec=discord.Member),
+        context,
+        client,
+        access_role=MagicMock(spec=discord.Role),
+        human_moderator_role=None,
+        access_role_name="The Network",
+    )
+
+    assert result.failures
+    assert "category" in result.failures[0].casefold()
+    assert not any("category" == item for item in result.synced)
+
+
+async def test_rectify_client_permissions_syncs_subscription_channels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild = MagicMock(spec=discord.Guild)
+    category = MagicMock(spec=discord.CategoryChannel, id=10)
+    client_role = MagicMock(spec=discord.Role, id=20)
+    profile = MagicMock(spec=discord.TextChannel, id=30, mention="#acme-profile")
+    publish = MagicMock(spec=discord.TextChannel, id=40, mention="#acme-stingers-publish")
+    subscribe = MagicMock(spec=discord.TextChannel, id=41, mention="#acme-stingers-subscribe")
+
+    guild.get_channel = MagicMock(
+        side_effect=lambda cid: {
+            10: category,
+            30: profile,
+            40: publish,
+            41: subscribe,
+        }.get(cid),
+    )
+    guild.get_role = MagicMock(return_value=client_role)
+
+    sync_sub = AsyncMock()
+    monkeypatch.setattr(
+        "bot.services.client_permission_rectification.sync_client_category_permissions",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "bot.services.client_permission_rectification.sync_client_profile_channel_permissions",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "bot.services.client_permission_rectification.sync_subscription_channel_permissions",
+        sync_sub,
+    )
+
+    from subscription_helpers import make_client_subscription
+
+    from bot.domain.network import Network
+
+    subscription = make_client_subscription(
+        id=1,
+        publish_channel_id=40,
+        subscribe_channel_id=41,
+    )
+    network = Network(
+        id=2,
+        key="stingers",
+        display_name="Stingers",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        join_channel_id=None,
+        enabled=True,
+    )
+
+    context = MagicMock()
+    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[subscription])
+    context.network_repo.get_by_id = AsyncMock(return_value=network)
+
+    client = Client(
+        id=1,
+        guild_id=1,
+        server_name="Acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=20,
+        profile_channel_id=30,
+        profile_message_id=40,
+        enabled=True,
+        timecode_enabled=False,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+
+    result = await rectify_client_permissions(
+        guild,
+        MagicMock(spec=discord.Member),
+        context,
+        client,
+        access_role=MagicMock(spec=discord.Role),
+        human_moderator_role=None,
+        access_role_name="The Network",
+    )
+
+    sync_sub.assert_awaited_once()
+    assert any("stingers" in item for item in result.synced)
+
+
 def test_guild_init_result_tracks_rectification_fields() -> None:
     result = GuildInitResult(success=True)
     result.rectifications.append("Leaders access synced.")

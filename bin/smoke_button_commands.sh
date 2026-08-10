@@ -68,32 +68,49 @@ async def main() -> None:
     settings = Settings()
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
+    ready = asyncio.Event()
+    failure: list[BaseException] = []
 
     @client.event
     async def on_ready() -> None:
-        guild = client.get_guild(settings.guild_id)
-        if guild is None:
-            raise SystemExit("FAIL: configured guild not found")
+        try:
+            guild = client.get_guild(settings.guild_id)
+            if guild is None:
+                raise RuntimeError("configured guild not found")
 
-        bot_stub = type("BotStub", (), {"settings": settings, "add_view": lambda *_: None})()
-        join_view = JoinNetworkView(bot_stub)
-        review_view = ModeratorReviewView(bot_stub, 1)
-        admin_view = NetworkAdminView(bot_stub)
-        profile_view = NetworkProfileView(bot_stub, 1, ["stingers"])
+            bot_stub = type("BotStub", (), {"settings": settings, "add_view": lambda *_: None})()
+            join_view = JoinNetworkView(bot_stub)
+            review_view = ModeratorReviewView(bot_stub, 1)
+            admin_view = NetworkAdminView(bot_stub)
+            profile_view = NetworkProfileView(bot_stub, 1, ["stingers"])
 
-        if len(join_view.children) != 1:
-            raise SystemExit("FAIL: JoinNetworkView missing button")
-        if len(review_view.children) != 2:
-            raise SystemExit("FAIL: ModeratorReviewView missing Accept/Deny buttons")
-        if len(admin_view.children) != 2:
-            raise SystemExit("FAIL: NetworkAdminView missing Create/Delete buttons")
-        if len(profile_view.children) < 1:
-            raise SystemExit("FAIL: NetworkProfileView missing buttons")
+            if len(join_view.children) != 1:
+                raise RuntimeError("JoinNetworkView missing button")
+            if len(review_view.children) != 2:
+                raise RuntimeError("ModeratorReviewView missing Accept/Deny buttons")
+            if len(admin_view.children) != 2:
+                raise RuntimeError("NetworkAdminView missing Create/Delete buttons")
+            if len(profile_view.children) < 1:
+                raise RuntimeError("NetworkProfileView missing buttons")
 
-        print("OK: persistent views build for live guild", guild.name)
-        await client.close()
+            print("OK: persistent views build for live guild", guild.name)
+        except BaseException as exc:
+            failure.append(exc)
+        finally:
+            ready.set()
+            await client.close()
 
-    await client.start(settings.discord_token)
+    task = asyncio.create_task(client.start(settings.discord_token))
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=60.0)
+    except asyncio.TimeoutError as exc:
+        task.cancel()
+        raise SystemExit(
+            "FAIL: timed out waiting for Discord (stop the running bot and retry)"
+        ) from exc
+    await task
+    if failure:
+        raise SystemExit(1) from failure[0]
 
 
 asyncio.run(main())

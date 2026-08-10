@@ -57,6 +57,24 @@ async def test_ensure_guild_only_mention_notifications_skips_when_already_set() 
     guild.edit.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_ensure_guild_only_mention_notifications_without_manage_guild() -> None:
+    guild, bot = _guild_with_channels(default=discord.NotificationLevel.all_messages)
+    type(bot).guild_permissions = PropertyMock(
+        return_value=MagicMock(manage_guild=False),
+    )
+
+    changed, error = await ensure_guild_only_mention_notifications(
+        guild,
+        bot,
+        reason="test",
+    )
+
+    assert changed is False
+    assert error == "bot needs **Manage Server**"
+    guild.edit.assert_not_called()
+
+
 def test_count_hub_guild_channels() -> None:
     guild = MagicMock(spec=discord.Guild)
     guild.channels = [

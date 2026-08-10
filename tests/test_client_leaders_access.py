@@ -29,7 +29,10 @@ def test_guild_init_syncs_leaders_for_all_client_roles() -> None:
 
 async def test_create_text_channel_with_overwrites_omits_sync_permissions_kwarg() -> None:
     guild = MagicMock(spec=discord.Guild)
-    guild.create_text_channel = AsyncMock(return_value=MagicMock(spec=discord.TextChannel))
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock()
+    guild.create_text_channel = AsyncMock(return_value=channel)
 
     everyone = MagicMock(spec=discord.Role)
     everyone.is_default.return_value = True
@@ -43,24 +46,36 @@ async def test_create_text_channel_with_overwrites_omits_sync_permissions_kwarg(
     category = MagicMock(spec=discord.CategoryChannel)
     category.id = 100
 
-    with patch(
-        "bot.services.guild_notifications.ensure_guild_only_mention_notifications",
-        new=AsyncMock(),
+    overwrite = {everyone: discord.PermissionOverwrite(view_channel=False)}
+
+    with (
+        patch(
+            "bot.services.guild_notifications.ensure_guild_only_mention_notifications",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bot.services.guild_permissions.sync_channel_permission_overwrites",
+            new=AsyncMock(),
+        ) as sync_overwrites,
     ):
         await create_text_channel_with_overwrites(
             guild,
             bot_member,
             name="probe-profile",
             category=category,
-            overwrites={everyone: discord.PermissionOverwrite(view_channel=False)},
+            overwrites=overwrite,
             reason="test",
         )
 
     kwargs = guild.create_text_channel.await_args.kwargs
     assert "sync_permissions" not in kwargs
-    assert kwargs["overwrites"] == {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-    }
+    assert "overwrites" not in kwargs
+    sync_overwrites.assert_awaited_once_with(
+        channel,
+        bot_member,
+        overwrite,
+        reason="test",
+    )
 
 
 async def test_sync_channel_permission_overwrites_applies_bulk_edit() -> None:

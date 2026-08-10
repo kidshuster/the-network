@@ -293,6 +293,103 @@ async def test_initialize_guild_survives_client_category_sync_50013(
     assert any("client category" in step.casefold() for step in result.failed_steps)
 
 
+@pytest.mark.asyncio
+async def test_initialize_guild_survives_hidden_moderator_only_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pre-existing #moderator-only the bot cannot see should warn, not abort init."""
+    guild, bot, human_mod, access_role, operator_role = _guild_with_roles()
+
+    def _http_50001() -> discord.HTTPException:
+        exc = discord.HTTPException(MagicMock(), "Missing Access")
+        exc.status = 403
+        exc.code = 50001
+        return exc
+
+    moderation = MagicMock(spec=discord.CategoryChannel)
+    moderation.id = 601
+    moderation.name = "Moderation"
+    moderation.channels = []
+    moderation.edit = AsyncMock()
+    network_cat = MagicMock(spec=discord.CategoryChannel)
+    network_cat.id = 602
+    network_cat.name = "The Network"
+    network_cat.channels = []
+    network_cat.edit = AsyncMock()
+    leaders_cat = MagicMock(spec=discord.CategoryChannel)
+    leaders_cat.id = 603
+    leaders_cat.name = "Leaders"
+    leaders_cat.channels = []
+    leaders_cat.edit = AsyncMock()
+    guild.categories = [moderation, network_cat, leaders_cat]
+
+    mod_only = MagicMock(spec=discord.TextChannel)
+    mod_only.id = 700
+    mod_only.name = "moderator-only"
+    mod_only.category_id = None
+    mod_only.category = None
+
+    async def _raise_missing_access(*_args: object, **_kwargs: object) -> None:
+        raise _http_50001()
+
+    mod_only.edit = AsyncMock(side_effect=_raise_missing_access)
+    mod_only.permissions_for = MagicMock(
+        return_value=MagicMock(view_channel=False, manage_channels=False),
+    )
+    guild.text_channels = [mod_only]
+    guild.channels = guild.categories + guild.text_channels
+
+    def resolve_cat(_guild: MagicMock, name: str) -> MagicMock | None:
+        return {
+            "Moderation": moderation,
+            "The Network": network_cat,
+            "Leaders": leaders_cat,
+        }.get(name)
+
+    monkeypatch.setattr("bot.services.guild_init.resolve_category", resolve_cat)
+    _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
+    monkeypatch.setattr(
+        "bot.services.guild_init._ensure_human_moderator_role",
+        AsyncMock(return_value=human_mod),
+    )
+    monkeypatch.setattr(
+        "bot.services.leaders_channel.ensure_leaders_channels",
+        AsyncMock(return_value=(None, None, MagicMock(
+            rectification_notes=lambda: [],
+            skip_notes=lambda: [],
+            failures=[],
+        ))),
+    )
+    monkeypatch.setattr(
+        "bot.services.join_requests_sticky.sync_hub_join_sticky",
+        AsyncMock(return_value=MagicMock(message=None)),
+    )
+    monkeypatch.setattr(
+        "bot.services.rules_sticky.sync_rules_sticky",
+        AsyncMock(return_value=MagicMock(message=None)),
+    )
+    guild.create_text_channel = AsyncMock(
+        side_effect=lambda **kwargs: MagicMock(
+            spec=discord.TextChannel,
+            id=800,
+            name=str(kwargs.get("name", "channel")),
+            mention=f"#{kwargs.get('name', 'channel')}",
+            edit=AsyncMock(),
+        ),
+    )
+    guild.create_category = AsyncMock()
+
+    result = await initialize_guild(
+        guild,
+        bot,
+        access_role_name="The Network",
+        operator_role_name="The Network+",
+    )
+
+    assert result.success is True
+    assert any("moderator-only" in step.casefold() for step in result.failed_steps)
+
+
 def test_moderator_category_overwrite_has_no_thread_flags() -> None:
     from bot.services.guild_permissions import (
         build_moderator_category_overwrite,

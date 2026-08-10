@@ -52,6 +52,13 @@ class _SmokeBot:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.bot_context = None
+        self.user = None
+        self._guild = None
+
+    def get_guild(self, guild_id: int):
+        if self._guild is not None and self._guild.id == guild_id:
+            return self._guild
+        return None
 
     def add_view(self, _view: object) -> None:
         return None
@@ -79,6 +86,9 @@ async def main() -> None:
             me = guild.me
             if me is None:
                 raise RuntimeError("bot member missing in guild")
+
+            smoke_bot.user = client.user
+            smoke_bot._guild = guild
 
             smoke = await run_pre_init_smoke_checks(guild, me, settings)
             print("OK: guild init smoke checks passed")
@@ -128,8 +138,9 @@ async def main() -> None:
         await client.start(settings.discord_token)
 
     client_task = asyncio.create_task(_run_client())
+    timeout = 180.0 if probe_only else 300.0
     try:
-        await asyncio.wait_for(ready.wait(), timeout=90.0)
+        await asyncio.wait_for(ready.wait(), timeout=timeout)
     except asyncio.TimeoutError as exc:
         client_task.cancel()
         raise SystemExit(
