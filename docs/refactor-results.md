@@ -3,7 +3,7 @@
 Running log of behavior-preserving refactor progress. Updated after each phase.
 
 **Last updated:** 2026-08-10  
-**Branch:** main @ `ee17a0e` (Phase 0 complete)
+**Branch:** main @ Phase 3 partial
 
 ---
 
