@@ -3,7 +3,7 @@
 Snapshot taken after Phase 1 inventory and Phase 2 characterization test additions. Use as the comparison point for all production refactoring.
 
 **Date:** 2026-08-10  
-**Branch:** main (uncommitted baseline work)  
+**Branch:** main @ `ee17a0e` (Phase 0 quality gate)  
 **Package version:** 1.2.15
 
 ---
@@ -12,10 +12,10 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 
 | Metric | Count |
 |--------|------:|
-| Production Python lines (`bot/`) | 18,119 |
-| Test Python lines (`tests/`) | 11,080 |
+| Production Python lines (`bot/`) | 18,017 |
+| Test Python lines (`tests/`) | 12,395 |
 | Production Python modules | 89 |
-| Test Python modules | 78 |
+| Test Python modules | 85 |
 | YAML message templates (`bot/messages/`) | 75 |
 | Changelog YAML | 1 |
 
@@ -102,9 +102,9 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 
 | Check | Result |
 |-------|--------|
-| `pytest` | ✅ 455 passed |
-| `ruff check .` | ⚠️ 4 pre-existing issues (unrelated files) |
-| `mypy bot` | ⚠️ 132 pre-existing errors in 28 files |
+| `pytest` | ✅ 468 passed, 0 warnings |
+| `ruff check .` | ✅ 0 errors |
+| `mypy bot` | ⚠️ ~135 pre-existing errors in 28 files |
 | Smoke scripts | Not run in baseline (require live Discord + env) |
 
 ---
@@ -141,15 +141,15 @@ The baseline is **not complete** solely on coverage percentage (61%). Meaningful
 - ✅ Join request service orchestration
 - ✅ Slash command authorization check
 - ✅ Profile edit service
+- ✅ UI handler error matrix (join, network, network-admin views)
+- ✅ Deferred ephemeral response helper
+- ✅ Smoke teardown orchestration
 
-**Remaining before production refactoring should proceed subsystem-by-subsystem:**
+**Remaining before deeper production refactoring:**
 
-- UI interaction handler error matrix
-- Hub announcements dispatch
-- Guild uninit preservation table
+- Hub announcements dispatch edge cases
+- Guild uninit preservation table (full matrix)
 - Startup/persistent view registration
 - Subscription sticky reconcile vs create modes
 
----
-
-*Do not edit production code until subsystem-specific characterization tests exist for the refactor target. Update this document after each refactoring step.*
+See [refactor-results.md](refactor-results.md) for first-track completion status and deeper-track phase progress.

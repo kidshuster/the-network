@@ -6,6 +6,27 @@ Prioritized by confidence and duplication evidence from baseline inspection.
 
 ---
 
+## First-track completion status (2026-08-10)
+
+| Item | Status |
+|------|--------|
+| R1.1 Interaction authorization helper | **Done** — `ensure_manage_guild()` in `bot/cogs/_checks.py` |
+| R1.2 Client role authorization helper | **Done** — `ensure_client_access()` in `bot/ui/_auth.py` |
+| R1.3 Discord HTTP 50013 helper | **Done** — `tests/discord_helpers.py` |
+| R1.4 Repository row-fetch boilerplate | **Partial** — helpers added; further dedup in deeper Phase 3 |
+| R2.1 Permission overwrite sync fallback | **Partial** — `sync_channel_permission_overwrites` + guild_init wiring |
+| R2.2 Overwrite builder composition | **Deferred** — deeper Phase 4 (truth-table tests first) |
+| R3.1 Sticky sync algorithm | **Partial** — `sticky_sync.py` for join + network-admin |
+| R4.1 Wire `DeferredEphemeralResponse` | **Done** — `bot/cogs/servers.py` |
+| R4.2 UI defer-then-followup helper | **Partial** — `defer_ephemeral()` applied; Phase 7 for response-mode centralization |
+| R5.1 Client reconnect step runner | **Partial** — `step_runner.py` + `_finish_client_reconnect` |
+| R5.2 Subscription resync discovery | **Done** — `resolve_subscription_channels_in_category()` |
+| R6.1 Modal construction | **Partial** — hub/client modal validators in `bot/ui/_auth.py` |
+
+See [refactor-results.md](refactor-results.md) for measurement deltas and deeper-track phase progress.
+
+---
+
 ## Priority 1 — High-confidence mechanism duplication
 
 ### R1.1 Interaction authorization helper unification
