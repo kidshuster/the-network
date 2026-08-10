@@ -62,6 +62,31 @@ async def _row_after_insert(
     )
 
 
+def _now_iso() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+def _enable_flag(value: bool) -> int:
+    return 1 if value else 0
+
+
+async def _list_rows(
+    db: Database,
+    sql: str,
+    params: tuple[object, ...] = (),
+) -> list[aiosqlite.Row]:
+    cursor = await db.connection.execute(sql, params)
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return list(rows)
+
+
+def _require_present[T](value: T | None, *, not_found: str) -> T:
+    if value is None:
+        raise RuntimeError(not_found)
+    return value
+
+
 class NetworkRepository:
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -93,7 +118,7 @@ class NetworkRepository:
         if not name:
             raise NetworkValidationError("Display name cannot be empty.")
 
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         try:
             cursor = await self._db.connection.execute(
                 """
@@ -153,9 +178,7 @@ class NetworkRepository:
         return NetworkRow.from_row(row) if row else None
 
     async def list_all(self) -> list[Network]:
-        cursor = await self._db.connection.execute("SELECT * FROM networks ORDER BY key ASC")
-        rows = await cursor.fetchall()
-        await cursor.close()
+        rows = await _list_rows(self._db, "SELECT * FROM networks ORDER BY key ASC")
         return [NetworkRow.from_row(row) for row in rows]
 
     async def set_enabled(self, key: str, enabled: bool) -> Network:
@@ -164,10 +187,10 @@ class NetworkRepository:
         if existing is None:
             raise NetworkValidationError(f"Network '{normalized_key}' was not found.")
 
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             "UPDATE networks SET enabled = ?, updated_at = ? WHERE key = ?",
-            (1 if enabled else 0, now, normalized_key),
+            (_enable_flag(enabled), now, normalized_key),
         )
         updated = await self.get_by_key(normalized_key)
         if updated is None:
@@ -217,7 +240,7 @@ class RelayRecordRepository:
         network_id: int,
         destination_channel_id: int,
     ) -> RelayRecord:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         try:
             cursor = await self._db.connection.execute(
                 """
@@ -257,20 +280,6 @@ class RelayRecordRepository:
         )
         return RelayRecordRow.from_row(row)
 
-    async def _require_by_id(
-        self,
-        record_id: int,
-        *,
-        not_found: str,
-    ) -> RelayRecord:
-        row = await _fetch_row_by_id(
-            self._db,
-            table="relay_records",
-            row_id=record_id,
-            not_found_message=not_found,
-        )
-        return RelayRecordRow.from_row(row)
-
     async def update_status(
         self,
         record_id: int,
@@ -279,7 +288,7 @@ class RelayRecordRepository:
         destination_message_ids: tuple[int, ...] | None = None,
         error_message: str | None = None,
     ) -> RelayRecord:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         if destination_message_ids is not None:
             ids_json = json.dumps(list(destination_message_ids))
             await self._db.execute(
@@ -304,9 +313,13 @@ class RelayRecordRepository:
                 """,
                 (status, error_message, now, record_id),
             )
-        return await self._require_by_id(
-            record_id,
-            not_found="Relay record disappeared after update",
+        return RelayRecordRow.from_row(
+            await _fetch_row_by_id(
+                self._db,
+                table="relay_records",
+                row_id=record_id,
+                not_found_message="Relay record disappeared after update",
+            )
         )
 
     async def delete_by_profile_id(self, profile_id: int) -> None:
@@ -337,7 +350,7 @@ class ServerRequestRepository:
         profile_image_url: str,
         profile_image_data: bytes | None = None,
     ) -> ServerRequest:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         cursor = await self._db.connection.execute(
             """
             INSERT INTO server_requests (
@@ -375,10 +388,7 @@ class ServerRequestRepository:
         *,
         not_found: str,
     ) -> ServerRequest:
-        request = await self.get_by_id(request_id)
-        if request is None:
-            raise RuntimeError(not_found)
-        return request
+        return _require_present(await self.get_by_id(request_id), not_found=not_found)
 
     async def get_by_id(self, request_id: int) -> ServerRequest | None:
         row = await self._db.fetchone(
@@ -388,12 +398,11 @@ class ServerRequestRepository:
         return ServerRequestRow.from_row(row) if row else None
 
     async def list_pending(self) -> list[ServerRequest]:
-        cursor = await self._db.connection.execute(
+        rows = await _list_rows(
+            self._db,
             "SELECT * FROM server_requests WHERE status = ? ORDER BY id ASC",
             (ServerRequestStatus.PENDING,),
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ServerRequestRow.from_row(row) for row in rows]
 
     async def get_pending_for_requester(
@@ -423,7 +432,7 @@ class ServerRequestRepository:
         return ServerRequestRow.from_row(row) if row else None
 
     async def set_moderator_message_id(self, request_id: int, message_id: int) -> ServerRequest:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE server_requests
@@ -444,7 +453,7 @@ class ServerRequestRepository:
         status: ServerRequestStatus,
         resolved_by_user_id: int,
     ) -> ServerRequest:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE server_requests
@@ -471,7 +480,8 @@ class ServerRequestRepository:
         )
 
     async def list_by_server_name_prefix(self, prefix: str) -> list[ServerRequest]:
-        cursor = await self._db.connection.execute(
+        rows = await _list_rows(
+            self._db,
             """
             SELECT * FROM server_requests
             WHERE server_name LIKE ?
@@ -479,8 +489,6 @@ class ServerRequestRepository:
             """,
             (f"{prefix}%",),
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ServerRequestRow.from_row(row) for row in rows]
 
 
@@ -495,7 +503,7 @@ class SettingsRepository:
         return str(row["value"])
 
     async def set(self, key: str, value: str) -> None:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             INSERT INTO settings (key, value, updated_at)
@@ -511,10 +519,7 @@ class ClientRepository:
         self._db = db
 
     async def _require_by_id(self, client_id: int, *, not_found: str) -> Client:
-        client = await self.get_by_id(client_id)
-        if client is None:
-            raise RuntimeError(not_found)
-        return client
+        return _require_present(await self.get_by_id(client_id), not_found=not_found)
 
     async def _require_subscription_by_id(
         self,
@@ -522,10 +527,10 @@ class ClientRepository:
         *,
         not_found: str,
     ) -> ClientSubscription:
-        subscription = await self.get_subscription_by_id(subscription_id)
-        if subscription is None:
-            raise RuntimeError(not_found)
-        return subscription
+        return _require_present(
+            await self.get_subscription_by_id(subscription_id),
+            not_found=not_found,
+        )
 
     async def create(
         self,
@@ -539,7 +544,7 @@ class ClientRepository:
         profile_message_id: int,
         enabled: bool = True,
     ) -> Client:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         try:
             cursor = await self._db.connection.execute(
                 """
@@ -557,7 +562,7 @@ class ClientRepository:
                     client_role_id,
                     profile_channel_id,
                     profile_message_id,
-                    1 if enabled else 0,
+                    _enable_flag(enabled),
                     now,
                     now,
                 ),
@@ -605,15 +610,14 @@ class ClientRepository:
         return ClientRow.from_row(row) if row else None
 
     async def list_all(self) -> list[Client]:
-        cursor = await self._db.connection.execute(
-            "SELECT * FROM clients ORDER BY server_name ASC"
+        rows = await _list_rows(
+            self._db,
+            "SELECT * FROM clients ORDER BY server_name ASC",
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ClientRow.from_row(row) for row in rows]
 
     async def update_profile_message_id(self, client_id: int, message_id: int) -> Client:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE clients SET profile_message_id = ?, updated_at = ?
@@ -630,7 +634,7 @@ class ClientRepository:
         label = display_name.strip()
         if not label:
             raise ProfileValidationError("Display name cannot be empty.")
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             "UPDATE clients SET display_name = ?, updated_at = ? WHERE id = ?",
             (label, now, client_id),
@@ -649,7 +653,7 @@ class ClientRepository:
         image_hash: str | None,
         degraded_reason: str | None,
     ) -> Client:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE clients SET
@@ -665,10 +669,10 @@ class ClientRepository:
         )
 
     async def set_enabled(self, client_id: int, enabled: bool) -> Client:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             "UPDATE clients SET enabled = ?, updated_at = ? WHERE id = ?",
-            (1 if enabled else 0, now, client_id),
+            (_enable_flag(enabled), now, client_id),
         )
         return await self._require_by_id(
             client_id,
@@ -676,10 +680,10 @@ class ClientRepository:
         )
 
     async def set_timecode_enabled(self, client_id: int, enabled: bool) -> Client:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             "UPDATE clients SET timecode_enabled = ?, updated_at = ? WHERE id = ?",
-            (1 if enabled else 0, now, client_id),
+            (_enable_flag(enabled), now, client_id),
         )
         return await self._require_by_id(
             client_id,
@@ -705,7 +709,7 @@ class ClientRepository:
         enabled: bool = True,
     ) -> ClientSubscription:
         normalized_key = network_key.strip().lower()
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         try:
             cursor = await self._db.connection.execute(
                 """
@@ -722,7 +726,7 @@ class ClientRepository:
                     publish_channel_id,
                     subscribe_channel_id,
                     moderation_message_id,
-                    1 if enabled else 0,
+                    _enable_flag(enabled),
                     now,
                     now,
                 ),
@@ -769,7 +773,7 @@ class ClientRepository:
         network_key: str,
     ) -> None:
         normalized_key = network_key.strip().lower()
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -784,7 +788,7 @@ class ClientRepository:
         subscription_id: int,
         network_id: int,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -826,38 +830,35 @@ class ClientRepository:
         self,
         network_id: int,
     ) -> list[ClientSubscription]:
-        cursor = await self._db.connection.execute(
+        rows = await _list_rows(
+            self._db,
             """
             SELECT * FROM client_subscriptions
             WHERE network_id = ? ORDER BY id ASC
             """,
             (network_id,),
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ClientSubscriptionRow.from_row(row) for row in rows]
 
     async def list_subscriptions_by_client(
         self,
         client_id: int,
     ) -> list[ClientSubscription]:
-        cursor = await self._db.connection.execute(
+        rows = await _list_rows(
+            self._db,
             """
             SELECT * FROM client_subscriptions
             WHERE client_id = ? ORDER BY id ASC
             """,
             (client_id,),
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ClientSubscriptionRow.from_row(row) for row in rows]
 
     async def list_all_subscriptions(self) -> list[ClientSubscription]:
-        cursor = await self._db.connection.execute(
-            "SELECT * FROM client_subscriptions ORDER BY id ASC"
+        rows = await _list_rows(
+            self._db,
+            "SELECT * FROM client_subscriptions ORDER BY id ASC",
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [ClientSubscriptionRow.from_row(row) for row in rows]
 
     async def update_moderation_message_id(
@@ -865,7 +866,7 @@ class ClientRepository:
         subscription_id: int,
         message_id: int,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -884,14 +885,14 @@ class ClientRepository:
         subscription_id: int,
         confirmed: bool = True,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
             SET subscribe_confirmed = ?, updated_at = ?
             WHERE id = ?
             """,
-            (1 if confirmed else 0, now, subscription_id),
+            (_enable_flag(confirmed), now, subscription_id),
         )
         return await self._require_subscription_by_id(
             subscription_id,
@@ -903,7 +904,7 @@ class ClientRepository:
         subscription_id: int,
         message_id: int | None,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -922,7 +923,7 @@ class ClientRepository:
         subscription_id: int,
         message_id: int | None,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -941,7 +942,7 @@ class ClientRepository:
         subscription_id: int,
         message_id: int | None,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions
@@ -960,13 +961,13 @@ class ClientRepository:
         subscription_id: int,
         enabled: bool,
     ) -> ClientSubscription:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         await self._db.execute(
             """
             UPDATE client_subscriptions SET enabled = ?, updated_at = ?
             WHERE id = ?
             """,
-            (1 if enabled else 0, now, subscription_id),
+            (_enable_flag(enabled), now, subscription_id),
         )
         return await self._require_subscription_by_id(
             subscription_id,
@@ -994,7 +995,7 @@ class ClientRepository:
         subscription_id: int,
         blocked_client_id: int,
     ) -> None:
-        now = datetime.now(tz=UTC).isoformat()
+        now = _now_iso()
         try:
             await self._db.execute(
                 """
@@ -1060,7 +1061,8 @@ class ClientRepository:
         return row is not None
 
     async def list_blacklisted_client_ids(self, subscription_id: int) -> list[int]:
-        cursor = await self._db.connection.execute(
+        rows = await _list_rows(
+            self._db,
             """
             SELECT blocked_client_id FROM client_blacklists
             WHERE subscription_id = ?
@@ -1068,8 +1070,6 @@ class ClientRepository:
             """,
             (subscription_id,),
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
         return [int(row["blocked_client_id"]) for row in rows]
 
     async def delete_blacklists_for_subscription(self, subscription_id: int) -> None:
