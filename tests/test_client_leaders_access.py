@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import inspect
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
-from bot.services.guild_permissions import sync_channel_permission_overwrites
+from bot.services.guild_permissions import (
+    create_text_channel_with_overwrites,
+    sync_channel_permission_overwrites,
+)
 
 
 def test_client_approval_grants_leaders_channel_access() -> None:
@@ -22,6 +25,42 @@ def test_guild_init_syncs_leaders_for_all_client_roles() -> None:
 
     source = inspect.getsource(initialize_guild)
     assert "ensure_leaders_channels" in source
+
+
+async def test_create_text_channel_with_overwrites_omits_sync_permissions_kwarg() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.create_text_channel = AsyncMock(return_value=MagicMock(spec=discord.TextChannel))
+
+    everyone = MagicMock(spec=discord.Role)
+    everyone.is_default.return_value = True
+    guild.default_role = everyone
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+    bot_member.top_role.id = 50
+
+    category = MagicMock(spec=discord.CategoryChannel)
+    category.id = 100
+
+    with patch(
+        "bot.services.guild_notifications.ensure_guild_only_mention_notifications",
+        new=AsyncMock(),
+    ):
+        await create_text_channel_with_overwrites(
+            guild,
+            bot_member,
+            name="probe-profile",
+            category=category,
+            overwrites={everyone: discord.PermissionOverwrite(view_channel=False)},
+            reason="test",
+        )
+
+    kwargs = guild.create_text_channel.await_args.kwargs
+    assert "sync_permissions" not in kwargs
+    assert kwargs["overwrites"] == {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+    }
 
 
 async def test_sync_channel_permission_overwrites_applies_bulk_edit() -> None:

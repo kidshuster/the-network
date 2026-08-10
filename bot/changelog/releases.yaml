@@ -1,4 +1,8 @@
 releases:
+  "1.2.9":
+    summary: "Fix channel creation regression from invalid sync_permissions kwarg."
+    changes:
+      - "Remove sync_permissions from create_text_channel calls — discord.py only supports it on edit."
   "1.2.8":
     summary: "Fix Leaders channel permission sync 50013 errors."
     changes:
