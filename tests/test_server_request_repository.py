@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from repository_helpers import create_test_network
 
 from bot.db.repositories import NetworkRepository, ServerRequestRepository
 from bot.domain.server_request import ServerRequestStatus
-from repository_helpers import create_test_network
 
 
 @pytest.mark.asyncio

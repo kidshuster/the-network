@@ -62,10 +62,16 @@ async def test_teardown_smoke_guild_removes_registered_clients() -> None:
 
     originals = {
         "cleanup_smoke_client": teardown_module.cleanup_smoke_client,
-        "cleanup_join_requests_smoke_artifacts": teardown_module.cleanup_join_requests_smoke_artifacts,
+        "cleanup_join_requests_smoke_artifacts": (
+            teardown_module.cleanup_join_requests_smoke_artifacts
+        ),
         "cleanup_guild_test_artifacts": teardown_module.cleanup_guild_test_artifacts,
-        "cleanup_hub_rebuild_smoke_artifacts": teardown_module.cleanup_hub_rebuild_smoke_artifacts,
-        "cleanup_orphan_smoke_subscription_channels": teardown_module.cleanup_orphan_smoke_subscription_channels,
+        "cleanup_hub_rebuild_smoke_artifacts": (
+            teardown_module.cleanup_hub_rebuild_smoke_artifacts
+        ),
+        "cleanup_orphan_smoke_subscription_channels": (
+            teardown_module.cleanup_orphan_smoke_subscription_channels
+        ),
     }
     teardown_module.cleanup_smoke_client = cleanup_mock
     teardown_module.cleanup_join_requests_smoke_artifacts = join_cleanup

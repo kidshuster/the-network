@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from repository_helpers import create_test_client, create_test_network, create_test_subscription
 
 from bot.db.repositories import ClientRepository, NetworkRepository
 from bot.domain.errors import ProfileValidationError
-from repository_helpers import create_test_client, create_test_network, create_test_subscription
 
 
 @pytest.mark.asyncio
@@ -66,8 +66,12 @@ async def test_get_by_profile_channel(db) -> None:
 @pytest.mark.asyncio
 async def test_list_all_orders_by_server_name(db) -> None:
     repo = ClientRepository(db)
-    await create_test_client(repo, server_name="Zebra", category_id=11, client_role_id=21, profile_channel_id=31)
-    await create_test_client(repo, server_name="Alpha", category_id=12, client_role_id=22, profile_channel_id=32)
+    await create_test_client(
+        repo, server_name="Zebra", category_id=11, client_role_id=21, profile_channel_id=31
+    )
+    await create_test_client(
+        repo, server_name="Alpha", category_id=12, client_role_id=22, profile_channel_id=32
+    )
     names = [c.server_name for c in await repo.list_all()]
     assert names == ["Alpha", "Zebra"]
 

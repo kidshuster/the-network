@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.cogs._responses import DeferredEphemeralResponse, defer_ephemeral
+from bot.cogs._responses import DeferredEphemeralResponse
 from bot.messages import render_embed
 
 

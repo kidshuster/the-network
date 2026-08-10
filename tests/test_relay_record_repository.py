@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from repository_helpers import create_test_network
 
 from bot.constants import RelayStatus
 from bot.db.repositories import NetworkRepository, RelayRecordRepository
 from bot.domain.errors import RelayError
-from repository_helpers import create_test_network
 
 
 @pytest.mark.asyncio

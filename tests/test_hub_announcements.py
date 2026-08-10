@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from context_helpers import make_test_context
 
 from bot.config import Settings
 from bot.domain.client import Client
@@ -13,7 +14,6 @@ from bot.services.hub_announcements import (
     is_hub_announcements_client,
     parse_announcement_content,
 )
-from context_helpers import make_test_context
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
@@ -340,7 +340,9 @@ async def test_dispatch_hub_announcement_relays_to_target_network(
 ) -> None:
     settings = _settings(monkeypatch)
     context = make_test_context(db)
-    network = await context.network_repo.create(guild_id=100, key="stingers", display_name="Stingers")
+    network = await context.network_repo.create(
+        guild_id=100, key="stingers", display_name="Stingers"
+    )
     hub = await context.client_repo.create(
         guild_id=100,
         server_name=settings.hub_announcements_server_name,

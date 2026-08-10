@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
@@ -10,11 +9,20 @@ from interaction_helpers import make_interaction, make_member
 from bot.messages import render_text
 from bot.ui.join_views import JoinNetworkModal, ModeratorReviewView
 
+_DEFAULT_CONTEXT = object()
 
-def _join_bot(*, guild_id: int = 100, context: MagicMock | None = MagicMock()) -> MagicMock:
+
+def _join_bot(
+    *,
+    guild_id: int = 100,
+    context: MagicMock | None | object = _DEFAULT_CONTEXT,
+) -> MagicMock:
     bot = MagicMock()
     bot.settings.guild_id = guild_id
-    bot.bot_context = context
+    if context is _DEFAULT_CONTEXT:
+        bot.bot_context = MagicMock()
+    else:
+        bot.bot_context = context
     return bot
 
 

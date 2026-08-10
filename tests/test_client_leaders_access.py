@@ -209,7 +209,6 @@ async def test_apply_client_role_leaders_overwrites_targets_layout_channels() ->
     bot_member = MagicMock(spec=discord.Member)
     bot_member.top_role = MagicMock(position=20)
 
-    import bot.services.guild_layout as guild_layout
     import bot.services.leaders_channel as leaders_module
 
     originals = {

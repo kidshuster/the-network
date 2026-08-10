@@ -37,6 +37,10 @@ include = ["bot*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["tests"]
+filterwarnings = [
+    # discord.py imports audioop for voice; removed in Python 3.13 stdlib.
+    "ignore:'audioop' is deprecated:DeprecationWarning:discord.player",
+]
 
 [tool.ruff]
 target-version = "py312"
