@@ -1,4 +1,8 @@
 releases:
+  "1.2.11":
+    summary: "Clarify init probe failures for outdated deploys vs permission issues."
+    changes:
+      - "Provisioning probe errors now show running bot version and update steps when deploy is stale."
   "1.2.10":
     summary: "Log bot version on startup; CI guard for discord.py channel create kwargs."
     changes:

@@ -325,18 +325,51 @@ async def _run_probe_step[T](
     return result
 
 
+def _probe_failure_detail(exc: BaseException) -> tuple[str, str]:
+    """Return (failure line, guidance paragraph)."""
+    from bot.services.changelog import installed_version
+
+    version = installed_version()
+    if isinstance(exc, discord.HTTPException):
+        code = getattr(exc, "code", None)
+        detail = f" ({code})" if code is not None else ""
+        failure = f"{exc.text}{detail}"
+        guidance = (
+            "Fix **The Network+** permissions and role order before running `/server init` "
+            "or approving join requests."
+        )
+        return failure, guidance
+
+    failure = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, TypeError) and "sync_permissions" in str(exc):
+        guidance = (
+            f"This is **not** a Discord permissions issue — the running bot (**v{version}**) "
+            "is outdated and still contains a known bug fixed in **v1.2.9**.\n\n"
+            "On the host:\n"
+            "```\n"
+            "cd ~/the-network-install\n"
+            "git pull\n"
+            "cat VERSION    # must show 1.2.9 or newer\n"
+            "./scripts/update.sh\n"
+            "```\n"
+            "Then confirm logs show `\"bot_version\": \"1.2.10\"` (or newer) before running "
+            "`/server init` again."
+        )
+        return failure, guidance
+
+    guidance = (
+        f"Running bot version: **{version}**. If this persists after `./scripts/update.sh`, "
+        "check `./scripts/logs.sh` for the `bot_version` field on startup."
+    )
+    return failure, guidance
+
+
 def _probe_failure_for_step(
     step: str,
     completed: list[str],
     exc: BaseException,
 ) -> NetworkValidationError:
-    if isinstance(exc, discord.HTTPException):
-        code = getattr(exc, "code", None)
-        detail = f" ({code})" if code is not None else ""
-        failure = f"{exc.text}{detail}"
-    else:
-        failure = f"{type(exc).__name__}: {exc}"
-
+    failure, guidance = _probe_failure_detail(exc)
     progress = (
         f"Completed before failure: {', '.join(completed)}."
         if completed
@@ -346,7 +379,7 @@ def _probe_failure_for_step(
         "Permission probe failed before guild init could start:\n"
         f"• Failed at **{step}**: {failure}\n"
         f"• {progress}\n\n"
-        "Fix **The Network+** permissions and role order, then run `/server init` again."
+        f"{guidance}"
     )
 
 
@@ -355,13 +388,7 @@ def _provision_probe_failure(
     completed: list[str],
     exc: BaseException,
 ) -> NetworkValidationError:
-    if isinstance(exc, discord.HTTPException):
-        code = getattr(exc, "code", None)
-        detail = f" ({code})" if code is not None else ""
-        failure = f"{exc.text}{detail}"
-    else:
-        failure = f"{type(exc).__name__}: {exc}"
-
+    failure, guidance = _probe_failure_detail(exc)
     progress = (
         f"Completed before failure: {', '.join(completed)}."
         if completed
@@ -371,6 +398,5 @@ def _provision_probe_failure(
         "Join-approval provisioning probe failed — Accept and client onboarding would fail:\n"
         f"• Failed at **{step}**: {failure}\n"
         f"• {progress}\n\n"
-        "Fix **The Network+** permissions and role order before running `/server init` "
-        "or approving join requests."
+        f"{guidance}"
     )
