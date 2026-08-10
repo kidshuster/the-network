@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.cogs._responses import defer_ephemeral
 from bot.messages import render_embed, render_text
+from bot.ui._auth import ensure_client_access
 from bot.ui.custom_ids import (
     blacklist_button,
     delete_client_button,
@@ -90,32 +92,31 @@ class NetworkProfileView(discord.ui.View):
         interaction: discord.Interaction,
         network_key: str,
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         guild = interaction.guild
         if context is None or guild is None:
-            await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send(render_text("bot_not_ready"), ephemeral=True)
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await interaction.followup.send(render_text("client_not_found"), ephemeral=True)
+            await response.send(render_text("client_not_found"), ephemeral=True)
             return
 
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            client_role = guild.get_role(client.client_role_id)
-            if client_role is None or client_role not in member.roles:
-                if not member.guild_permissions.manage_guild:
-                    await interaction.followup.send(
-                        render_text("client_role_required_subscribe"),
-                        ephemeral=True,
-                    )
-                    return
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_subscribe",
+            via="followup",
+            allow_non_member=True,
+        ):
+            return
 
         network = await context.network_repo.get_by_key(network_key)
         if network is None:
-            await interaction.followup.send(
+            await response.send(
                 render_text("network_not_found", network_key=network_key),
                 ephemeral=True,
             )
@@ -123,7 +124,7 @@ class NetworkProfileView(discord.ui.View):
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(
+            await response.send(
                 render_text("bot_member_unavailable_brief"),
                 ephemeral=True,
             )
@@ -144,7 +145,7 @@ class NetworkProfileView(discord.ui.View):
             access_role_name=self._bot.settings.network_access_role_name,
         )
         if not result.success or result.subscription is None:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "subscribe_failed",
                     description=result.error or "Unknown error",
@@ -179,34 +180,34 @@ class NetworkProfileView(discord.ui.View):
             description += f"\nPublish: {publish.mention}"
         if subscribe is not None:
             description += f"\nSubscribe: {subscribe.mention}"
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed("subscribe_success", description=description),
             ephemeral=True,
         )
 
     async def _timecode_toggle_callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+        response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         guild = interaction.guild
         if context is None or guild is None:
-            await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send(render_text("bot_not_ready"), ephemeral=True)
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await interaction.followup.send(render_text("client_not_found"), ephemeral=True)
+            await response.send(render_text("client_not_found"), ephemeral=True)
             return
 
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            client_role = guild.get_role(client.client_role_id)
-            if client_role is None or client_role not in member.roles:
-                if not member.guild_permissions.manage_guild:
-                    await interaction.followup.send(
-                        render_text("client_role_required_edit"),
-                        ephemeral=True,
-                    )
-                    return
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_edit",
+            via="followup",
+            allow_non_member=True,
+            ephemeral=None,
+        ):
+            return
 
         updated = await context.client_repo.set_timecode_enabled(
             client.id,
@@ -219,7 +220,7 @@ class NetworkProfileView(discord.ui.View):
         await refresh_client_profile_message(self._bot, context, guild, updated)
 
         state = "enabled" if updated.timecode_enabled else "disabled"
-        await interaction.followup.send(
+        await response.send(
             render_text("timecode_toggle_updated", state=state),
             ephemeral=True,
         )
@@ -266,14 +267,14 @@ class NetworkProfileView(discord.ui.View):
             await interaction.response.send_message(render_text("invalid_guild"), ephemeral=True)
             return
 
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None or (
-            client_role not in member.roles and not member.guild_permissions.manage_guild
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_delete",
+            via="response",
+            require_member=True,
         ):
-            await interaction.response.send_message(
-                render_text("client_role_required_delete"),
-                ephemeral=True,
-            )
             return
 
         from bot.ui.profile_views import DeleteClientConfirmView
@@ -295,16 +296,16 @@ async def handle_subscribe_connected(
     network_key: str,
 ) -> None:
     """Mark subscribe channel connected and refresh setup UI."""
-    await interaction.response.defer(ephemeral=True)
+    response = await defer_ephemeral(interaction)
     context = bot.bot_context
     guild = interaction.guild
     if context is None or guild is None:
-        await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+        await response.send(render_text("bot_not_ready"), ephemeral=True)
         return
 
     subscription = await context.client_repo.get_subscription_by_id(subscription_id)
     if subscription is None:
-        await interaction.followup.send(
+        await response.send(
             render_text("subscription_not_found"),
             ephemeral=True,
         )
@@ -312,7 +313,7 @@ async def handle_subscribe_connected(
 
     client = await context.client_repo.get_by_id(subscription.client_id)
     if client is None:
-        await interaction.followup.send(
+        await response.send(
             render_text("client_was_not_found"),
             ephemeral=True,
         )
@@ -320,7 +321,7 @@ async def handle_subscribe_connected(
 
     network = await context.network_repo.get_by_id(subscription.network_id or 0)
     if network is None:
-        await interaction.followup.send(
+        await response.send(
             render_text("network_not_found", network_key=network_key),
             ephemeral=True,
         )
@@ -340,7 +341,7 @@ async def handle_subscribe_connected(
         subscription=subscription,
         network=network,
     )
-    await interaction.followup.send(
+    await response.send(
         embed=render_embed(
             "review_success",
             label="Confirmed",
@@ -433,17 +434,17 @@ class SubscriptionModerationView(discord.ui.View):
         )
 
     async def _leave_callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+        response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         if context is None:
-            await interaction.followup.send(render_text("bot_not_ready"), ephemeral=True)
+            await response.send(render_text("bot_not_ready"), ephemeral=True)
             return
 
         subscription = await context.client_repo.get_subscription_by_id(
             self._subscription_id,
         )
         if subscription is None:
-            await interaction.followup.send(
+            await response.send(
                 render_text("subscription_not_found"),
                 ephemeral=True,
             )
@@ -451,12 +452,12 @@ class SubscriptionModerationView(discord.ui.View):
 
         member = interaction.user
         if not isinstance(member, discord.Member):
-            await interaction.followup.send(render_text("invalid_member"), ephemeral=True)
+            await response.send(render_text("invalid_member"), ephemeral=True)
             return
 
         client = await context.client_repo.get_by_id(subscription.client_id)
         if client is None:
-            await interaction.followup.send(
+            await response.send(
                 render_text("client_was_not_found"),
                 ephemeral=True,
             )
@@ -464,17 +465,17 @@ class SubscriptionModerationView(discord.ui.View):
 
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send(render_text("invalid_guild"), ephemeral=True)
+            await response.send(render_text("invalid_guild"), ephemeral=True)
             return
 
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None or (
-            client_role not in member.roles and not member.guild_permissions.manage_guild
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_leave",
+            via="followup",
+            require_member=True,
         ):
-            await interaction.followup.send(
-                render_text("client_role_required_leave"),
-                ephemeral=True,
-            )
             return
 
         network = (
@@ -488,7 +489,7 @@ class SubscriptionModerationView(discord.ui.View):
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(
+            await response.send(
                 render_text("bot_member_unavailable_brief"),
                 ephemeral=True,
             )
@@ -508,7 +509,7 @@ class SubscriptionModerationView(discord.ui.View):
             network_repo=context.network_repo,
         )
         if not result.success:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "leave_network_failed",
                     description=result.error or "Unknown error",
@@ -521,7 +522,7 @@ class SubscriptionModerationView(discord.ui.View):
         await context.routing_service.load_cache()
         await refresh_client_profile_message(self._bot, context, guild, client)
 
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed(
                 "leave_network_success",
                 network_key=network_key,
@@ -563,14 +564,14 @@ class SubscriptionModerationView(discord.ui.View):
             await interaction.response.send_message(render_text("invalid_guild"), ephemeral=True)
             return
 
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None or (
-            client_role not in member.roles and not member.guild_permissions.manage_guild
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_blacklist",
+            via="response",
+            require_member=True,
         ):
-            await interaction.response.send_message(
-                render_text("client_role_required_blacklist"),
-                ephemeral=True,
-            )
             return
 
         if subscription.network_id is None:

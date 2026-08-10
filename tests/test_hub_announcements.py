@@ -9,9 +9,11 @@ from bot.config import Settings
 from bot.domain.client import Client
 from bot.services.hub_announcements import (
     can_post_hub_announcement,
+    dispatch_hub_announcement,
     is_hub_announcements_client,
     parse_announcement_content,
 )
+from context_helpers import make_test_context
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
@@ -226,3 +228,204 @@ async def test_relay_skips_hub_announcements_subscribe_destination(
     assert result.success
     subscriber_subscribe.send.assert_awaited_once()
     hub_subscribe.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_hub_announcement_requires_hub_client(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(monkeypatch)
+    context = make_test_context(db)
+    bot = MagicMock()
+    bot.settings = settings
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    message = MagicMock(spec=discord.Message)
+    message.content = "Maintenance tonight."
+    message.embeds = []
+    message.attachments = []
+
+    result = await dispatch_hub_announcement(bot, context, guild, message)
+
+    assert result.success is False
+    assert result.errors == ("Hub announcements client is not configured.",)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_hub_announcement_propagates_parse_error(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(monkeypatch)
+    context = make_test_context(db)
+    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.client_repo.create(
+        guild_id=100,
+        server_name=settings.hub_announcements_server_name,
+        display_name=settings.hub_announcements_display_name,
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await context.client_repo.create_subscription(
+        client_id=hub.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=1001,
+        subscribe_channel_id=1002,
+    )
+
+    bot = MagicMock()
+    bot.settings = settings
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    message = MagicMock(spec=discord.Message)
+    message.content = "[missing]\nHello"
+    message.embeds = []
+    message.attachments = []
+
+    result = await dispatch_hub_announcement(bot, context, guild, message)
+
+    assert result.success is False
+    assert result.errors
+    assert "Unknown network" in result.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_hub_announcement_rejects_empty_message(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(monkeypatch)
+    context = make_test_context(db)
+    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.client_repo.create(
+        guild_id=100,
+        server_name=settings.hub_announcements_server_name,
+        display_name=settings.hub_announcements_display_name,
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await context.client_repo.create_subscription(
+        client_id=hub.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=1001,
+        subscribe_channel_id=1002,
+    )
+
+    bot = MagicMock()
+    bot.settings = settings
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    message = MagicMock(spec=discord.Message)
+    message.content = "   "
+    message.embeds = []
+    message.attachments = []
+
+    result = await dispatch_hub_announcement(bot, context, guild, message)
+
+    assert result.success is False
+    assert result.errors == ("Message is empty.",)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_hub_announcement_relays_to_target_network(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(monkeypatch)
+    context = make_test_context(db)
+    network = await context.network_repo.create(guild_id=100, key="stingers", display_name="Stingers")
+    hub = await context.client_repo.create(
+        guild_id=100,
+        server_name=settings.hub_announcements_server_name,
+        display_name=settings.hub_announcements_display_name,
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await context.client_repo.create_subscription(
+        client_id=hub.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=1001,
+        subscribe_channel_id=1002,
+    )
+
+    publish_channel = MagicMock(spec=discord.TextChannel)
+    publish_channel.id = 1001
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.get_channel = MagicMock(return_value=publish_channel)
+
+    injected = MagicMock(spec=discord.Message)
+    injected.id = 9001
+    monkeypatch.setattr(
+        "bot.services.hub_announcements.inject_hub_announcement",
+        AsyncMock(return_value=injected),
+    )
+    context.relay_service.relay_message = AsyncMock(return_value=MagicMock(success=True))
+    context.relay_service.feed_reject_reason = MagicMock(return_value=None)
+
+    bot = MagicMock()
+    bot.settings = settings
+    message = MagicMock(spec=discord.Message)
+    message.content = "[stingers]\nMaintenance tonight."
+    message.embeds = []
+    message.attachments = []
+
+    result = await dispatch_hub_announcement(bot, context, guild, message)
+
+    assert result.success is True
+    assert result.networks_attempted == ("stingers",)
+    assert result.networks_relayed == ("stingers",)
+    assert result.errors == ()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_hub_announcement_reports_missing_publish_channel(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(monkeypatch)
+    context = make_test_context(db)
+    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.client_repo.create(
+        guild_id=100,
+        server_name=settings.hub_announcements_server_name,
+        display_name=settings.hub_announcements_display_name,
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await context.client_repo.create_subscription(
+        client_id=hub.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=1001,
+        subscribe_channel_id=1002,
+    )
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.get_channel = MagicMock(return_value=None)
+
+    bot = MagicMock()
+    bot.settings = settings
+    message = MagicMock(spec=discord.Message)
+    message.content = "Maintenance tonight."
+    message.embeds = []
+    message.attachments = []
+
+    result = await dispatch_hub_announcement(bot, context, guild, message)
+
+    assert result.success is False
+    assert result.networks_relayed == ()
+    assert any("publish channel missing" in error for error in result.errors)

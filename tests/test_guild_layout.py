@@ -6,16 +6,20 @@ import discord
 
 from bot.services.guild_layout import (
     CATEGORY_LEADERS,
+    CATEGORY_MODERATION,
     CATEGORY_NETWORK,
     CHANNEL_CHANGELOG,
     CHANNEL_JOIN_REQUESTS,
+    CHANNEL_NETWORK_ANNOUNCEMENTS,
     CHANNEL_WELCOME_SINK,
     join_channel_name,
+    resolve_announcement_channel_in_category,
     resolve_bot_role,
     resolve_changelog_channel,
     resolve_human_moderator_role,
     resolve_moderator_role,
     resolve_network_announcement_channel,
+    resolve_network_announcements_channel,
     resolve_network_hub_category,
     resolve_welcome_sink_channel,
 )
@@ -109,3 +113,43 @@ def test_resolve_network_announcement_channel() -> None:
     other.type = discord.ChannelType.news
     guild.channels = [other, match]
     assert resolve_network_announcement_channel(guild, "stingers", category=category) is match
+
+
+def test_resolve_network_announcements_channel_requires_announcement_type() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    mod_category = MagicMock(spec=discord.CategoryChannel)
+    mod_category.name = CATEGORY_MODERATION
+    mod_category.id = 10
+
+    plain = MagicMock(spec=discord.TextChannel)
+    plain.name = CHANNEL_NETWORK_ANNOUNCEMENTS
+    plain.category_id = mod_category.id
+    plain.is_news = MagicMock(return_value=False)
+
+    announcement = MagicMock(spec=discord.TextChannel)
+    announcement.name = CHANNEL_NETWORK_ANNOUNCEMENTS
+    announcement.category_id = mod_category.id
+    announcement.is_news = MagicMock(return_value=True)
+
+    guild.categories = [mod_category]
+    guild.text_channels = [plain, announcement]
+
+    assert resolve_network_announcements_channel(guild) is announcement
+
+
+def test_resolve_announcement_channel_in_category_ignores_plain_text() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    plain = MagicMock(spec=discord.TextChannel)
+    plain.name = CHANNEL_NETWORK_ANNOUNCEMENTS
+    plain.category_id = 10
+    plain.is_news = MagicMock(return_value=False)
+    guild.text_channels = [plain]
+
+    assert (
+        resolve_announcement_channel_in_category(
+            guild,
+            name=CHANNEL_NETWORK_ANNOUNCEMENTS,
+            category_id=10,
+        )
+        is None
+    )

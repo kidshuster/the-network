@@ -21,12 +21,36 @@ DIAG_PREFIX = "diag"
 SMOKE_WEBHOOK_PREFIX = "smoke-wh"
 SMOKE_CLIENT_CATEGORY_PREFIX = "Smoke Accept "
 SMOKE_REBUILD_CATEGORY_PREFIX = "Smoke Rebuild "
+SMOKE_CLIENT_SERVER_PREFIXES = (
+    "Smoke Accept ",
+    "Smoke Deny ",
+    "Smoke Rebuild ",
+    "Smoke HubSub ",
+    "Smoke Welcome ",
+)
 # Join-approval smoke only during init probes — hub rebuild is cleaned explicitly at test end.
-SMOKE_CLIENT_ROLE_PREFIXES = ("Client: Smoke Accept ", "Client: Smoke Deny ")
+SMOKE_CLIENT_ROLE_PREFIXES = (
+    "Client: Smoke Accept ",
+    "Client: Smoke Deny ",
+    "Client: Smoke Rebuild ",
+    "Client: Smoke HubSub ",
+    "Client: Smoke Welcome ",
+)
 SMOKE_REBUILD_ROLE_PREFIX = "Client: Smoke Rebuild "
 SMOKE_EMOJI_PREFIX = "tnprobe"
+SMOKE_CATEGORY_NAME_PREFIXES = (
+    SMOKE_CLIENT_CATEGORY_PREFIX,
+    SMOKE_REBUILD_CATEGORY_PREFIX,
+    "Smoke Deny ",
+    "Smoke HubSub ",
+    "Smoke Welcome ",
+)
 
 _DIAG_NAME = re.compile(r"^diag", re.IGNORECASE)
+
+
+def is_smoke_client_server_name(server_name: str) -> bool:
+    return server_name.startswith(SMOKE_CLIENT_SERVER_PREFIXES)
 
 
 def is_test_channel_name(name: str) -> bool:
@@ -40,10 +64,8 @@ def is_test_channel_name(name: str) -> bool:
 
 def is_test_category_name(name: str) -> bool:
     lowered = name.casefold()
-    return (
-        lowered.startswith(PROBE_PREFIX)
-        or _DIAG_NAME.match(name) is not None
-        or name.startswith(SMOKE_CLIENT_CATEGORY_PREFIX)
+    return any(name.startswith(prefix) for prefix in SMOKE_CATEGORY_NAME_PREFIXES) or (
+        lowered.startswith(PROBE_PREFIX) or _DIAG_NAME.match(name) is not None
     )
 
 
@@ -324,6 +346,8 @@ async def cleanup_orphan_smoke_subscription_channels(
             extra={"channels": manual},
         )
     return manual
+
+
 async def cleanup_stale_probe_resources(guild: discord.Guild) -> list[str]:
     return await cleanup_guild_test_artifacts(guild)
 

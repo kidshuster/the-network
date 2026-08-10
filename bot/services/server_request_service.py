@@ -293,7 +293,7 @@ class ServerRequestService:
         from bot.services.client_profile_post import build_client_profile_embed
         from bot.services.client_profile_sync import refresh_client_profile_message
         from bot.services.client_provision import ClientProvisionService
-        from bot.services.emoji_service import EmojiService
+        from bot.services.emoji_service import EmojiService, emoji_sync_target_from_client
         from bot.ui.network_views import NetworkProfileView
 
         @dataclass
@@ -347,19 +347,10 @@ class ServerRequestService:
         emoji_service = EmojiService()
         emoji_result = await emoji_service.sync_for_profile(
             guild,
-            type(
-                "ProfileAdapter",
-                (),
-                {
-                    "emoji_id": None,
-                    "emoji_name": None,
-                    "image_hash": None,
-                    "degraded_reason": None,
-                    "server_name": request.server_name,
-                    "display_name": request.display_name,
-                    "source_channel_id": provision.profile_channel.id,
-                },
-            )(),
+            emoji_sync_target_from_client(
+                client,
+                source_channel_id=provision.profile_channel.id,
+            ),
             image,
             previous_hash=None,
             previous_emoji_id=None,

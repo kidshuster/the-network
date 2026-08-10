@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 
+from bot.cogs._checks import ensure_manage_guild
+from bot.cogs._responses import defer_ephemeral
 from bot.messages import modal_spec, render_embed, render_text
 from bot.messages.modals_builder import add_modal_fields
+from bot.ui._auth import validate_hub_modal_context
 from bot.ui.custom_ids import join_network_button, request_approve_button, request_deny_button
 
 if TYPE_CHECKING:
@@ -23,21 +26,21 @@ class JoinNetworkModal(discord.ui.Modal):
         self._fields = add_modal_fields(self, spec)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        user = interaction.user
-        if guild is None or guild.id != self._bot.settings.guild_id:
-            await interaction.followup.send(render_text("hub_guild_only"))
+        response = await defer_ephemeral(interaction)
+        validated = validate_hub_modal_context(
+            self._bot,
+            interaction,
+            guild_only_key="hub_guild_only",
+        )
+        if isinstance(validated, str):
+            await response.send(validated)
             return
 
-        context = self._bot.bot_context
-        if context is None:
-            await interaction.followup.send(render_text("bot_not_ready"))
-            return
+        context = validated.context
 
         attachments = self._fields["profile_image"].component.values
         if not attachments:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "join_request_failed",
                     description="A profile image upload is required.",
@@ -51,13 +54,13 @@ class JoinNetworkModal(discord.ui.Modal):
         service = ServerRequestService(context, self._bot)
         name = self._fields["name"].component.value.strip()
         result = await service.submit_request(
-            guild,
-            requester=user,
+            validated.guild,
+            requester=interaction.user,
             server_name=name,
             profile_image=attachments[0],
         )
         if not result.success:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "join_request_failed",
                     description=result.error or "Unknown error",
@@ -66,7 +69,7 @@ class JoinNetworkModal(discord.ui.Modal):
             )
             return
 
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed(
                 "join_request_submitted",
                 client_name=result.server_name or "—",
@@ -120,19 +123,16 @@ class ModeratorReviewView(discord.ui.View):
         await self._handle_review(interaction, approved=False)
 
     async def _handle_review(self, interaction: discord.Interaction, *, approved: bool) -> None:
-        member = interaction.user
-        if not isinstance(member, discord.Member) or not member.guild_permissions.manage_guild:
-            await interaction.response.send_message(
-                render_text("manage_guild_required"),
-                ephemeral=True,
-            )
+        if not await ensure_manage_guild(interaction):
             return
 
-        await interaction.response.defer(ephemeral=True)
+        response = await defer_ephemeral(interaction)
         context = self._bot.bot_context
         if context is None:
-            await interaction.followup.send(render_text("bot_not_ready"))
+            await response.send(render_text("bot_not_ready"))
             return
+
+        member = cast(discord.Member, interaction.user)
 
         from bot.services.server_request_service import ServerRequestService
 
@@ -154,7 +154,7 @@ class ModeratorReviewView(discord.ui.View):
                 "Join request button review failed",
                 extra={"request_id": self._request_id, "approved": approved},
             )
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "review_failed",
                     description="An unexpected error occurred. Check bot logs.",
@@ -164,7 +164,7 @@ class ModeratorReviewView(discord.ui.View):
             return
 
         if not result.success:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "review_failed",
                     description=result.error or "Unknown error",
@@ -174,7 +174,7 @@ class ModeratorReviewView(discord.ui.View):
             return
 
         label = "approved" if approved else "denied"
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed(
                 "review_success",
                 label=label.title(),
@@ -184,6 +184,3 @@ class ModeratorReviewView(discord.ui.View):
             ephemeral=True,
         )
 
-
-JoinServerView = JoinNetworkView
-JoinRequestModal = JoinNetworkModal

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
@@ -22,6 +23,73 @@ if TYPE_CHECKING:
     from bot.services.guild_init import GuildInitResult
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_reconnect_step(name: str, action: Callable[[], Awaitable[object]]) -> None:
+    await action()
+
+
+async def _finish_client_reconnect(
+    guild: discord.Guild,
+    bot: NetworkRelayBot,
+    context: BotContext,
+    bot_member: discord.Member,
+    client: Client,
+) -> None:
+    await _run_reconnect_step(
+        "sync channel names",
+        lambda: sync_client_channel_names(
+            guild,
+            bot_member,
+            client=client,
+            client_repo=context.client_repo,
+            network_repo=context.network_repo,
+        ),
+    )
+
+    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    for subscription in subscriptions:
+        network = await context.network_repo.get_by_id(subscription.network_id)
+        if network is None:
+            continue
+        await _run_reconnect_step(
+            f"sync subscription setup for {network.key}",
+            lambda sub=subscription, net=network: sync_subscription_setup(
+                bot,
+                context,
+                guild,
+                client=client,
+                subscription=sub,
+                network=net,
+                setup_mode="reconcile",
+            ),
+        )
+
+    category = guild.get_channel(client.category_id)
+    if isinstance(category, discord.CategoryChannel):
+        await _run_reconnect_step(
+            "reorder client category channels",
+            lambda: reorder_client_category_channels(
+                category,
+                client=client,
+                client_repo=context.client_repo,
+                network_repo=context.network_repo,
+            ),
+        )
+
+    all_networks = await context.network_repo.list_all()
+    bot.add_view(
+        NetworkProfileView(
+            bot,
+            client.id,
+            [network.key for network in all_networks],
+            timecode_enabled=client.timecode_enabled,
+        ),
+    )
+    await _run_reconnect_step(
+        "refresh client profile message",
+        lambda: refresh_client_profile_message(bot, context, guild, client),
+    )
 
 
 async def reconnect_clients_on_init(
@@ -67,48 +135,7 @@ async def reconnect_clients_on_init(
             continue
 
         try:
-            await sync_client_channel_names(
-                guild,
-                bot_member,
-                client=client,
-                client_repo=context.client_repo,
-                network_repo=context.network_repo,
-            )
-
-            subscriptions = await context.client_repo.list_subscriptions_by_client(
-                client.id,
-            )
-            for subscription in subscriptions:
-                network = await context.network_repo.get_by_id(subscription.network_id)
-                if network is None:
-                    continue
-                await sync_subscription_setup(
-                    bot,
-                    context,
-                    guild,
-                    client=client,
-                    subscription=subscription,
-                    network=network,
-                    setup_mode="reconcile",
-                )
-
-            await reorder_client_category_channels(
-                category,
-                client=client,
-                client_repo=context.client_repo,
-                network_repo=context.network_repo,
-            )
-
-            all_networks = await context.network_repo.list_all()
-            bot.add_view(
-                NetworkProfileView(
-                    bot,
-                    client.id,
-                    [network.key for network in all_networks],
-                    timecode_enabled=client.timecode_enabled,
-                ),
-            )
-            await refresh_client_profile_message(bot, context, guild, client)
+            await _finish_client_reconnect(guild, bot, context, bot_member, client)
             reconnected += 1
         except discord.HTTPException as exc:
             result.rectification_failures.append(

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Remove leftover probe/diag/smoke Discord artifacts from the configured guild.
+# Remove leftover probe/diag Discord artifacts (lightweight pre-flight cleanup).
+# For full smoke client + guild teardown after a test batch, use bin/smoke_teardown.sh.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -55,7 +56,7 @@ async def main() -> None:
                 for item in removed:
                     print(f"  - {item}")
             else:
-                print("OK: no stale probe/diag/join-approval artifacts")
+                print("OK: no stale probe/diag artifacts")
 
             if manual:
                 print(
@@ -65,8 +66,6 @@ async def main() -> None:
                 )
                 for item in manual:
                     print(f"  - {item}", file=sys.stderr)
-            elif not removed:
-                print("OK: no stale hub-rebuild smoke artifacts")
         except BaseException as exc:
             failure.append(exc)
         finally:
@@ -76,7 +75,7 @@ async def main() -> None:
     task = asyncio.create_task(client.start(settings.discord_token))
     try:
         await asyncio.wait_for(ready.wait(), timeout=90.0)
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         task.cancel()
         raise SystemExit(
             "FAIL: timed out waiting for Discord (stop the running bot and retry)"

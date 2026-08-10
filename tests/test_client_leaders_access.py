@@ -150,6 +150,45 @@ async def test_sync_channel_permission_overwrites_refreshes_from_category_on_fai
     assert edit_kwargs[2]["sync_permissions"] is False
 
 
+async def test_sync_channel_permission_overwrites_falls_back_to_incremental() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock(
+        side_effect=[
+            discord.HTTPException(MagicMock(), "Forbidden"),
+            None,
+            discord.HTTPException(MagicMock(), "Forbidden"),
+        ]
+    )
+    channel.set_permissions = AsyncMock()
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.position = 10
+    bot_member.top_role.id = 50
+
+    client_role = MagicMock(spec=discord.Role)
+    client_role.id = 101
+    client_role.position = 1
+    client_role.is_default.return_value = False
+
+    overwrite = discord.PermissionOverwrite(view_channel=True)
+
+    await sync_channel_permission_overwrites(
+        channel,
+        bot_member,
+        {client_role: overwrite},
+        reason="test",
+    )
+
+    assert channel.edit.await_count == 3
+    channel.set_permissions.assert_awaited_once_with(
+        client_role,
+        overwrite=overwrite,
+        reason="test",
+    )
+
+
 async def test_apply_client_role_leaders_overwrites_targets_layout_channels() -> None:
     from bot.services.leaders_channel import _apply_client_role_leaders_overwrites
 

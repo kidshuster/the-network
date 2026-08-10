@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.cogs._responses import defer_ephemeral
 from bot.messages import modal_spec, render_embed, render_text
 from bot.messages.modals_builder import add_modal_fields
+from bot.ui._auth import ensure_client_access, validate_client_modal_context
 from bot.ui.custom_ids import profile_edit_button
 
 if TYPE_CHECKING:
@@ -32,31 +34,29 @@ class EditClientProfileModal(discord.ui.Modal):
         display_input.default = current_display_name
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None:
-            await interaction.followup.send(render_text("hub_guild_form_only"))
+        response = await defer_ephemeral(interaction)
+        validated = validate_client_modal_context(self._bot, interaction)
+        if isinstance(validated, str):
+            await response.send(validated)
             return
 
-        context = self._bot.bot_context
-        if context is None:
-            await interaction.followup.send(render_text("bot_not_ready"))
-            return
+        context = validated.context
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await interaction.followup.send(render_text("client_not_found"))
+            await response.send(render_text("client_not_found"))
             return
 
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            client_role = guild.get_role(client.client_role_id)
-            if client_role is None or client_role not in member.roles:
-                if not member.guild_permissions.manage_guild:
-                    await interaction.followup.send(
-                        render_text("client_role_required_edit"),
-                    )
-                    return
+        if not await ensure_client_access(
+            interaction,
+            validated.guild,
+            client,
+            popup_key="client_role_required_edit",
+            via="followup",
+            allow_non_member=True,
+            ephemeral=None,
+        ):
+            return
 
         display_name = self._fields["display_name"].component.value.strip()
         profile_image: discord.Attachment | None = None
@@ -69,13 +69,13 @@ class EditClientProfileModal(discord.ui.Modal):
         result = await apply_client_profile_edit(
             self._bot,
             context,
-            guild,
+            validated.guild,
             client_id=self._client_id,
             display_name=display_name,
             profile_image=profile_image,
         )
         if not result.success or result.client is None:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "profile_update_failed",
                     description=result.error or "Unknown error",
@@ -88,7 +88,7 @@ class EditClientProfileModal(discord.ui.Modal):
         if result.warnings:
             warnings = "\n".join(f"• {warning}" for warning in result.warnings)
 
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed(
                 "profile_updated",
                 display_name=result.client.display_name,
@@ -149,37 +149,36 @@ class DeleteClientConfirmView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        response = await defer_ephemeral(interaction)
         guild = interaction.guild
         if guild is None:
-            await interaction.followup.send(render_text("invalid_guild"))
+            await response.send(render_text("invalid_guild"))
             return
 
         context = self._bot.bot_context
         if context is None:
-            await interaction.followup.send(render_text("bot_not_ready"))
+            await response.send(render_text("bot_not_ready"))
             return
 
         client = await context.client_repo.get_by_id(self._client_id)
         if client is None:
-            await interaction.followup.send(render_text("client_not_found"))
+            await response.send(render_text("client_not_found"))
             return
 
-        member = interaction.user
-        if not isinstance(member, discord.Member):
-            await interaction.followup.send(render_text("invalid_member"))
-            return
-
-        client_role = guild.get_role(client.client_role_id)
-        if client_role is None or (
-            client_role not in member.roles and not member.guild_permissions.manage_guild
+        if not await ensure_client_access(
+            interaction,
+            guild,
+            client,
+            popup_key="client_role_required_delete",
+            via="followup",
+            require_member=True,
+            ephemeral=None,
         ):
-            await interaction.followup.send(render_text("client_role_required_delete"))
             return
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(render_text("bot_member_unavailable_brief"))
+            await response.send(render_text("bot_member_unavailable_brief"))
             return
 
         from bot.services.client_deletion import ClientDeletionService
@@ -193,7 +192,7 @@ class DeleteClientConfirmView(discord.ui.View):
             context=context,
         )
         if not result.success:
-            await interaction.followup.send(
+            await response.send(
                 embed=render_embed(
                     "delete_client_failed",
                     error=result.error or "Unknown error",
@@ -201,7 +200,7 @@ class DeleteClientConfirmView(discord.ui.View):
             )
             return
 
-        await interaction.followup.send(
+        await response.send(
             embed=render_embed(
                 "delete_client_success",
                 server_name=client.server_name,

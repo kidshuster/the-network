@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from bot.client import NetworkRelayBot
 from bot.cogs._checks import require_manage_guild
+from bot.cogs._responses import DeferredEphemeralResponse
 from bot.context import BotContext
 from bot.domain.errors import NetworkValidationError
 from bot.messages import render_embed, render_text
@@ -180,20 +181,20 @@ class ServerCog(
     )
     async def init_server(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        response = DeferredEphemeralResponse(interaction)
         guild = interaction.guild
         if guild is None or guild.id != self.bot.settings.guild_id:
-            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
+            await response.send(render_text("central_guild_only"), ephemeral=True)
             return
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(render_text("bot_member_unavailable"), ephemeral=True)
+            await response.send(render_text("bot_member_unavailable"), ephemeral=True)
             return
-
-        await interaction.followup.send(render_text("server_init_started"), ephemeral=True)
 
         async def _run() -> None:
             try:
+                await response.send(render_text("server_init_started"), ephemeral=True)
                 clients = None
                 if self.bot.bot_context is not None:
                     clients = await self.bot.bot_context.client_repo.list_all()
@@ -206,29 +207,31 @@ class ServerCog(
                     bot=self.bot,
                     context=self.bot.bot_context,
                 )
-                await interaction.followup.send(
+                await response.send(
                     embed=_server_init_embed(result),
                     ephemeral=True,
                 )
                 for rectification_embed in _server_init_rectification_embeds(result):
-                    await interaction.followup.send(
+                    await response.send(
                         embed=rectification_embed,
                         ephemeral=True,
                     )
             except NetworkValidationError as exc:
-                await interaction.followup.send(
+                await response.send(
                     embed=render_embed("server_init_failed", description=str(exc)),
                     ephemeral=True,
                 )
             except Exception as exc:
                 logger.exception("Server init failed unexpectedly")
-                await interaction.followup.send(
+                await response.send(
                     embed=render_embed(
                         "server_init_failed",
                         description=f"Unexpected error: {type(exc).__name__}: {exc}",
                     ),
                     ephemeral=True,
                 )
+            finally:
+                await response.ensure_sent()
 
         asyncio.create_task(_run())
 
@@ -239,20 +242,20 @@ class ServerCog(
     )
     async def uninit_server(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        response = DeferredEphemeralResponse(interaction)
         guild = interaction.guild
         if guild is None or guild.id != self.bot.settings.guild_id:
-            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
+            await response.send(render_text("central_guild_only"), ephemeral=True)
             return
 
         bot_member = guild.me
         if bot_member is None:
-            await interaction.followup.send(render_text("bot_member_unavailable"), ephemeral=True)
+            await response.send(render_text("bot_member_unavailable"), ephemeral=True)
             return
-
-        await interaction.followup.send(render_text("server_uninit_started"), ephemeral=True)
 
         async def _run() -> None:
             try:
+                await response.send(render_text("server_uninit_started"), ephemeral=True)
                 result = await uninitialize_guild(
                     guild,
                     bot_member,
@@ -271,19 +274,21 @@ class ServerCog(
                         result.notes.append(
                             "Could not clear hub database (networks/clients) — check bot logs."
                         )
-                await interaction.followup.send(
+                await response.send(
                     embed=_server_uninit_embed(result),
                     ephemeral=True,
                 )
             except Exception:
                 logger.exception("Server uninit failed unexpectedly")
-                await interaction.followup.send(
+                await response.send(
                     embed=render_embed(
                         "server_uninit_failed",
                         description="An unexpected error occurred. Check bot logs.",
                     ),
                     ephemeral=True,
                 )
+            finally:
+                await response.ensure_sent()
 
         asyncio.create_task(_run())
 

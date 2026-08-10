@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import discord
 
+from bot.services.sticky_sync import sticky_channel_manage_messages_error
+
 logger = logging.getLogger(__name__)
 
 RULES_STICKY_VERSION = 2
@@ -63,21 +65,12 @@ async def sync_rules_sticky(
             ),
         )
 
-    permissions = rules_channel.permissions_for(bot_member)
-    required = (
-        permissions.view_channel,
-        permissions.send_messages,
-        permissions.embed_links,
-        permissions.manage_messages,
-    )
-    if not all(required):
+    permission_error = sticky_channel_manage_messages_error(rules_channel, bot_member)
+    if permission_error is not None:
         return RulesStickyResult(
             success=False,
             skipped=True,
-            reason=(
-                f"The bot cannot manage messages in {rules_channel.mention}. "
-                "Grant View Channel, Send Messages, Embed Links, and Manage Messages there."
-            ),
+            reason=permission_error,
         )
 
     from bot.services.discord_cleanup import wipe_text_channel

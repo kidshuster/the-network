@@ -15,13 +15,18 @@ from bot.messages import render_embed
 from bot.services.client_profile_post import build_client_profile_embed
 from bot.services.client_profile_sync import refresh_client_profile_message
 from bot.services.client_provision import ClientProvisionService
-from bot.services.emoji_service import EmojiService
+from bot.services.emoji_service import EmojiService, emoji_sync_target_from_client
 from bot.services.guild_layout import (
     CHANNEL_NETWORK_ANNOUNCEMENTS,
+    find_network_announcements_text_channel,
     resolve_moderation_category,
     resolve_network_announcements_channel,
 )
-from bot.services.guild_permissions import build_moderation_staff_overwrites
+from bot.services.guild_permissions import (
+    _can_configure_role,
+    build_moderation_staff_overwrites,
+    build_moderator_announcement_overwrite,
+)
 from bot.services.image_service import download_profile_image_from_url, normalize_image_bytes
 from bot.services.network_provision import resolve_operator_role_by_name
 from bot.ui.network_views import NetworkProfileView
@@ -108,10 +113,11 @@ async def _ensure_mod_announcements_channel(
     guild: discord.Guild,
     bot_member: discord.Member,
     human_moderator_role: discord.Role | None,
+    settings: Settings,
     *,
     result: GuildInitResult | None = None,
 ) -> discord.TextChannel | None:
-    from bot.services.guild_init import GuildInitResult, _ensure_text_channel
+    from bot.services.guild_init import GuildInitResult, _ensure_announcement_channel
 
     moderation = resolve_moderation_category(guild)
     if moderation is None:
@@ -121,9 +127,21 @@ async def _ensure_mod_announcements_channel(
         guild,
         bot_member,
         human_moderator_role,
+        for_announcement=True,
     )
+    operator = resolve_operator_role_by_name(
+        guild,
+        role_name=settings.network_operator_role_name,
+    )
+    if (
+        operator is not None
+        and operator != human_moderator_role
+        and _can_configure_role(bot_member, operator)
+    ):
+        overwrites[operator] = build_moderator_announcement_overwrite()
+
     init_result = result if result is not None else GuildInitResult(success=True)
-    channel = await _ensure_text_channel(
+    channel = await _ensure_announcement_channel(
         guild,
         bot_member,
         name=CHANNEL_NETWORK_ANNOUNCEMENTS,
@@ -136,6 +154,18 @@ async def _ensure_mod_announcements_channel(
 
     if channel is not None:
         await _sync_guide_sticky(channel, bot_member)
+    elif result is not None:
+        moderation = resolve_moderation_category(guild)
+        legacy = find_network_announcements_text_channel(
+            guild,
+            category_id=moderation.id if moderation is not None else None,
+            include_announcement=False,
+        )
+        if legacy is not None:
+            result.rectification_failures.append(
+                f"{legacy.mention} is a plain text channel — could not convert to "
+                "announcement type (check bot **Manage Channels**)."
+            )
     return channel
 
 
@@ -192,26 +222,9 @@ async def _sync_hub_client_emoji(
         return client
     image = normalize_image_bytes(image_data)
     emoji_service = EmojiService()
-    profile_channel = guild.get_channel(client.profile_channel_id)
-    source_channel_id = (
-        profile_channel.id if profile_channel is not None else client.profile_channel_id
-    )
-    adapter = type(
-        "ProfileAdapter",
-        (),
-        {
-            "emoji_id": client.emoji_id,
-            "emoji_name": client.emoji_name,
-            "image_hash": client.image_hash,
-            "degraded_reason": client.degraded_reason,
-            "server_name": client.server_name,
-            "display_name": client.display_name,
-            "source_channel_id": source_channel_id,
-        },
-    )()
     emoji_result = await emoji_service.sync_for_profile(
         guild,
-        adapter,
+        emoji_sync_target_from_client(client),
         image,
         previous_hash=client.image_hash,
         previous_emoji_id=client.emoji_id,
@@ -370,15 +383,16 @@ async def ensure_hub_announcements_client(
 
     from bot.services.guild_layout import resolve_human_moderator_role
 
+    settings = bot.settings
     human_moderator_role = resolve_human_moderator_role(guild)
     await _ensure_mod_announcements_channel(
         guild,
         bot_member,
         human_moderator_role,
+        settings,
         result=result,
     )
 
-    settings = bot.settings
     client = await context.client_repo.get_by_server_name(
         guild.id,
         settings.hub_announcements_server_name,

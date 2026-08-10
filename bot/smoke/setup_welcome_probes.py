@@ -10,6 +10,8 @@ import discord
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
+from bot.services.permission_probe import PROBE_PNG
+from bot.services.server_request_service import ServerRequestService
 from bot.services.subscription_setup import SubscriptionSetupState
 from bot.services.subscription_setup_sticky import (
     _maybe_post_activation_welcome,
@@ -21,8 +23,6 @@ from bot.smoke.provision_flow import (
     ensure_smoke_network_key,
 )
 from bot.smoke.resource_guard import guild_test_resource_guard
-from bot.services.permission_probe import PROBE_PNG
-from bot.services.server_request_service import ServerRequestService
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

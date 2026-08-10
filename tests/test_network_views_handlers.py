@@ -5,11 +5,17 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 from discord_helpers import make_guild_with_roles
+from interaction_helpers import make_interaction, make_member
 from subscription_helpers import make_client_subscription
 
 from bot.domain.client import Client
 from bot.domain.network import Network
-from bot.ui.network_views import NetworkProfileView
+from bot.messages import render_text
+from bot.ui.network_views import (
+    NetworkProfileView,
+    SubscriptionModerationView,
+    handle_subscribe_connected,
+)
 
 
 def _client() -> Client:
@@ -188,3 +194,305 @@ async def test_subscribe_button_renders_failure_embed(
 
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert embed.title == "Subscribe Failed"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_button_reports_network_not_found() -> None:
+    guild, bot_member, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[client_role])
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.network_repo.get_by_key = AsyncMock(return_value=None)
+
+    bot = MagicMock()
+    bot.bot_context = context
+    bot.settings.network_access_role_name = "The Network"
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.me = bot_member
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = NetworkProfileView(bot, client.id, ["missing"])
+    await view._handle_subscribe(interaction, "missing")
+
+    assert interaction.followup.send.await_args.args[0] == render_text(
+        "network_not_found",
+        network_key="missing",
+    )
+
+
+@pytest.mark.asyncio
+async def test_subscribe_button_reports_client_not_found() -> None:
+    guild, bot_member, _, _, _ = make_guild_with_roles()
+    member = make_member(guild=guild, manage_guild=True)
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=None)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.me = bot_member
+
+    view = NetworkProfileView(bot, 999, ["stingers"])
+    await view._handle_subscribe(interaction, "stingers")
+
+    assert interaction.followup.send.await_args.args[0] == render_text("client_not_found")
+
+
+@pytest.mark.asyncio
+async def test_subscribe_button_allows_manage_guild_without_client_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild, bot_member, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[], manage_guild=True)
+
+    network = Network(
+        id=2,
+        key="stingers",
+        display_name="Stingers",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        join_channel_id=None,
+        enabled=True,
+    )
+    subscription = make_client_subscription(id=5)
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.network_repo.get_by_key = AsyncMock(return_value=network)
+    context.client_cache.load_cache = AsyncMock()
+    context.routing_service.load_cache = AsyncMock()
+
+    subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
+    monkeypatch.setattr(
+        "bot.services.client_subscription.ClientSubscriptionService.subscribe_client",
+        AsyncMock(return_value=subscribe_result),
+    )
+    monkeypatch.setattr(
+        "bot.services.subscription_setup_sticky.sync_subscription_setup",
+        AsyncMock(),
+    )
+
+    bot = MagicMock()
+    bot.bot_context = context
+    bot.settings.network_access_role_name = "The Network"
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.me = bot_member
+    guild.get_role = MagicMock(return_value=client_role)
+    publish = MagicMock(spec=discord.TextChannel, id=100, mention="#publish")
+    subscribe = MagicMock(spec=discord.TextChannel, id=101, mention="#subscribe")
+    guild.get_channel = MagicMock(
+        side_effect=lambda cid: publish if cid == 100 else subscribe,
+    )
+
+    view = NetworkProfileView(bot, client.id, ["stingers"])
+    await view._handle_subscribe(interaction, "stingers")
+
+    embed = interaction.followup.send.await_args.kwargs["embed"]
+    assert embed.title == "Network Subscription"
+
+
+@pytest.mark.asyncio
+async def test_timecode_toggle_blocks_without_client_role() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[], manage_guild=False)
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = NetworkProfileView(bot, client.id, ["stingers"])
+    await view._timecode_toggle_callback(interaction)
+
+    assert interaction.followup.send.await_args.args[0] == render_text(
+        "client_role_required_edit",
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_button_blocks_without_client_role() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[], manage_guild=False)
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = NetworkProfileView(bot, client.id, ["stingers"])
+    await view._delete_callback(interaction)
+
+    interaction.response.send_message.assert_awaited_once()
+    assert interaction.response.send_message.await_args.args[0] == render_text(
+        "client_role_required_delete",
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_button_shows_confirm_prompt_for_client_role_holder() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[client_role])
+
+    context = MagicMock()
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = NetworkProfileView(bot, client.id, ["stingers"])
+    await view._delete_callback(interaction)
+
+    prompt = interaction.response.send_message.await_args.args[0]
+    assert client.server_name in prompt
+    assert interaction.response.send_message.await_args.kwargs["view"] is not None
+
+
+@pytest.mark.asyncio
+async def test_leave_network_blocks_without_client_role() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[], manage_guild=False)
+    subscription = make_client_subscription()
+
+    context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = SubscriptionModerationView(bot, subscription.id, "stingers")
+    await view._leave_callback(interaction)
+
+    assert interaction.followup.send.await_args.args[0] == render_text(
+        "client_role_required_leave",
+    )
+
+
+@pytest.mark.asyncio
+async def test_leave_network_renders_failure_embed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild, bot_member, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[client_role])
+    subscription = make_client_subscription()
+
+    context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.network_repo.get_by_id = AsyncMock(
+        return_value=Network(
+            id=2,
+            key="stingers",
+            display_name="Stingers",
+            feed_category_id=None,
+            output_channel_id=None,
+            concat_channel_id=None,
+            profile_forum_channel_id=None,
+            join_channel_id=None,
+            enabled=True,
+        ),
+    )
+
+    unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
+    monkeypatch.setattr(
+        "bot.services.client_subscription.ClientSubscriptionService.unsubscribe_client",
+        AsyncMock(return_value=unsubscribe_result),
+    )
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.me = bot_member
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = SubscriptionModerationView(bot, subscription.id, "stingers")
+    await view._leave_callback(interaction)
+
+    embed = interaction.followup.send.await_args.kwargs["embed"]
+    assert embed.title == "Could not leave network"
+
+
+@pytest.mark.asyncio
+async def test_blacklist_button_reports_no_targets() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[client_role])
+    subscription = make_client_subscription()
+
+    context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[subscription])
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    view = SubscriptionModerationView(
+        bot,
+        subscription.id,
+        "stingers",
+        show_blacklist=True,
+    )
+    await view._blacklist_callback(interaction)
+
+    assert interaction.response.send_message.await_args.args[0] == render_text(
+        "no_blacklist_targets",
+    )
+
+
+@pytest.mark.asyncio
+async def test_subscribe_connected_reports_missing_subscription() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    member = make_member(guild=guild)
+
+    context = MagicMock()
+    context.client_repo.get_subscription_by_id = AsyncMock(return_value=None)
+
+    bot = MagicMock()
+    bot.bot_context = context
+
+    interaction = make_interaction(guild=guild, user=member)
+
+    await handle_subscribe_connected(bot, interaction, subscription_id=99, network_key="stingers")
+
+    assert interaction.followup.send.await_args.args[0] == render_text("subscription_not_found")

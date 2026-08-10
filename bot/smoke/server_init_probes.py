@@ -228,14 +228,27 @@ async def probe_hub_announcements(
     settings: Settings,
 ) -> ProbeResult:
     from bot.services.guild_layout import (
+        find_network_announcements_text_channel,
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )
     from bot.services.hub_announcements import is_hub_announcements_client
 
-    mod_channel = resolve_network_announcements_channel(guild)
     mod_category = resolve_moderation_category(guild)
+    mod_channel = resolve_network_announcements_channel(guild)
     if mod_channel is None:
+        legacy = find_network_announcements_text_channel(
+            guild,
+            category_id=mod_category.id if mod_category is not None else None,
+            include_announcement=False,
+        )
+        if legacy is not None:
+            return ProbeResult(
+                "hub announcements channel",
+                False,
+                f"{legacy.mention} is a plain text channel — run `/server init` to "
+                "recreate it as an announcement channel",
+            )
         return ProbeResult(
             "hub announcements channel",
             False,
@@ -246,6 +259,12 @@ async def probe_hub_announcements(
             "hub announcements channel",
             False,
             "#network-announcements is outside Moderation",
+        )
+    if not mod_channel.is_news():
+        return ProbeResult(
+            "hub announcements channel",
+            False,
+            "#network-announcements must be an announcement channel — run `/server init`",
         )
 
     hub = await context.client_repo.get_by_server_name(
@@ -289,7 +308,8 @@ async def probe_hub_announcements(
     return ProbeResult(
         "hub announcements wiring",
         True,
-        f"hub client subscribed to {len(networks)} network(s)",
+        f"{mod_channel.mention} is announcement channel; hub client subscribed to "
+        f"{len(networks)} network(s)",
     )
 
 
@@ -480,6 +500,162 @@ async def probe_reinit_rectifies_clients(
         return ProbeResult("reinit rectification", True, "; ".join(detail_parts))
 
 
+async def probe_leaders_delete_double_reinit(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    bot: NetworkRelayBot,
+    context: BotContext,
+    settings: Settings,
+) -> ProbeResult:
+    """Delete #leaders-channel, reinit twice — permissions restored, no false warnings."""
+    clients = await context.client_repo.list_all()
+    guild_clients = [client for client in clients if client.guild_id == guild.id]
+    if not guild_clients:
+        return ProbeResult(
+            "leaders delete reinit",
+            True,
+            "skipped — no registered clients",
+        )
+
+    leaders = resolve_leaders_channel(guild)
+    changelog = resolve_changelog_channel(guild)
+    if leaders is None or changelog is None:
+        return ProbeResult(
+            "leaders delete reinit",
+            False,
+            "Leaders layout missing — run `/server init` first",
+        )
+
+    async with guild_test_resource_guard(guild, bot_member=bot_member):
+        await leaders.delete(reason=_PROBE_REASON)
+
+        first = await initialize_guild(
+            guild,
+            bot_member,
+            access_role_name=settings.network_access_role_name,
+            operator_role_name=settings.network_operator_role_name,
+            clients=clients,
+            bot=bot,
+            context=context,
+            skip_join_smoke=True,
+        )
+        if not first.success:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                first.reason or "first initialize_guild failed after deleting leaders channel",
+            )
+        if first.rectification_failures:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                "first reinit reported failures: "
+                + "; ".join(first.rectification_failures[:5]),
+            )
+
+        restored = resolve_leaders_channel(guild)
+        if restored is None:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                "#leaders-channel was not recreated",
+            )
+        gaps = await _collect_leaders_access_gaps(guild, context)
+        if gaps:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                "Leaders access missing after recreate: " + "; ".join(gaps[:5]),
+            )
+
+        second = await initialize_guild(
+            guild,
+            bot_member,
+            access_role_name=settings.network_access_role_name,
+            operator_role_name=settings.network_operator_role_name,
+            clients=clients,
+            bot=bot,
+            context=context,
+            skip_join_smoke=True,
+        )
+        if not second.success:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                second.reason or "second initialize_guild failed",
+            )
+        if second.rectification_failures:
+            return ProbeResult(
+                "leaders delete reinit",
+                False,
+                "second reinit should be clean but reported: "
+                + "; ".join(second.rectification_failures[:5]),
+            )
+
+    return ProbeResult(
+        "leaders delete reinit",
+        True,
+        f"recreated {restored.mention}; second reinit had no rectification failures",
+    )
+
+
+async def probe_leaders_idempotent_reinit(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    bot: NetworkRelayBot,
+    context: BotContext,
+    settings: Settings,
+) -> ProbeResult:
+    """Run initialize_guild twice on unchanged layout — no spurious rectification failures."""
+    clients = await context.client_repo.list_all()
+    if not [client for client in clients if client.guild_id == guild.id]:
+        return ProbeResult(
+            "leaders idempotent reinit",
+            True,
+            "skipped — no registered clients",
+        )
+
+    async with guild_test_resource_guard(guild, bot_member=bot_member):
+        for pass_label in ("first", "second"):
+            result = await initialize_guild(
+                guild,
+                bot_member,
+                access_role_name=settings.network_access_role_name,
+                operator_role_name=settings.network_operator_role_name,
+                clients=clients,
+                bot=bot,
+                context=context,
+                skip_join_smoke=True,
+            )
+            if not result.success:
+                return ProbeResult(
+                    "leaders idempotent reinit",
+                    False,
+                    f"{pass_label} initialize_guild failed: {result.reason or 'unknown'}",
+                )
+            if result.rectification_failures:
+                return ProbeResult(
+                    "leaders idempotent reinit",
+                    False,
+                    f"{pass_label} reinit reported rectification failures: "
+                    + "; ".join(result.rectification_failures[:5]),
+                )
+            gaps = await _collect_leaders_access_gaps(guild, context)
+            if gaps:
+                return ProbeResult(
+                    "leaders idempotent reinit",
+                    False,
+                    f"{pass_label} reinit left Leaders access gaps: "
+                    + "; ".join(gaps[:5]),
+                )
+
+    return ProbeResult(
+        "leaders idempotent reinit",
+        True,
+        "two consecutive inits had no rectification failures; client roles retain access",
+    )
+
+
 async def run_server_init_audit(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -517,6 +693,24 @@ async def run_server_init_stress_probes(
     if include_reinit:
         report.add(
             await probe_reinit_rectifies_clients(
+                guild,
+                bot_member,
+                bot,
+                context,
+                settings,
+            )
+        )
+        report.add(
+            await probe_leaders_delete_double_reinit(
+                guild,
+                bot_member,
+                bot,
+                context,
+                settings,
+            )
+        )
+        report.add(
+            await probe_leaders_idempotent_reinit(
                 guild,
                 bot_member,
                 bot,

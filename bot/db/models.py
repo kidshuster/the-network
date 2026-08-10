@@ -7,7 +7,6 @@ from bot.constants import RelayStatus
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
-from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
 from bot.domain.server_request import ServerRequest, ServerRequestStatus
 
@@ -40,39 +39,6 @@ class NetworkRow:
                 else None
             ),
             enabled=bool(row["enabled"]),
-        )
-
-
-class ProfileRow:
-    @staticmethod
-    def from_row(row: Any) -> ServerProfile:
-        return ServerProfile(
-            id=int(row["id"]),
-            guild_id=int(row["guild_id"]),
-            profile_thread_id=int(row["profile_thread_id"]),
-            profile_starter_message_id=int(row["profile_starter_message_id"]),
-            source_channel_id=int(row["source_channel_id"]),
-            network_id=int(row["network_id"]),
-            server_name=str(row["server_name"]),
-            display_name=str(row["display_name"]),
-            enabled=bool(row["enabled"]),
-            emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
-            emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,
-            image_hash=str(row["image_hash"]) if row["image_hash"] is not None else None,
-            degraded_reason=(
-                str(row["degraded_reason"]) if row["degraded_reason"] is not None else None
-            ),
-            partner_role_id=(
-                int(row["partner_role_id"])
-                if "partner_role_id" in row.keys() and row["partner_role_id"] is not None
-                else None
-            ),
-            profile_forum_channel_id=(
-                int(row["profile_forum_channel_id"])
-                if "profile_forum_channel_id" in row.keys()
-                and row["profile_forum_channel_id"] is not None
-                else None
-            ),
         )
 
 

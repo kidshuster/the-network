@@ -172,3 +172,56 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
     client_role.delete.assert_awaited_once()
     context.refresh_client_counts.assert_awaited_once()
     context.routing_service.load_cache.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_client_stops_when_unsubscribe_fails(
+    db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _make_context(db)
+    network = await context.network_repo.create(
+        guild_id=100,
+        key="stingers",
+        display_name="Stingers",
+    )
+    client = await context.client_repo.create(
+        guild_id=100,
+        server_name="acme",
+        display_name="Acme",
+        category_id=10,
+        client_role_id=11,
+        profile_channel_id=30,
+        profile_message_id=40,
+    )
+    await context.client_repo.create_subscription(
+        client_id=client.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=203,
+        subscribe_channel_id=202,
+    )
+
+    unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
+    monkeypatch.setattr(
+        "bot.services.client_subscription.ClientSubscriptionService.unsubscribe_client",
+        AsyncMock(return_value=unsubscribe_result),
+    )
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.me = MagicMock(spec=discord.Member)
+
+    service = ClientDeletionService()
+    result = await service.delete_client(
+        guild,
+        guild.me,
+        client=client,
+        client_repo=context.client_repo,
+        network_repo=context.network_repo,
+        context=context,
+    )
+
+    assert result.success is False
+    assert result.error == "Missing Permissions"
+    assert await context.client_repo.get_by_id(client.id) is not None
+    assert await context.client_repo.get_subscription(client.id, network.id) is not None

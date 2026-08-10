@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.services.emoji_service import EmojiService, build_emoji_name, sanitize_slug
+from bot.services.emoji_service import (
+    EmojiService,
+    EmojiSyncTarget,
+    build_emoji_name,
+    sanitize_slug,
+)
 from bot.testing.png_fixtures import probe_png_bytes
 
 SAMPLE_PNG = probe_png_bytes()
@@ -40,14 +45,15 @@ async def test_sync_degrades_on_guild_emoji_cap() -> None:
 
     guild.create_custom_emoji = AsyncMock(side_effect=raise_cap)
 
-    profile = MagicMock()
-    profile.server_name = "Partner"
-    profile.display_name = "Partner"
-    profile.source_channel_id = 201
-    profile.emoji_id = None
-    profile.emoji_name = None
-    profile.image_hash = None
-    profile.degraded_reason = None
+    target = EmojiSyncTarget(
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+        server_name="Partner",
+        display_name="Partner",
+        source_channel_id=201,
+    )
 
     image = MagicMock()
     image.image_hash = "abc123"
@@ -55,7 +61,7 @@ async def test_sync_degrades_on_guild_emoji_cap() -> None:
 
     result = await service.sync_for_profile(
         guild,
-        profile,
+        target,
         image,
         previous_hash=None,
         previous_emoji_id=None,
@@ -77,14 +83,15 @@ async def test_sync_degrades_on_missing_permissions() -> None:
 
     guild.create_custom_emoji = AsyncMock(side_effect=raise_forbidden)
 
-    profile = MagicMock()
-    profile.server_name = "Partner"
-    profile.display_name = "Partner"
-    profile.source_channel_id = 201
-    profile.emoji_id = None
-    profile.emoji_name = None
-    profile.image_hash = None
-    profile.degraded_reason = None
+    target = EmojiSyncTarget(
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+        server_name="Partner",
+        display_name="Partner",
+        source_channel_id=201,
+    )
 
     image = MagicMock()
     image.image_hash = "abc123"
@@ -92,7 +99,7 @@ async def test_sync_degrades_on_missing_permissions() -> None:
 
     result = await service.sync_for_profile(
         guild,
-        profile,
+        target,
         image,
         previous_hash=None,
         previous_emoji_id=None,
@@ -111,14 +118,15 @@ async def test_sync_recreates_when_emoji_missing_from_guild() -> None:
         return_value=MagicMock(id=555, name="net_partner_000201")
     )
 
-    profile = MagicMock()
-    profile.server_name = "Partner"
-    profile.display_name = "Partner"
-    profile.source_channel_id = 201
-    profile.emoji_id = 999
-    profile.emoji_name = "net_partner_000201"
-    profile.image_hash = "same-hash"
-    profile.degraded_reason = None
+    target = EmojiSyncTarget(
+        emoji_id=999,
+        emoji_name="net_partner_000201",
+        image_hash="same-hash",
+        degraded_reason=None,
+        server_name="Partner",
+        display_name="Partner",
+        source_channel_id=201,
+    )
 
     image = MagicMock()
     image.image_hash = "same-hash"
@@ -126,7 +134,7 @@ async def test_sync_recreates_when_emoji_missing_from_guild() -> None:
 
     result = await service.sync_for_profile(
         guild,
-        profile,
+        target,
         image,
         previous_hash="same-hash",
         previous_emoji_id=999,
@@ -142,14 +150,15 @@ async def test_sync_skips_when_hash_unchanged() -> None:
     guild = MagicMock(spec=discord.Guild)
     guild.emojis = [MagicMock(id=999, name="net_partner_000201")]
 
-    profile = MagicMock()
-    profile.server_name = "Partner"
-    profile.display_name = "Partner"
-    profile.source_channel_id = 201
-    profile.emoji_id = 999
-    profile.emoji_name = "net_partner_000201"
-    profile.image_hash = "same-hash"
-    profile.degraded_reason = None
+    target = EmojiSyncTarget(
+        emoji_id=999,
+        emoji_name="net_partner_000201",
+        image_hash="same-hash",
+        degraded_reason=None,
+        server_name="Partner",
+        display_name="Partner",
+        source_channel_id=201,
+    )
 
     image = MagicMock()
     image.image_hash = "same-hash"
@@ -157,7 +166,7 @@ async def test_sync_skips_when_hash_unchanged() -> None:
 
     result = await service.sync_for_profile(
         guild,
-        profile,
+        target,
         image,
         previous_hash="same-hash",
         previous_emoji_id=999,

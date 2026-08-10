@@ -213,6 +213,7 @@ def build_moderation_only_overwrites(
     human_moderator_role: discord.Role | None,
     *,
     for_category: bool = False,
+    for_announcement: bool = False,
     allow_slash_commands: bool = False,
 ) -> OverwriteMap:
     """Moderation category — human moderators and the bot only."""
@@ -228,8 +229,28 @@ def build_moderation_only_overwrites(
             bot_member,
             human_moderator_role,
             for_category=for_category,
+            for_announcement=for_announcement,
             allow_slash_commands=allow_slash_commands,
         ),
+    )
+
+
+def build_moderation_staff_overwrites(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    human_moderator_role: discord.Role | None,
+    *,
+    for_category: bool = False,
+    for_announcement: bool = False,
+    allow_slash_commands: bool = False,
+) -> OverwriteMap:
+    return build_moderation_only_overwrites(
+        guild,
+        bot_member,
+        human_moderator_role,
+        for_category=for_category,
+        for_announcement=for_announcement,
+        allow_slash_commands=allow_slash_commands,
     )
 
 
@@ -491,23 +512,6 @@ def build_partner_feed_overwrite() -> discord.PermissionOverwrite:
     )
 
 
-def build_moderation_staff_overwrites(
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    human_moderator_role: discord.Role | None,
-    *,
-    for_category: bool = False,
-    allow_slash_commands: bool = False,
-) -> OverwriteMap:
-    return build_moderation_only_overwrites(
-        guild,
-        bot_member,
-        human_moderator_role,
-        for_category=for_category,
-        allow_slash_commands=allow_slash_commands,
-    )
-
-
 def build_subscribe_category_overwrites(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -692,6 +696,19 @@ def prepare_server_feed_channel_overwrites(
     )
 
 
+async def _apply_channel_overwrites_incrementally(
+    channel: discord.abc.GuildChannel,
+    overwrites: Mapping[
+        discord.Role | discord.Member | discord.Object,
+        discord.PermissionOverwrite,
+    ],
+    *,
+    reason: str,
+) -> None:
+    for target, overwrite in overwrites.items():
+        await channel.set_permissions(target, overwrite=overwrite, reason=reason)
+
+
 async def sync_channel_permission_overwrites(
     channel: discord.abc.GuildChannel,
     bot_member: discord.Member,
@@ -707,6 +724,10 @@ async def sync_channel_permission_overwrites(
 
     Avoid toggling sync_permissions off without overwrites — copying category
     member overwrites onto the channel triggers 50013 and can lock the bot out.
+
+    When bulk replace fails (common for Leaders channels with the bot's top role
+    in the map), inherit from the category then apply each role with
+    ``set_permissions`` so init does not warn after permissions are already correct.
     """
     if isinstance(channel, discord.CategoryChannel):
         msg = "sync_channel_permission_overwrites is for non-category channels"
@@ -716,21 +737,27 @@ async def sync_channel_permission_overwrites(
     if edit_kwargs:
         await channel.edit(reason=reason, **edit_kwargs)  # type: ignore[arg-type]
 
-    try:
+    async def _bulk_apply() -> None:
         await channel.edit(  # type: ignore[attr-defined]
             overwrites=safe,
             sync_permissions=False,
             reason=reason,
         )
+
+    try:
+        await _bulk_apply()
     except discord.HTTPException:
         if channel.category_id is None:
             raise
         await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
-        await channel.edit(  # type: ignore[attr-defined]
-            overwrites=safe,
-            sync_permissions=False,
-            reason=reason,
-        )
+        try:
+            await _bulk_apply()
+        except discord.HTTPException:
+            await _apply_channel_overwrites_incrementally(
+                channel,
+                safe,
+                reason=reason,
+            )
 
 
 async def create_text_channel_with_overwrites(
@@ -790,29 +817,6 @@ async def create_text_channel_with_overwrites(
     if news:
         kwargs["news"] = True
     return await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
-
-
-async def sync_partner_feed_channel_permissions(
-    channel: discord.abc.GuildChannel,
-    bot_member: discord.Member,
-    server_role: discord.Role,
-    access_role: discord.Role,
-    human_moderator_role: discord.Role | None,
-    *,
-    reason: str,
-) -> None:
-    """Sync partner feed permissions using access-role overwrites."""
-    overwrites = dict(
-        build_server_feed_channel_overwrites(
-            channel.guild,
-            bot_member,
-            server_role,
-            access_role,
-            human_moderator_role,
-        )
-    )
-    safe = filter_configurable_overwrites(bot_member, overwrites, for_channel=True)
-    await channel.edit(overwrites=safe, reason=reason)
 
 
 def build_commands_channel_overwrites(

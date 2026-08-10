@@ -53,24 +53,12 @@ async def apply_client_profile_edit(
         except ProfileValidationError as exc:
             return ClientProfileUpdateResult(success=False, error=str(exc))
 
-        from bot.services.emoji_service import EmojiService
+        from bot.services.emoji_service import EmojiService, emoji_sync_target_from_client
 
         emoji_service = EmojiService()
         emoji_result = await emoji_service.sync_for_profile(
             guild,
-            type(
-                "ProfileAdapter",
-                (),
-                {
-                    "emoji_id": updated.emoji_id,
-                    "emoji_name": updated.emoji_name,
-                    "image_hash": updated.image_hash,
-                    "degraded_reason": updated.degraded_reason,
-                    "server_name": updated.server_name,
-                    "display_name": updated.display_name,
-                    "source_channel_id": updated.profile_channel_id,
-                },
-            )(),
+            emoji_sync_target_from_client(updated),
             normalized,
             previous_hash=updated.image_hash,
             previous_emoji_id=updated.emoji_id,

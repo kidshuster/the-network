@@ -2,11 +2,16 @@ kind: embed
 title: "Network-wide announcements"
 colour: blurple
 description: |
-  Post here to relay announcements through **The Network Announcements** client.
+  This is an **announcement channel**. Post here to relay announcements through **the-network**.
 fields:
   - name: Targeting
     value: |
       • **All networks** — post your message normally.
       • **One network** — start with `[network_key]` on the first line, then your message.
+    inline: false
+  - name: Channel Follow
+    value: |
+      Each hub client's `-publish` channel can **Channel Follow** this channel (Discord desktop) so published posts appear there automatically.
+      Bot relay still runs when you post here — use `[network_key]` when you only want one network.
     inline: false
 footer: "The Network • hub announcements guide"

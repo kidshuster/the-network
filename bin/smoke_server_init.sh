@@ -14,10 +14,11 @@ for arg in "$@"; do
     --audit) MODE="audit" ;;
     --stress) MODE="stress" ;;
     --leaders-drift) MODE="leaders-drift" ;;
+    --leaders-delete-reinit) MODE="leaders-delete-reinit" ;;
     --reinit) MODE="reinit" ;;
     -h|--help)
       cat <<'EOF'
-Usage: bin/smoke_server_init.sh [--audit|--stress|--leaders-drift|--reinit]
+Usage: bin/smoke_server_init.sh [--audit|--stress|--leaders-drift|--leaders-delete-reinit|--reinit]
 
 Live server-init probes against the configured guild (.env). These scripts hit
 the real Discord API and are intentionally excluded from pytest.
@@ -27,6 +28,7 @@ Stop the running bot before probing (only one gateway session per token).
 Modes:
   --audit         Read-only checks + current Leaders access audit (default)
   --leaders-drift Simulate missing client Leaders overwrites and verify resync
+  --leaders-delete-reinit Delete #leaders-channel, reinit twice (permissions + no false warnings)
   --reinit        Run initialize_guild and verify client/Leaders rectification
   --stress        audit + leaders-drift + reinit
 
@@ -63,6 +65,7 @@ from bot.smoke.provision_flow import create_smoke_context
 from bot.smoke.server_init_probes import (
     format_probe_report,
     probe_leaders_drift_resync,
+    probe_leaders_delete_double_reinit,
     probe_reinit_rectifies_clients,
     run_server_init_audit,
     run_server_init_stress_probes,
@@ -120,6 +123,18 @@ async def main() -> None:
 
                     report = ServerInitProbeReport()
                     probe = await probe_leaders_drift_resync(guild, me, context, settings)
+                    report.add(probe)
+                elif mode == "leaders-delete-reinit":
+                    from bot.smoke.server_init_probes import ServerInitProbeReport
+
+                    report = ServerInitProbeReport()
+                    probe = await probe_leaders_delete_double_reinit(
+                        guild,
+                        me,
+                        probe_bot,
+                        context,
+                        settings,
+                    )
                     report.add(probe)
                 elif mode == "reinit":
                     from bot.smoke.server_init_probes import ServerInitProbeReport

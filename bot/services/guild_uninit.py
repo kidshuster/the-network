@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -24,10 +23,9 @@ from bot.services.guild_layout import (
     CHANNEL_WELCOME_SINK,
     LEGACY_CHANNEL_LEADERS,
 )
+from bot.services.step_runner import run_guild_step
 
 logger = logging.getLogger(__name__)
-
-_STEP_TIMEOUT_SECONDS = 45.0
 
 _PRESERVED_CHANNEL_NAMES = frozenset(
     {
@@ -163,20 +161,7 @@ async def _run_uninit_step[T](
     step: str,
     action: Callable[[], Awaitable[T]],
 ) -> T | None:
-    try:
-        return await asyncio.wait_for(action(), timeout=_STEP_TIMEOUT_SECONDS)
-    except TimeoutError:
-        message = f"{step}: timed out after {_STEP_TIMEOUT_SECONDS:.0f}s"
-        result.failed_steps.append(message)
-        result.notes.append(f"Could not {step}: timed out")
-        logger.warning("Guild uninit step timed out", extra={"step": step})
-        return None
-    except discord.HTTPException as exc:
-        message = f"{step}: {exc}"
-        result.failed_steps.append(message)
-        result.notes.append(f"Could not {step}: {exc}")
-        logger.warning("Guild uninit step failed", extra={"step": step, "error": str(exc)})
-        return None
+    return await run_guild_step(result, step, action)
 
 
 async def _detach_preserved_channels(

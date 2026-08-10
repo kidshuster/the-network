@@ -37,3 +37,8 @@ class DeferredEphemeralResponse:
             )
         except discord.HTTPException:
             logger.exception("Could not send fallback followup for deferred command")
+
+
+async def defer_ephemeral(interaction: discord.Interaction) -> DeferredEphemeralResponse:
+    await interaction.response.defer(ephemeral=True)
+    return DeferredEphemeralResponse(interaction)

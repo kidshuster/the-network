@@ -28,7 +28,7 @@ Steps:
   5. smoke_hub_announcements   — hub client relay + write-only guard
   6. ensure smoke network + hub rebuild smoke
   7. smoke_server_init --stress
-  8. smoke_cleanup_artifacts
+  8. smoke_teardown           — remove all smoke clients and Discord artifacts
   9. restart bot (unless --no-restart)
 
 Prerequisites: hub initialized via /server init; operator role fully permissioned.
@@ -159,7 +159,7 @@ PY
 
 export SMOKE_NETWORK_KEY="${SMOKE_NETWORK_KEY:-smoke}"
 run_step "server init stress probes" "$ROOT/bin/smoke_server_init.sh" --stress
-run_step "cleanup smoke artifacts" "$ROOT/bin/smoke_cleanup_artifacts.sh"
+run_step "cleanup smoke artifacts" "$ROOT/bin/smoke_teardown.sh"
 
 echo ""
 echo "OK: Testwork smoke/stress suite passed"

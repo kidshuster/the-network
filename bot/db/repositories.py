@@ -12,7 +12,6 @@ from bot.db.models import (
     ClientRow,
     ClientSubscriptionRow,
     NetworkRow,
-    ProfileRow,
     RelayRecordRow,
     ServerRequestRow,
 )
@@ -20,11 +19,47 @@ from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.errors import NetworkValidationError, ProfileValidationError, RelayError
 from bot.domain.network import Network
-from bot.domain.profile import ServerProfile
 from bot.domain.relay_record import RelayRecord
 from bot.domain.server_request import ServerRequest, ServerRequestStatus
 
 _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+
+def _insert_row_id(cursor: aiosqlite.Cursor, *, failure_message: str) -> int:
+    row_id = cursor.lastrowid
+    if row_id is None:
+        raise RuntimeError(failure_message)
+    return row_id
+
+
+async def _fetch_row_by_id(
+    db: Database,
+    *,
+    table: str,
+    row_id: int,
+    not_found_message: str,
+) -> aiosqlite.Row:
+    row = await db.fetchone(f"SELECT * FROM {table} WHERE id = ?", (row_id,))
+    if row is None:
+        raise RuntimeError(not_found_message)
+    return row
+
+
+async def _row_after_insert(
+    db: Database,
+    cursor: aiosqlite.Cursor,
+    *,
+    table: str,
+    missing_id_message: str,
+    not_found_message: str,
+) -> aiosqlite.Row:
+    row_id = _insert_row_id(cursor, failure_message=missing_id_message)
+    return await _fetch_row_by_id(
+        db,
+        table=table,
+        row_id=row_id,
+        not_found_message=not_found_message,
+    )
 
 
 class NetworkRepository:
@@ -86,12 +121,13 @@ class NetworkRepository:
             raise NetworkValidationError(
                 "A network with that key already exists."
             ) from exc
-        network_id = cursor.lastrowid
-        if network_id is None:
-            raise RuntimeError("Failed to create network row")
-        row = await self._db.fetchone("SELECT * FROM networks WHERE id = ?", (network_id,))
-        if row is None:
-            raise RuntimeError("Created network row not found")
+        row = await _row_after_insert(
+            self._db,
+            cursor,
+            table="networks",
+            missing_id_message="Failed to create network row",
+            not_found_message="Created network row not found",
+        )
         return NetworkRow.from_row(row)
 
     async def get_by_key(self, key: str) -> Network | None:
@@ -150,269 +186,6 @@ class NetworkRepository:
             raise RuntimeError("Network still present after delete")
         return existing
 
-
-class ProfileRepository:
-    def __init__(self, db: Database) -> None:
-        self._db = db
-
-    async def get_by_thread_id(self, thread_id: int) -> ServerProfile | None:
-        row = await self._db.fetchone(
-            "SELECT * FROM profiles WHERE profile_thread_id = ?",
-            (thread_id,),
-        )
-        return ProfileRow.from_row(row) if row else None
-
-    async def get_by_source_channel(self, source_channel_id: int) -> ServerProfile | None:
-        row = await self._db.fetchone(
-            "SELECT * FROM profiles WHERE source_channel_id = ?",
-            (source_channel_id,),
-        )
-        return ProfileRow.from_row(row) if row else None
-
-    async def list_all(self) -> list[ServerProfile]:
-        cursor = await self._db.connection.execute(
-            "SELECT * FROM profiles ORDER BY server_name ASC"
-        )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return [ProfileRow.from_row(row) for row in rows]
-
-    async def list_by_network_id(self, network_id: int) -> list[ServerProfile]:
-        cursor = await self._db.connection.execute(
-            "SELECT * FROM profiles WHERE network_id = ? ORDER BY server_name ASC",
-            (network_id,),
-        )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return [ProfileRow.from_row(row) for row in rows]
-
-    async def get_by_network_and_server_name(
-        self,
-        network_id: int,
-        server_name: str,
-    ) -> ServerProfile | None:
-        name = server_name.strip()
-        if not name:
-            return None
-        row = await self._db.fetchone(
-            """
-            SELECT * FROM profiles
-            WHERE network_id = ? AND server_name = ? COLLATE NOCASE
-            """,
-            (network_id, name),
-        )
-        return ProfileRow.from_row(row) if row else None
-
-    async def set_enabled_by_network_and_server_name(
-        self,
-        network_id: int,
-        server_name: str,
-        enabled: bool,
-    ) -> ServerProfile:
-        profile = await self.get_by_network_and_server_name(network_id, server_name)
-        if profile is None:
-            raise ProfileValidationError(
-                f"No server {server_name!r} found on this network."
-            )
-        return await self.set_enabled_by_thread(profile.profile_thread_id, enabled)
-
-    async def upsert(
-        self,
-        *,
-        guild_id: int,
-        profile_thread_id: int,
-        profile_starter_message_id: int,
-        source_channel_id: int,
-        network_id: int,
-        server_name: str,
-        display_name: str,
-        enabled: bool,
-        partner_role_id: int | None = None,
-        profile_forum_channel_id: int | None = None,
-    ) -> ServerProfile:
-        existing = await self.get_by_thread_id(profile_thread_id)
-        other = await self.get_by_source_channel(source_channel_id)
-        if other is not None and other.profile_thread_id != profile_thread_id:
-            raise ProfileValidationError(
-                f"Source channel <#{source_channel_id}> is already used by profile "
-                f"'{other.server_name}' (thread {other.profile_thread_id})."
-            )
-
-        now = datetime.now(tz=UTC).isoformat()
-        if existing is None:
-            try:
-                cursor = await self._db.connection.execute(
-                    """
-                    INSERT INTO profiles (
-                        guild_id, profile_thread_id, profile_starter_message_id,
-                        source_channel_id, network_id, server_name, display_name,
-                        enabled, partner_role_id, profile_forum_channel_id,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        guild_id,
-                        profile_thread_id,
-                        profile_starter_message_id,
-                        source_channel_id,
-                        network_id,
-                        server_name,
-                        display_name,
-                        1 if enabled else 0,
-                        partner_role_id,
-                        profile_forum_channel_id,
-                        now,
-                        now,
-                    ),
-                )
-                await self._db.connection.commit()
-            except aiosqlite.IntegrityError as exc:
-                raise ProfileValidationError(
-                    "Profile thread or source channel is already registered."
-                ) from exc
-            profile_id = cursor.lastrowid
-            if profile_id is None:
-                raise RuntimeError("Failed to create profile row")
-            row = await self._db.fetchone("SELECT * FROM profiles WHERE id = ?", (profile_id,))
-        else:
-            await self._db.execute(
-                """
-                UPDATE profiles SET
-                    profile_starter_message_id = ?,
-                    source_channel_id = ?,
-                    network_id = ?,
-                    server_name = ?,
-                    display_name = ?,
-                    enabled = ?,
-                    partner_role_id = COALESCE(?, partner_role_id),
-                    profile_forum_channel_id = COALESCE(?, profile_forum_channel_id),
-                    updated_at = ?
-                WHERE profile_thread_id = ?
-                """,
-                (
-                    profile_starter_message_id,
-                    source_channel_id,
-                    network_id,
-                    server_name,
-                    display_name,
-                    1 if enabled else 0,
-                    partner_role_id,
-                    profile_forum_channel_id,
-                    now,
-                    profile_thread_id,
-                ),
-            )
-            row = await self._db.fetchone(
-                "SELECT * FROM profiles WHERE profile_thread_id = ?",
-                (profile_thread_id,),
-            )
-
-        if row is None:
-            raise RuntimeError("Profile row not found after upsert")
-        return ProfileRow.from_row(row)
-
-    async def update_display_name(self, thread_id: int, display_name: str) -> ServerProfile:
-        label = display_name.strip()
-        if not label:
-            raise ProfileValidationError("Display name cannot be empty.")
-
-        existing = await self.get_by_thread_id(thread_id)
-        if existing is None:
-            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
-
-        now = datetime.now(tz=UTC).isoformat()
-        await self._db.execute(
-            "UPDATE profiles SET display_name = ?, updated_at = ? WHERE profile_thread_id = ?",
-            (label, now, thread_id),
-        )
-        updated = await self.get_by_thread_id(thread_id)
-        if updated is None:
-            raise RuntimeError("Profile disappeared after display name update")
-        return updated
-
-    async def update_starter_message_id(self, thread_id: int, message_id: int) -> ServerProfile:
-        existing = await self.get_by_thread_id(thread_id)
-        if existing is None:
-            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
-
-        now = datetime.now(tz=UTC).isoformat()
-        await self._db.execute(
-            """
-            UPDATE profiles
-            SET profile_starter_message_id = ?, updated_at = ?
-            WHERE profile_thread_id = ?
-            """,
-            (message_id, now, thread_id),
-        )
-        updated = await self.get_by_thread_id(thread_id)
-        if updated is None:
-            raise RuntimeError("Profile disappeared after starter message update")
-        return updated
-
-    async def set_enabled_by_thread(self, thread_id: int, enabled: bool) -> ServerProfile:
-        existing = await self.get_by_thread_id(thread_id)
-        if existing is None:
-            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
-
-        now = datetime.now(tz=UTC).isoformat()
-        await self._db.execute(
-            "UPDATE profiles SET enabled = ?, updated_at = ? WHERE profile_thread_id = ?",
-            (1 if enabled else 0, now, thread_id),
-        )
-        updated = await self.get_by_thread_id(thread_id)
-        if updated is None:
-            raise RuntimeError("Profile disappeared after update")
-        return updated
-
-    async def update_emoji_fields(
-        self,
-        thread_id: int,
-        *,
-        emoji_id: int | None,
-        emoji_name: str | None,
-        image_hash: str | None,
-        degraded_reason: str | None,
-    ) -> ServerProfile:
-        existing = await self.get_by_thread_id(thread_id)
-        if existing is None:
-            raise ProfileValidationError(f"Profile thread {thread_id} was not found.")
-
-        now = datetime.now(tz=UTC).isoformat()
-        await self._db.execute(
-            """
-            UPDATE profiles SET
-                emoji_id = ?,
-                emoji_name = ?,
-                image_hash = ?,
-                degraded_reason = ?,
-                updated_at = ?
-            WHERE profile_thread_id = ?
-            """,
-            (emoji_id, emoji_name, image_hash, degraded_reason, now, thread_id),
-        )
-        updated = await self.get_by_thread_id(thread_id)
-        if updated is None:
-            raise RuntimeError("Profile disappeared after emoji update")
-        return updated
-
-    async def delete_by_thread_id(self, thread_id: int) -> ServerProfile | None:
-        existing = await self.get_by_thread_id(thread_id)
-        if existing is None:
-            return None
-        await self._db.execute(
-            "DELETE FROM profiles WHERE profile_thread_id = ?",
-            (thread_id,),
-        )
-        return existing
-
-    async def list_by_profile_forum_channel(self, forum_channel_id: int) -> list[ServerProfile]:
-        cursor = await self._db.connection.execute(
-            "SELECT * FROM profiles WHERE profile_forum_channel_id = ?",
-            (forum_channel_id,),
-        )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        return [ProfileRow.from_row(row) for row in rows]
 
 
 class RelayRecordRepository:
@@ -475,12 +248,27 @@ class RelayRecordRepository:
             raise RelayError(
                 f"Relay record already exists for message {source_message_id}."
             ) from exc
-        record_id = cursor.lastrowid
-        if record_id is None:
-            raise RuntimeError("Failed to create relay record")
-        row = await self._db.fetchone("SELECT * FROM relay_records WHERE id = ?", (record_id,))
-        if row is None:
-            raise RuntimeError("Created relay record not found")
+        row = await _row_after_insert(
+            self._db,
+            cursor,
+            table="relay_records",
+            missing_id_message="Failed to create relay record",
+            not_found_message="Created relay record not found",
+        )
+        return RelayRecordRow.from_row(row)
+
+    async def _require_by_id(
+        self,
+        record_id: int,
+        *,
+        not_found: str,
+    ) -> RelayRecord:
+        row = await _fetch_row_by_id(
+            self._db,
+            table="relay_records",
+            row_id=record_id,
+            not_found_message=not_found,
+        )
         return RelayRecordRow.from_row(row)
 
     async def update_status(
@@ -516,10 +304,10 @@ class RelayRecordRepository:
                 """,
                 (status, error_message, now, record_id),
             )
-        row = await self._db.fetchone("SELECT * FROM relay_records WHERE id = ?", (record_id,))
-        if row is None:
-            raise RuntimeError("Relay record disappeared after update")
-        return RelayRecordRow.from_row(row)
+        return await self._require_by_id(
+            record_id,
+            not_found="Relay record disappeared after update",
+        )
 
     async def delete_by_profile_id(self, profile_id: int) -> None:
         await self._db.execute(
@@ -572,16 +360,25 @@ class ServerRequestRepository:
             ),
         )
         await self._db.connection.commit()
-        request_id = cursor.lastrowid
-        if request_id is None:
-            raise RuntimeError("Failed to create server request")
-        row = await self._db.fetchone(
-            "SELECT * FROM server_requests WHERE id = ?",
-            (request_id,),
+        row = await _row_after_insert(
+            self._db,
+            cursor,
+            table="server_requests",
+            missing_id_message="Failed to create server request",
+            not_found_message="Created server request not found",
         )
-        if row is None:
-            raise RuntimeError("Created server request not found")
         return ServerRequestRow.from_row(row)
+
+    async def _require_by_id(
+        self,
+        request_id: int,
+        *,
+        not_found: str,
+    ) -> ServerRequest:
+        request = await self.get_by_id(request_id)
+        if request is None:
+            raise RuntimeError(not_found)
+        return request
 
     async def get_by_id(self, request_id: int) -> ServerRequest | None:
         row = await self._db.fetchone(
@@ -635,13 +432,10 @@ class ServerRequestRepository:
             """,
             (message_id, now, request_id),
         )
-        row = await self._db.fetchone(
-            "SELECT * FROM server_requests WHERE id = ?",
-            (request_id,),
+        return await self._require_by_id(
+            request_id,
+            not_found="Server request disappeared after update",
         )
-        if row is None:
-            raise RuntimeError("Server request disappeared after update")
-        return ServerRequestRow.from_row(row)
 
     async def resolve(
         self,
@@ -659,13 +453,10 @@ class ServerRequestRepository:
             """,
             (status, resolved_by_user_id, now, request_id),
         )
-        row = await self._db.fetchone(
-            "SELECT * FROM server_requests WHERE id = ?",
-            (request_id,),
+        return await self._require_by_id(
+            request_id,
+            not_found="Server request disappeared after resolve",
         )
-        if row is None:
-            raise RuntimeError("Server request disappeared after resolve")
-        return ServerRequestRow.from_row(row)
 
     async def delete_by_network_id(self, network_id: int) -> None:
         await self._db.execute(
@@ -719,6 +510,23 @@ class ClientRepository:
     def __init__(self, db: Database) -> None:
         self._db = db
 
+    async def _require_by_id(self, client_id: int, *, not_found: str) -> Client:
+        client = await self.get_by_id(client_id)
+        if client is None:
+            raise RuntimeError(not_found)
+        return client
+
+    async def _require_subscription_by_id(
+        self,
+        subscription_id: int,
+        *,
+        not_found: str,
+    ) -> ClientSubscription:
+        subscription = await self.get_subscription_by_id(subscription_id)
+        if subscription is None:
+            raise RuntimeError(not_found)
+        return subscription
+
     async def create(
         self,
         *,
@@ -759,12 +567,13 @@ class ClientRepository:
             raise ProfileValidationError(
                 f"A client named {server_name!r} already exists."
             ) from exc
-        client_id = cursor.lastrowid
-        if client_id is None:
-            raise RuntimeError("Failed to create client row")
-        row = await self._db.fetchone("SELECT * FROM clients WHERE id = ?", (client_id,))
-        if row is None:
-            raise RuntimeError("Created client row not found")
+        row = await _row_after_insert(
+            self._db,
+            cursor,
+            table="clients",
+            missing_id_message="Failed to create client row",
+            not_found_message="Created client row not found",
+        )
         return ClientRow.from_row(row)
 
     async def get_by_id(self, client_id: int) -> Client | None:
@@ -812,10 +621,10 @@ class ClientRepository:
             """,
             (message_id, now, client_id),
         )
-        updated = await self.get_by_id(client_id)
-        if updated is None:
-            raise RuntimeError("Client disappeared after profile message update")
-        return updated
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after profile message update",
+        )
 
     async def update_display_name(self, client_id: int, display_name: str) -> Client:
         label = display_name.strip()
@@ -826,10 +635,10 @@ class ClientRepository:
             "UPDATE clients SET display_name = ?, updated_at = ? WHERE id = ?",
             (label, now, client_id),
         )
-        updated = await self.get_by_id(client_id)
-        if updated is None:
-            raise RuntimeError("Client disappeared after display name update")
-        return updated
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after display name update",
+        )
 
     async def update_emoji_fields(
         self,
@@ -850,10 +659,10 @@ class ClientRepository:
             """,
             (emoji_id, emoji_name, image_hash, degraded_reason, now, client_id),
         )
-        updated = await self.get_by_id(client_id)
-        if updated is None:
-            raise RuntimeError("Client disappeared after emoji update")
-        return updated
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after emoji update",
+        )
 
     async def set_enabled(self, client_id: int, enabled: bool) -> Client:
         now = datetime.now(tz=UTC).isoformat()
@@ -861,10 +670,10 @@ class ClientRepository:
             "UPDATE clients SET enabled = ?, updated_at = ? WHERE id = ?",
             (1 if enabled else 0, now, client_id),
         )
-        updated = await self.get_by_id(client_id)
-        if updated is None:
-            raise RuntimeError("Client disappeared after enable update")
-        return updated
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after enable update",
+        )
 
     async def set_timecode_enabled(self, client_id: int, enabled: bool) -> Client:
         now = datetime.now(tz=UTC).isoformat()
@@ -872,10 +681,10 @@ class ClientRepository:
             "UPDATE clients SET timecode_enabled = ?, updated_at = ? WHERE id = ?",
             (1 if enabled else 0, now, client_id),
         )
-        updated = await self.get_by_id(client_id)
-        if updated is None:
-            raise RuntimeError("Client disappeared after timecode update")
-        return updated
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after timecode update",
+        )
 
     async def delete(self, client_id: int) -> Client | None:
         existing = await self.get_by_id(client_id)
@@ -923,15 +732,13 @@ class ClientRepository:
             raise ProfileValidationError(
                 "This client is already subscribed to that network."
             ) from exc
-        sub_id = cursor.lastrowid
-        if sub_id is None:
-            raise RuntimeError("Failed to create subscription row")
-        row = await self._db.fetchone(
-            "SELECT * FROM client_subscriptions WHERE id = ?",
-            (sub_id,),
+        row = await _row_after_insert(
+            self._db,
+            cursor,
+            table="client_subscriptions",
+            missing_id_message="Failed to create subscription row",
+            not_found_message="Created subscription row not found",
         )
-        if row is None:
-            raise RuntimeError("Created subscription row not found")
         return ClientSubscriptionRow.from_row(row)
 
     async def get_subscription_by_id(self, subscription_id: int) -> ClientSubscription | None:
@@ -986,10 +793,10 @@ class ClientRepository:
             """,
             (network_id, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after relink")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after relink",
+        )
 
     async def get_subscription(
         self,
@@ -1067,10 +874,10 @@ class ClientRepository:
             """,
             (message_id, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after moderation message update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after moderation message update",
+        )
 
     async def set_subscribe_confirmed(
         self,
@@ -1086,10 +893,10 @@ class ClientRepository:
             """,
             (1 if confirmed else 0, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after subscribe confirm update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after subscribe confirm update",
+        )
 
     async def update_publish_setup_message_id(
         self,
@@ -1105,10 +912,10 @@ class ClientRepository:
             """,
             (message_id, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after publish setup message update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after publish setup message update",
+        )
 
     async def update_subscribe_setup_message_id(
         self,
@@ -1124,10 +931,10 @@ class ClientRepository:
             """,
             (message_id, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after subscribe setup message update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after subscribe setup message update",
+        )
 
     async def update_activation_welcome_message_id(
         self,
@@ -1143,10 +950,10 @@ class ClientRepository:
             """,
             (message_id, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after activation welcome update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after activation welcome update",
+        )
 
     async def set_subscription_enabled(
         self,
@@ -1161,10 +968,10 @@ class ClientRepository:
             """,
             (1 if enabled else 0, now, subscription_id),
         )
-        updated = await self.get_subscription_by_id(subscription_id)
-        if updated is None:
-            raise RuntimeError("Subscription disappeared after enable update")
-        return updated
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after enable update",
+        )
 
     async def delete_subscription(self, subscription_id: int) -> ClientSubscription | None:
         existing = await self.get_subscription_by_id(subscription_id)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import discord
+import pytest
 
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
@@ -15,6 +16,7 @@ from bot.services.guild_uninit import (
     is_deletable_hub_role,
     is_hub_managed_category,
     is_preserved_hub_channel,
+    uninitialize_guild,
 )
 
 
@@ -142,3 +144,98 @@ def test_collect_uninit_targets_preserves_rules_and_moderator_only() -> None:
     assert {ch.id for ch in channels} == {3, 4, 5}
     assert {cat.id for cat in categories} == {100, 200}
     assert roles == []
+
+
+def test_collect_uninit_targets_preserves_rules_channel_by_id() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    rules = MagicMock(spec=discord.TextChannel, id=99, category_id=100)
+    rules.name = "community-rules"
+    guild.rules_channel = rules
+    guild.roles = []
+
+    subscribe = MagicMock(spec=discord.CategoryChannel, id=100, name="Subscribe To Me!")
+    guild.categories = [subscribe]
+    guild.channels = [subscribe, rules]
+
+    channels, categories, roles, preserved = collect_uninit_targets(guild)
+
+    assert {ch.id for ch in preserved} == {99}
+    assert channels == []
+    assert {cat.id for cat in categories} == {100}
+    assert roles == []
+
+
+def test_collect_uninit_targets_includes_legacy_moderator_role() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.rules_channel = None
+    guild.categories = []
+    guild.channels = []
+
+    moderator = MagicMock(spec=discord.Role, managed=False)
+    moderator.is_default.return_value = False
+    moderator.name = LEGACY_MODERATOR_ROLE_NAME
+    guild.roles = [moderator]
+
+    _, _, roles, _ = collect_uninit_targets(guild)
+
+    assert roles == [moderator]
+
+
+@pytest.mark.asyncio
+async def test_uninitialize_guild_fails_without_manage_channels() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    bot_member = MagicMock(spec=discord.Member)
+    perms = MagicMock()
+    perms.manage_channels = False
+    bot_member.guild_permissions = perms
+
+    result = await uninitialize_guild(guild, bot_member)
+
+    assert result.success is False
+    assert result.reason is not None
+    assert "Manage Channels" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    guild = MagicMock(spec=discord.Guild)
+    rules = MagicMock(spec=discord.TextChannel, id=99, category_id=100)
+    rules.name = CHANNEL_RULES
+    guild.rules_channel = rules
+
+    hub_channel = MagicMock(spec=discord.TextChannel, id=200, category_id=100)
+    hub_channel.name = "join-the-network"
+    subscribe = MagicMock(spec=discord.CategoryChannel, id=100)
+    subscribe.name = "Subscribe To Me!"
+    guild.categories = [subscribe]
+    guild.channels = [subscribe, rules, hub_channel]
+
+    partner = MagicMock(spec=discord.Role, managed=False, position=1)
+    partner.is_default.return_value = False
+    partner.name = LEGACY_MODERATOR_ROLE_NAME
+    guild.roles = [partner]
+
+    bot_member = MagicMock(spec=discord.Member)
+    perms = MagicMock()
+    perms.manage_channels = True
+    perms.manage_roles = True
+    bot_member.guild_permissions = perms
+
+    delete_channel = AsyncMock(return_value=True)
+    delete_role = AsyncMock(return_value=True)
+    monkeypatch.setattr("bot.services.guild_uninit.delete_channel", delete_channel)
+    monkeypatch.setattr("bot.services.guild_uninit.delete_role", delete_role)
+    rules.edit = AsyncMock()
+
+    result = await uninitialize_guild(guild, bot_member)
+
+    assert result.success is True
+    assert result.preserved_channels == ["#rules"]
+    assert result.deleted_channels == ["#join-the-network"]
+    assert result.deleted_categories == ["Subscribe To Me!"]
+    assert result.deleted_roles == [LEGACY_MODERATOR_ROLE_NAME]
+    rules.edit.assert_awaited_once()

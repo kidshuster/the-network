@@ -29,7 +29,7 @@ def test_name_matchers() -> None:
     assert is_test_role_name("diag8-d9198e")
     assert is_test_role_name("Client: Smoke Accept abc")
     assert is_test_role_name("Client: Smoke Deny abc")
-    assert not is_test_role_name("Client: Smoke Rebuild abc")
+    assert is_test_role_name("Client: Smoke Rebuild abc")
     assert not is_test_role_name("The Network+")
 
 

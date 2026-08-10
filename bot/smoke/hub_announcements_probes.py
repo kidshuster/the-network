@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from dataclasses import dataclass
@@ -131,6 +132,61 @@ async def _recent_bot_text_messages(
     return matches
 
 
+async def _ensure_channel_follow(
+    source: discord.TextChannel,
+    destination: discord.TextChannel,
+) -> None:
+    try:
+        webhooks = await destination.webhooks()
+    except discord.HTTPException:
+        webhooks = []
+    for webhook in webhooks:
+        if webhook.type is not discord.WebhookType.channel_follower:
+            continue
+        source_channel = webhook.source_channel
+        if source_channel is not None and source_channel.id == source.id:
+            return
+    try:
+        await source.follow(destination=destination, reason="The Network hub announcements smoke")
+    except discord.HTTPException as exc:
+        raise RuntimeError(
+            f"Could not link Channel Follow from {source.mention} to "
+            f"{destination.mention}: {exc}"
+        ) from exc
+
+
+async def _channel_contains_token(
+    channel: discord.TextChannel,
+    token: str,
+    *,
+    limit: int = 25,
+) -> bool:
+    try:
+        async for message in channel.history(limit=limit):
+            if token in (message.content or ""):
+                return True
+            for embed in message.embeds:
+                if token in (embed.description or ""):
+                    return True
+    except discord.HTTPException:
+        pass
+    return False
+
+
+async def _wait_for_channel_token(
+    channel: discord.TextChannel,
+    token: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> bool:
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    while asyncio.get_event_loop().time() < deadline:
+        if await _channel_contains_token(channel, token):
+            return True
+        await asyncio.sleep(2.0)
+    return False
+
+
 async def run_hub_announcements_smoke_flow(
     guild: discord.Guild,
     bot: NetworkRelayBot,
@@ -150,7 +206,22 @@ async def run_hub_announcements_smoke_flow(
 
         mod_channel = resolve_network_announcements_channel(guild)
         if mod_channel is None:
+            from bot.services.guild_layout import find_network_announcements_text_channel
+
+            legacy = find_network_announcements_text_channel(
+                guild,
+                include_announcement=False,
+            )
+            if legacy is not None:
+                raise RuntimeError(
+                    f"{legacy.mention} is still a plain text channel after ensure — "
+                    "run `/server init` with Manage Channels permission"
+                )
             raise RuntimeError("#network-announcements channel missing after ensure")
+        if not mod_channel.is_news():
+            raise RuntimeError(
+                "#network-announcements is not an announcement channel — run `/server init`"
+            )
 
         subscriber_name, subscriber_subscribe_id = await _provision_smoke_subscriber(
             guild,
@@ -246,6 +317,26 @@ async def run_hub_announcements_smoke_flow(
             raise RuntimeError(
                 "Mod channel dispatch failed: "
                 + ("; ".join(dispatch.errors) if dispatch.errors else "no networks relayed")
+            )
+        if not await _channel_contains_token(hub_publish, dispatch_token):
+            raise RuntimeError(
+                "Mod channel dispatch did not appear on hub publish channel"
+            )
+
+        publish_token = secrets.token_hex(4)
+        publish_body = f"Smoke announcement publish {publish_token}"
+        await _ensure_channel_follow(mod_channel, hub_publish)
+        publish_message = await mod_channel.send(publish_body)
+        try:
+            await publish_message.publish()
+        except discord.HTTPException as exc:
+            raise RuntimeError(
+                f"Could not publish announcement from #network-announcements: {exc}"
+            ) from exc
+        if not await _wait_for_channel_token(hub_publish, publish_token):
+            raise RuntimeError(
+                "Published announcement did not arrive on hub publish channel "
+                "via Channel Follow"
             )
 
         try:

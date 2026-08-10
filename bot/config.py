@@ -40,7 +40,7 @@ class Settings(BaseSettings):
         alias="HUB_ANNOUNCEMENTS_SERVER_NAME",
     )
     hub_announcements_display_name: str = Field(
-        default="The Network Announcements",
+        default="the-network",
         alias="HUB_ANNOUNCEMENTS_DISPLAY_NAME",
     )
 

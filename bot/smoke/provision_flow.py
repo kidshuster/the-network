@@ -239,7 +239,7 @@ async def run_post_init_join_smoke(
     context: BotContext,
 ) -> str | None:
     """Submit → accept → deny smoke after hub channels exist. Returns a note or None."""
-    from bot.services.guild_channels import resolve_join_requests_channel
+    from bot.services.guild_layout import resolve_join_requests_channel
 
     if resolve_join_requests_channel(guild) is None:
         raise NetworkValidationError(

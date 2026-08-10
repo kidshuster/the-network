@@ -30,6 +30,7 @@ from bot.services.guild_permissions import (
     build_hub_public_category_overwrites,
     build_moderation_staff_overwrites,
     filter_configurable_overwrites,
+    sync_channel_permission_overwrites,
     sync_client_category_permissions,
 )
 from bot.services.network_provision import (
@@ -37,6 +38,7 @@ from bot.services.network_provision import (
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.services.step_runner import run_guild_step
 from bot.smoke.provision_flow import run_guild_init_smoke_checks, run_post_init_join_smoke
 
 if TYPE_CHECKING:
@@ -83,20 +85,7 @@ async def _run_init_step[T](
     *,
     fallback: T | None = None,
 ) -> T | None:
-    try:
-        return await asyncio.wait_for(action(), timeout=_STEP_TIMEOUT_SECONDS)
-    except TimeoutError:
-        message = f"{step}: timed out after {_STEP_TIMEOUT_SECONDS:.0f}s"
-        result.failed_steps.append(message)
-        result.notes.append(f"Could not {step}: timed out")
-        logger.warning("Guild init step timed out", extra={"step": step})
-        return fallback
-    except discord.HTTPException as exc:
-        message = f"{step}: {exc}"
-        result.failed_steps.append(message)
-        result.notes.append(f"Could not {step}: {exc}")
-        logger.warning("Guild init step failed", extra={"step": step, "error": str(exc)})
-        return fallback
+    return await run_guild_step(result, step, action, fallback=fallback)
 
 
 async def _edit_overwrites(
@@ -115,34 +104,50 @@ async def _edit_overwrites(
         overwrites,
         for_channel=is_channel,
     )
+    reason = "The Network guild init"
 
-    async def _edit() -> None:
+    async def _edit() -> bool:
         if sync_from_category and is_channel:
             await target.edit(
                 sync_permissions=True,
-                reason="The Network guild init",
+                reason=reason,
                 **edit_kwargs,  # type: ignore[arg-type]
             )
-            return
+            return True
+        if is_channel:
+            await sync_channel_permission_overwrites(
+                target,
+                bot_member,
+                safe_overwrites,
+                reason=reason,
+                **edit_kwargs,
+            )
+            return True
         await target.edit(
             overwrites=safe_overwrites,
-            reason="The Network guild init",
+            reason=reason,
             **edit_kwargs,  # type: ignore[arg-type]
         )
+        return True
 
-    edited = await _run_init_step(result, step, _edit)
-    if edited is not None or not (sync_from_category and is_channel):
-        return edited is not None
+    edited = await _run_init_step(result, step, _edit, fallback=False)
+    if edited or not (sync_from_category and is_channel):
+        return edited
 
     async def _sync_only() -> None:
         await target.edit(
             sync_permissions=True,
-            reason="The Network guild init",
+            reason=reason,
             **edit_kwargs,  # type: ignore[arg-type]
         )
 
-    synced = await _run_init_step(result, f"{step} (inherit category)", _sync_only)
-    return synced is not None
+    synced = await _run_init_step(
+        result,
+        f"{step} (inherit category)",
+        _sync_only,
+        fallback=False,
+    )
+    return synced
 
 
 async def _ensure_category(
@@ -247,6 +252,164 @@ async def _ensure_text_channel(
     if created is not None:
         result.created_channels.append(f"#{name}")
     return created
+
+
+async def _ensure_announcement_channel(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    *,
+    name: str,
+    category: discord.CategoryChannel,
+    overwrites: dict,
+    topic: str | None,
+    result: GuildInitResult,
+    sync_from_category: bool = False,
+) -> discord.TextChannel | None:
+    from bot.services.guild_permissions import create_text_channel_with_overwrites
+
+    safe_overwrites = filter_configurable_overwrites(
+        bot_member,
+        overwrites,
+        for_channel=True,
+    )
+
+    def _in_category(channel: discord.TextChannel) -> bool:
+        return (
+            channel.name.casefold() == name.casefold()
+            and channel.category_id == category.id
+        )
+
+    deleted_legacy = False
+    for channel in list(guild.text_channels):
+        if not _in_category(channel):
+            continue
+        if channel.is_news():
+            await _edit_overwrites(
+                bot_member,
+                channel,
+                overwrites,
+                result=result,
+                step=f"sync #{name} permissions",
+                sync_from_category=sync_from_category,
+                name=name,
+                topic=topic,
+            )
+            return channel
+
+        async def _delete_wrong_type(ch: discord.TextChannel = channel) -> None:
+            await ch.delete(
+                reason="The Network guild init: convert to announcement channel",
+            )
+
+        if await _run_init_step(
+            result,
+            f"recreate #{name} as announcement channel",
+            _delete_wrong_type,
+        ) is not None:
+            deleted_legacy = True
+            result.rectifications.append(f"Recreated #{name} as announcement channel")
+
+    if deleted_legacy:
+        await asyncio.sleep(1.0)
+
+    for channel in list(guild.text_channels):
+        if channel.name.casefold() != name.casefold():
+            continue
+        if _in_category(channel):
+            continue
+        if channel.is_news():
+            moved = await _edit_overwrites(
+                bot_member,
+                channel,
+                overwrites,
+                result=result,
+                step=f"move #{name} into {category.name}",
+                sync_from_category=sync_from_category,
+                category=category,
+                name=name,
+                topic=topic,
+            )
+            if moved:
+                result.moved_channels.append(f"#{name} → {category.name}")
+            return channel
+
+        async def _delete_mismatch(ch: discord.TextChannel = channel) -> None:
+            await ch.delete(
+                reason="The Network guild init: replace with announcement channel",
+            )
+
+        if await _run_init_step(
+            result,
+            f"remove non-announcement #{name}",
+            _delete_mismatch,
+        ) is not None:
+            deleted_legacy = True
+
+    if deleted_legacy:
+        await asyncio.sleep(1.0)
+
+    for channel in guild.text_channels:
+        if _in_category(channel) and channel.is_news():
+            await _edit_overwrites(
+                bot_member,
+                channel,
+                overwrites,
+                result=result,
+                step=f"sync #{name} permissions",
+                sync_from_category=sync_from_category,
+                name=name,
+                topic=topic,
+            )
+            return channel
+
+    async def _create() -> discord.TextChannel:
+        if sync_from_category:
+            return await guild.create_text_channel(
+                name=name,
+                category=category,
+                topic=topic,
+                news=True,
+                reason="The Network guild init",
+            )
+        return await create_text_channel_with_overwrites(
+            guild,
+            bot_member,
+            name=name,
+            category=category,
+            overwrites=safe_overwrites,
+            topic=topic,
+            news=True,
+            reason="The Network guild init",
+        )
+
+    created = await _run_init_step(
+        result,
+        f"create #{name} announcement channel",
+        _create,
+    )
+    if created is not None:
+        result.created_channels.append(f"#{name}")
+        if not created.is_news():
+            result.rectification_failures.append(
+                f"#{name} was created but is not an announcement channel."
+            )
+            return None
+        return created
+
+    legacy = next(
+        (
+            channel
+            for channel in guild.text_channels
+            if _in_category(channel) and not channel.is_news()
+        ),
+        None,
+    )
+    if legacy is not None:
+        result.rectification_failures.append(
+            f"Could not convert {legacy.mention} to an announcement channel "
+            "(delete/recreate failed — check bot **Manage Channels**)."
+        )
+    return None
 
 
 async def _ensure_human_moderator_role(
@@ -735,7 +898,7 @@ async def initialize_guild(
 
         await _reorder_moderation_channels(moderation, result=result)
 
-        if clients is not None and bot is not None and context is not None:
+        if bot is not None and context is not None:
             from bot.services.hub_announcements import ensure_hub_announcements_client
 
             await ensure_hub_announcements_client(

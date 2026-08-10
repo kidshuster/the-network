@@ -7,6 +7,7 @@ from bot.constants import (
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
+from bot.domain.network import Network
 
 CATEGORY_NETWORK = "The Network"
 CATEGORY_MODERATION = "Moderation"
@@ -30,6 +31,26 @@ CHANNEL_WELCOME_SINK = "welcome-sink"
 def join_channel_name(network_key: str) -> str:
     """Legacy per-network join channel name."""
     return f"join-{network_key.strip().lower()}"[:100]
+
+
+def resolve_network_join_channel(
+    guild: discord.Guild,
+    network: Network,
+) -> discord.TextChannel | None:
+    if network.join_channel_id is not None:
+        channel = guild.get_channel(network.join_channel_id)
+        if isinstance(channel, discord.TextChannel):
+            return channel
+
+    expected_name = join_channel_name(network.key).casefold()
+    hub_category = resolve_network_hub_category(guild)
+    for channel in guild.text_channels:
+        if channel.name.casefold() != expected_name:
+            continue
+        if hub_category is not None and channel.category_id != hub_category.id:
+            continue
+        return channel
+    return None
 
 
 def resolve_category(guild: discord.Guild, display_name: str) -> discord.CategoryChannel | None:
@@ -56,6 +77,24 @@ def resolve_text_channel_in_category(
 ) -> discord.TextChannel | None:
     target = name.casefold()
     for channel in guild.text_channels:
+        if channel.name.casefold() != target:
+            continue
+        if category_id is not None and channel.category_id != category_id:
+            continue
+        return channel
+    return None
+
+
+def resolve_announcement_channel_in_category(
+    guild: discord.Guild,
+    *,
+    name: str,
+    category_id: int | None = None,
+) -> discord.TextChannel | None:
+    target = name.casefold()
+    for channel in guild.text_channels:
+        if not channel.is_news():
+            continue
         if channel.name.casefold() != target:
             continue
         if category_id is not None and channel.category_id != category_id:
@@ -151,14 +190,36 @@ def resolve_network_announcements_channel(
 ) -> discord.TextChannel | None:
     mod_category = resolve_moderation_category(guild)
     if mod_category is not None:
-        match = resolve_text_channel_in_category(
+        match = resolve_announcement_channel_in_category(
             guild,
             name=CHANNEL_NETWORK_ANNOUNCEMENTS,
             category_id=mod_category.id,
         )
         if match is not None:
             return match
-    return resolve_text_channel_in_category(guild, name=CHANNEL_NETWORK_ANNOUNCEMENTS)
+    return resolve_announcement_channel_in_category(
+        guild,
+        name=CHANNEL_NETWORK_ANNOUNCEMENTS,
+    )
+
+
+def find_network_announcements_text_channel(
+    guild: discord.Guild,
+    *,
+    category_id: int | None = None,
+    include_announcement: bool = True,
+) -> discord.TextChannel | None:
+    """Find #network-announcements regardless of announcement type (migration helper)."""
+    target = CHANNEL_NETWORK_ANNOUNCEMENTS.casefold()
+    for channel in guild.text_channels:
+        if channel.name.casefold() != target:
+            continue
+        if category_id is not None and channel.category_id != category_id:
+            continue
+        if not include_announcement and channel.is_news():
+            continue
+        return channel
+    return None
 
 
 def resolve_network_announcement_channel(

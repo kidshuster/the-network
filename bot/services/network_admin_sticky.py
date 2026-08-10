@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.messages import render_embed
+from bot.services.sticky_sync import StoredStickySyncResult, sync_stored_embed_sticky
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -114,6 +115,16 @@ async def refresh_network_admin_sticky_from_settings(
         )
 
 
+def _network_admin_result(result: StoredStickySyncResult) -> NetworkAdminStickyResult:
+    return NetworkAdminStickyResult(
+        success=result.success,
+        message=result.message,
+        updated=result.updated,
+        skipped=result.skipped,
+        reason=result.reason,
+    )
+
+
 async def sync_network_admin_sticky(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -127,24 +138,6 @@ async def sync_network_admin_sticky(
 ) -> NetworkAdminStickyResult:
     from bot.ui.network_admin_views import NetworkAdminView
 
-    permissions = channel.permissions_for(bot_member)
-    if not permissions.view_channel or not permissions.send_messages or not permissions.embed_links:
-        return NetworkAdminStickyResult(
-            success=False,
-            skipped=True,
-            reason=(
-                f"The bot cannot post embeds in {channel.mention}. "
-                "Grant View Channel, Send Messages, and Embed Links there."
-            ),
-        )
-
-    if wipe_channel:
-        from bot.services.discord_cleanup import wipe_text_channel
-
-        _deleted, wipe_error = await wipe_text_channel(channel, bot_member)
-        if wipe_error is not None:
-            return NetworkAdminStickyResult(success=False, reason=wipe_error)
-
     desired_embed = await build_network_admin_embed(context)
     footer = build_network_admin_footer()
     if desired_embed.footer and desired_embed.footer.text:
@@ -153,37 +146,27 @@ async def sync_network_admin_sticky(
     view = NetworkAdminView(bot)
     bot.add_view(view)
 
-    if wipe_channel:
-        message = await channel.send(embed=desired_embed, view=view, silent=True)
-        await set_setting(NETWORK_ADMIN_SETTINGS_KEY, f"{channel.id}:{message.id}")
-        return NetworkAdminStickyResult(success=True, message=message, updated=True)
+    async def refresh_current(
+        message: discord.Message,
+        embed: discord.Embed,
+        sticky_view: discord.ui.View,
+    ) -> None:
+        await message.edit(embed=embed, view=sticky_view)
 
-    stored_raw = await get_setting(NETWORK_ADMIN_SETTINGS_KEY)
-    existing: discord.Message | None = None
-    if stored_raw:
-        try:
-            message_id = int(stored_raw.split(":")[-1])
-            existing = await channel.fetch_message(message_id)
-        except (ValueError, discord.HTTPException):
-            existing = None
+    def is_current(existing_embed: discord.Embed) -> bool:
+        existing_footer = existing_embed.footer.text if existing_embed.footer else ""
+        return existing_footer == footer
 
-    if existing is not None and existing.author.id == bot_member.id and existing.embeds:
-        existing_footer = existing.embeds[0].footer.text if existing.embeds[0].footer else ""
-        if existing_footer == footer:
-            await existing.edit(embed=desired_embed, view=view)
-            await set_setting(NETWORK_ADMIN_SETTINGS_KEY, f"{channel.id}:{existing.id}")
-            return NetworkAdminStickyResult(success=True, message=existing, skipped=True)
-
-        try:
-            await existing.edit(embed=desired_embed, view=view)
-            await set_setting(NETWORK_ADMIN_SETTINGS_KEY, f"{channel.id}:{existing.id}")
-            return NetworkAdminStickyResult(success=True, message=existing, updated=True)
-        except discord.HTTPException:
-            try:
-                await existing.delete()
-            except discord.HTTPException:
-                pass
-
-    message = await channel.send(embed=desired_embed, view=view, silent=True)
-    await set_setting(NETWORK_ADMIN_SETTINGS_KEY, f"{channel.id}:{message.id}")
-    return NetworkAdminStickyResult(success=True, message=message, updated=True)
+    result = await sync_stored_embed_sticky(
+        channel,
+        bot_member,
+        get_setting=get_setting,
+        set_setting=set_setting,
+        settings_key=NETWORK_ADMIN_SETTINGS_KEY,
+        desired_embed=desired_embed,
+        view=view,
+        is_current=is_current,
+        refresh_current=refresh_current,
+        wipe_channel=wipe_channel,
+    )
+    return _network_admin_result(result)

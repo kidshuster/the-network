@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import discord
 
 from bot.domain.errors import EmojiSyncError
-from bot.domain.profile import ServerProfile
 from bot.domain.profile_image import ProfileImage
+
+if TYPE_CHECKING:
+    from bot.domain.client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,33 @@ EMOJI_NAME_RE = re.compile(r"^[a-z0-9_]{2,32}$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 _GUILD_EMOJI_CAP_CODES = {30008, 30018}
 _MISSING_PERMISSION_CODE = 50013
+
+
+@dataclass(frozen=True)
+class EmojiSyncTarget:
+    emoji_id: int | None
+    emoji_name: str | None
+    image_hash: str | None
+    degraded_reason: str | None
+    server_name: str
+    display_name: str
+    source_channel_id: int
+
+
+def emoji_sync_target_from_client(
+    client: Client,
+    *,
+    source_channel_id: int | None = None,
+) -> EmojiSyncTarget:
+    return EmojiSyncTarget(
+        emoji_id=client.emoji_id,
+        emoji_name=client.emoji_name,
+        image_hash=client.image_hash,
+        degraded_reason=client.degraded_reason,
+        server_name=client.server_name,
+        display_name=client.display_name,
+        source_channel_id=source_channel_id or client.profile_channel_id,
+    )
 
 
 def _degraded_message_for_code(code: int | None) -> str | None:
@@ -87,15 +117,15 @@ def build_emoji_name(
 
 
 class EmojiService:
-    def _needs_emoji_repair(self, guild: discord.Guild, profile: ServerProfile) -> bool:
-        if profile.emoji_id is None or profile.degraded_reason is not None:
+    def _needs_emoji_repair(self, guild: discord.Guild, target: EmojiSyncTarget) -> bool:
+        if target.emoji_id is None or target.degraded_reason is not None:
             return True
-        return discord.utils.get(guild.emojis, id=profile.emoji_id) is None
+        return discord.utils.get(guild.emojis, id=target.emoji_id) is None
 
     async def sync_for_profile(
         self,
         guild: discord.Guild,
-        profile: ServerProfile,
+        target: EmojiSyncTarget,
         image: ProfileImage,
         *,
         previous_hash: str | None,
@@ -104,20 +134,20 @@ class EmojiService:
     ) -> EmojiResult:
         if (
             not force
-            and not self._needs_emoji_repair(guild, profile)
+            and not self._needs_emoji_repair(guild, target)
             and previous_hash == image.image_hash
         ):
             return EmojiResult(
-                emoji_id=profile.emoji_id,
-                emoji_name=profile.emoji_name,
-                image_hash=profile.image_hash,
+                emoji_id=target.emoji_id,
+                emoji_name=target.emoji_name,
+                image_hash=target.image_hash,
                 degraded_reason=None,
                 recreated=False,
                 skipped=True,
             )
 
-        slug = sanitize_slug(profile.server_name or profile.display_name)
-        emoji_name = build_emoji_name(slug, profile.source_channel_id)
+        slug = sanitize_slug(target.server_name or target.display_name)
+        emoji_name = build_emoji_name(slug, target.source_channel_id)
         emoji, failure_code = await self._create_emoji(guild, emoji_name, image.data)
         if emoji is None:
             degraded = _degraded_message_for_code(failure_code)
@@ -144,21 +174,6 @@ class EmojiService:
             recreated=True,
             skipped=False,
             delete_emoji_id=delete_emoji_id,
-        )
-
-    async def repair_emoji(
-        self,
-        guild: discord.Guild,
-        profile: ServerProfile,
-        image: ProfileImage,
-    ) -> EmojiResult:
-        return await self.sync_for_profile(
-            guild,
-            profile,
-            image,
-            previous_hash=profile.image_hash,
-            previous_emoji_id=profile.emoji_id,
-            force=True,
         )
 
     async def delete_emoji(self, guild: discord.Guild, emoji_id: int) -> None:

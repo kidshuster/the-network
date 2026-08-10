@@ -4,17 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import discord
 import pytest
+from discord_helpers import http_50013
 
 from bot.domain.client import Client
-from bot.services.guild_init import initialize_guild
+from bot.services.guild_init import GuildInitResult, _edit_overwrites, initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
-
-
-def _http_50013() -> discord.HTTPException:
-    exc = discord.HTTPException(MagicMock(), "Missing Permissions")
-    exc.status = 403
-    exc.code = 50013
-    return exc
 
 
 def _guild_with_roles(
@@ -116,7 +110,7 @@ async def test_initialize_guild_survives_category_sync_50013(
     existing_category.id = 501
     existing_category.name = "The Network"
     existing_category.channels = []
-    existing_category.edit = AsyncMock(side_effect=_http_50013())
+    existing_category.edit = AsyncMock(side_effect=http_50013())
 
     moderation_category = MagicMock(spec=discord.CategoryChannel)
     moderation_category.id = 502
@@ -201,7 +195,7 @@ async def test_initialize_guild_survives_rules_channel_50013(
     rules.name = "rules"
     rules.mention = "#rules"
     rules.category_id = network_cat.id
-    rules.edit = AsyncMock(side_effect=_http_50013())
+    rules.edit = AsyncMock(side_effect=http_50013())
     guild.rules_channel = rules
     network_cat.channels = [rules]
 
@@ -247,7 +241,7 @@ async def test_initialize_guild_survives_client_category_sync_50013(
     client_category = MagicMock(spec=discord.CategoryChannel)
     client_category.id = 600
     client_category.name = "Alpha"
-    client_category.edit = AsyncMock(side_effect=_http_50013())
+    client_category.edit = AsyncMock(side_effect=http_50013())
     guild.categories = [client_category]
 
     for name in ("The Network", "Moderation"):
@@ -388,6 +382,81 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
 
     assert result.success is True
     assert any("moderator-only" in step.casefold() for step in result.failed_steps)
+
+
+@pytest.mark.asyncio
+async def test_edit_overwrites_falls_back_when_bulk_channel_edit_fails() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock(
+        side_effect=[
+            http_50013(),
+            None,
+            None,
+        ]
+    )
+    channel.set_permissions = AsyncMock()
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock(position=10, id=50)
+
+    client_role = MagicMock(spec=discord.Role, id=101, position=1)
+    client_role.is_default.return_value = False
+    overwrite = discord.PermissionOverwrite(view_channel=True)
+
+    result = GuildInitResult(success=True)
+    ok = await _edit_overwrites(
+        bot_member,
+        channel,
+        {client_role: overwrite},
+        result=result,
+        step="sync #leaders permissions",
+        sync_from_category=False,
+    )
+
+    assert ok is True
+    assert result.failed_steps == []
+    assert channel.edit.await_count == 3
+    channel.set_permissions.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_edit_overwrites_falls_back_to_incremental_set_permissions() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.category_id = 100
+    channel.edit = AsyncMock(
+        side_effect=[
+            http_50013(),
+            None,
+            http_50013(),
+        ]
+    )
+    channel.set_permissions = AsyncMock()
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.top_role = MagicMock(position=10, id=50)
+
+    client_role = MagicMock(spec=discord.Role, id=101, position=1)
+    client_role.is_default.return_value = False
+    overwrite = discord.PermissionOverwrite(view_channel=True)
+
+    result = GuildInitResult(success=True)
+    ok = await _edit_overwrites(
+        bot_member,
+        channel,
+        {client_role: overwrite},
+        result=result,
+        step="sync #leaders permissions",
+        sync_from_category=False,
+    )
+
+    assert ok is True
+    assert result.failed_steps == []
+    channel.set_permissions.assert_awaited_once_with(
+        client_role,
+        overwrite=overwrite,
+        reason="The Network guild init",
+    )
 
 
 def test_moderator_category_overwrite_has_no_thread_flags() -> None:

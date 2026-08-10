@@ -7,7 +7,7 @@ import discord
 
 from bot.domain.client import Client
 from bot.services.client_subscription import (
-    find_network_subscription_channels,
+    resolve_subscription_channels_in_category,
     sync_client_profile_channel_permissions,
     sync_subscription_channel_permissions,
 )
@@ -100,15 +100,13 @@ async def rectify_client_permissions(
         publish = guild.get_channel(subscription.publish_channel_id)
         subscribe = guild.get_channel(subscription.subscribe_channel_id)
         if publish is None or subscribe is None:
-            found_publish, found_subscribe = find_network_subscription_channels(
+            publish, subscribe = resolve_subscription_channels_in_category(
+                guild,
                 category,
+                subscription,
                 network.key,
                 client=client,
             )
-            if publish is None:
-                publish = found_publish
-            if subscribe is None:
-                subscribe = found_subscribe
 
         try:
             await sync_subscription_channel_permissions(

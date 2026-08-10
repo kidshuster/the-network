@@ -87,6 +87,33 @@ def find_network_subscription_channels(
     return publish_channel, subscribe_channel
 
 
+def resolve_subscription_channels_in_category(
+    guild: discord.Guild,
+    category: discord.CategoryChannel,
+    subscription: ClientSubscription,
+    network_key: str,
+    *,
+    client: Client,
+) -> tuple[discord.TextChannel | None, discord.abc.GuildChannel | None]:
+    publish = guild.get_channel(subscription.publish_channel_id)
+    subscribe = guild.get_channel(subscription.subscribe_channel_id)
+    if not isinstance(publish, discord.TextChannel):
+        publish = None
+    if publish is not None and subscribe is not None:
+        return publish, subscribe
+
+    found_publish, found_subscribe = find_network_subscription_channels(
+        category,
+        network_key,
+        client=client,
+    )
+    if publish is None:
+        publish = found_publish
+    if subscribe is None:
+        subscribe = found_subscribe
+    return publish, subscribe
+
+
 async def sync_subscription_channel_permissions(
     guild: discord.Guild,
     bot_member: discord.Member,

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import discord
 
 from bot.domain.network import Network
-from bot.services.guild_channels import (
+from bot.services.guild_layout import (
     join_channel_name,
     resolve_join_requests_channel,
     resolve_network_hub_category,
