@@ -26,5 +26,8 @@ jobs:
       - name: Pytest
         run: pytest -q
 
+      - name: Discord API compatibility
+        run: pytest -q tests/test_discord_api_compat.py
+
       - name: Deploy bundle smoke test
         run: ./bin/test_deploy_bundle.sh

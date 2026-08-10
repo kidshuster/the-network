@@ -1,4 +1,9 @@
 releases:
+  "1.2.10":
+    summary: "Log bot version on startup; CI guard for discord.py channel create kwargs."
+    changes:
+      - "Add CI test that rejects invalid create_text_channel kwargs before release."
+      - "Log installed bot version on ready for easier deploy verification."
   "1.2.9":
     summary: "Fix channel creation regression from invalid sync_permissions kwarg."
     changes:

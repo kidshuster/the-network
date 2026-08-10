@@ -133,12 +133,15 @@ class NetworkRelayBot(commands.Bot):
             asyncio.create_task(self._sync_slash_commands())
 
         context = self.bot_context
+        from bot.services.changelog import installed_version
+
         logger.info(
             "Bot ready",
             extra={
                 "guild_id": guild.id,
                 "guild_name": guild.name,
                 "user": str(self.user),
+                "bot_version": installed_version(),
                 "schema_version": self.schema_version,
                 "network_count": context.network_count if context else 0,
                 "client_count": context.client_count if context else 0,
