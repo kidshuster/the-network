@@ -64,10 +64,26 @@ async def _related_client_data(store: Store):
 async def test_client_delete_recipe_removes_relations_atomically(db) -> None:
     store = Store.create(db)
     client, blocked, subscription = await _related_client_data(store)
+    await store.resources.upsert(
+        ManagedResource(100, "client.test", "category", 9001, "client", client.id)
+    )
+    await store.resources.upsert(
+        ManagedResource(100, "subscription.test", "channel", 9002, "subscription", subscription.id)
+    )
     assert await store.clients.delete_with_relations(client.id) == client
     assert await store.clients.get_by_id(client.id) is None
     assert await store.subscriptions.get_subscription_by_id(subscription.id) is None
     assert await store.blacklists.is_blacklisted(subscription.id, blocked.id) is False
+    assert await store.resources.get(100, "client.test") is None
+    assert await store.resources.get(100, "subscription.test") is None
+
+
+@pytest.mark.asyncio
+async def test_nested_transaction_fails_immediately_instead_of_deadlocking(db) -> None:
+    with pytest.raises(RuntimeError, match="Nested database transactions"):
+        async with db.transaction():
+            async with db.transaction():
+                pytest.fail("nested transaction unexpectedly started")
 
 
 @pytest.mark.asyncio

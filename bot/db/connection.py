@@ -14,6 +14,7 @@ class Database:
         self._conn: aiosqlite.Connection | None = None
         self._transaction_lock = asyncio.Lock()
         self._in_transaction = False
+        self._transaction_owner: asyncio.Task[object] | None = None
 
     @property
     def connection(self) -> aiosqlite.Connection:
@@ -44,10 +45,12 @@ class Database:
         Transactions are deliberately non-nestable: a named Store recipe owns its
         whole commit boundary, which prevents partial commits hidden in callers.
         """
+        task = asyncio.current_task()
+        if task is not None and task is self._transaction_owner:
+            raise RuntimeError("Nested database transactions are not supported")
         async with self._transaction_lock:
-            if self._in_transaction:
-                raise RuntimeError("Nested database transactions are not supported")
             self._in_transaction = True
+            self._transaction_owner = task
             try:
                 await self.connection.execute("BEGIN IMMEDIATE")
                 yield self.connection
@@ -58,6 +61,7 @@ class Database:
                 await self.connection.commit()
             finally:
                 self._in_transaction = False
+                self._transaction_owner = None
 
     async def fetchone(self, sql: str, params: tuple[object, ...] = ()) -> aiosqlite.Row | None:
         cursor = await self.connection.execute(sql, params)

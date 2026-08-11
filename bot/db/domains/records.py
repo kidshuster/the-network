@@ -704,6 +704,19 @@ class ClientStore:
             return None
         async with self._db.transaction() as connection:
             await connection.execute(
+                """
+                DELETE FROM managed_resources
+                WHERE owner_type = 'subscription' AND owner_id IN (
+                    SELECT id FROM client_subscriptions WHERE client_id = ?
+                )
+                """,
+                (client_id,),
+            )
+            await connection.execute(
+                "DELETE FROM managed_resources WHERE owner_type = 'client' AND owner_id = ?",
+                (client_id,),
+            )
+            await connection.execute(
                 "DELETE FROM client_blacklists WHERE blocked_client_id = ?",
                 (client_id,),
             )
@@ -1019,6 +1032,10 @@ class ClientStore:
         if existing is None:
             return None
         async with self._db.transaction() as connection:
+            await connection.execute(
+                "DELETE FROM managed_resources WHERE owner_type = 'subscription' AND owner_id = ?",
+                (subscription_id,),
+            )
             await connection.execute(
                 "DELETE FROM client_blacklists WHERE subscription_id = ?",
                 (subscription_id,),
