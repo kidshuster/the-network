@@ -17,13 +17,13 @@ from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
 from bot.widgets.recipes.onboarding.service import ServerRequestService
 from bot.widgets.views.persistent_views import PersistentViewRegistry
-from tests.live.permission_probe import PROBE_PNG
-from tests.live.provision_flow import (
+from tests.core.permission_probe import PROBE_PNG
+from tests.core.provision_flow import (
     _SmokeProfileAttachment,
     cleanup_smoke_client,
     ensure_smoke_network_key,
 )
-from tests.live.resource_guard import guild_test_resource_guard
+from tests.core.resource_guard import guild_test_resource_guard
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

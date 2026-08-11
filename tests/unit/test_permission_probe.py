@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.core.models.errors import NetworkValidationError
-from tests.live.permission_probe import (
+from tests.core.permission_probe import (
     cleanup_stale_probe_resources,
     verify_operator_permissions_live,
     verify_provision_permissions_live,

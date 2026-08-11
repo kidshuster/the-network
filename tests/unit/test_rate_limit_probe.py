@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.live.rate_limit_probe import (
+from tests.core.rate_limit_probe import (
     RateLimitHeaders,
     SmokeQuotaReport,
     _evaluate_probe,
@@ -39,7 +39,7 @@ def test_rate_limit_headers_from_success() -> None:
 
 def test_evaluate_probe_blocks_long_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SMOKE_MAX_RETRY_AFTER_SEC", "30")
-    from tests.live import rate_limit_probe as mod
+    from tests.core import rate_limit_probe as mod
 
     monkeypatch.setattr(mod, "MAX_RETRY_AFTER_SEC", 30.0)
     endpoint = _evaluate_probe(
@@ -62,7 +62,7 @@ def test_evaluate_probe_blocks_long_retry_after(monkeypatch: pytest.MonkeyPatch)
 
 def test_evaluate_probe_ok_when_remaining_sufficient(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SMOKE_MIN_RATE_LIMIT_REMAINING", "1")
-    from tests.live import rate_limit_probe as mod
+    from tests.core import rate_limit_probe as mod
 
     monkeypatch.setattr(mod, "MIN_REMAINING", 1)
     endpoint = _evaluate_probe(

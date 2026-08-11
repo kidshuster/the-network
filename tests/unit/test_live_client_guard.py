@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from tests.live.client_guard import (
+from tests.core.client_guard import (
     assert_protected_clients_unchanged,
     snapshot_protected_clients,
 )

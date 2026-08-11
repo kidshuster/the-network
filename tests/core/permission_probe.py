@@ -8,7 +8,7 @@ import discord
 
 from bot.core.models.errors import NetworkValidationError
 from bot.testing.png_fixtures import probe_png_bytes
-from tests.live.resource_guard import (
+from tests.core.resource_guard import (
     PROBE_PREFIX,
     GuildTestResourceGuard,
     cleanup_stale_probe_resources,  # noqa: F401
@@ -83,7 +83,7 @@ async def verify_operator_permissions_live(
             )
 
             step = "create role"
-            from tests.live.pacing import pause_before_role_create
+            from tests.core.pacing import pause_before_role_create
 
             await pause_before_role_create()
             role: discord.Role = await _run_probe_step(
@@ -175,7 +175,7 @@ async def verify_provision_permissions_live(
         step = "starting"
         try:
             step = "create client role"
-            from tests.live.pacing import pause_before_role_create
+            from tests.core.pacing import pause_before_role_create
 
             await pause_before_role_create()
             client_role: discord.Role = await _run_probe_step(

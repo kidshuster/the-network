@@ -17,13 +17,13 @@ from bot.core.runtime import BotContext
 from bot.testing.context_factory import create_bot_context
 from bot.widgets.recipes.onboarding.service import ServerRequestService
 from bot.widgets.views.persistent_views import PersistentViewRegistry
-from tests.live.constants import SMOKE_CLEANUP_REASON
-from tests.live.permission_probe import (
+from tests.core.constants import SMOKE_CLEANUP_REASON
+from tests.core.permission_probe import (
     PROBE_PNG,
     verify_operator_permissions_live,
     verify_provision_permissions_live,
 )
-from tests.live.resource_guard import delete_guild_channel_for_cleanup, guild_test_resource_guard
+from tests.core.resource_guard import delete_guild_channel_for_cleanup, guild_test_resource_guard
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -155,7 +155,7 @@ async def run_permission_provision_probe(
         access_role,
         operator_role_name=operator_role_name,
     )
-    from tests.live.pacing import pause_between_probe_phases
+    from tests.core.pacing import pause_between_probe_phases
 
     await pause_between_probe_phases()
     provision_steps = await verify_provision_permissions_live(
@@ -341,7 +341,7 @@ async def cleanup_all_hub_rebuild_smoke_clients(
     bot_member: discord.Member,
 ) -> list[str]:
     """Remove every hub-rebuild smoke client from Discord and the database."""
-    from tests.live.resource_guard import (
+    from tests.core.resource_guard import (
         cleanup_hub_rebuild_smoke_artifacts,
         cleanup_orphan_smoke_subscription_channels,
     )
@@ -423,7 +423,7 @@ async def run_join_approval_smoke_flow(
             if client_role is None:
                 raise RuntimeError("Smoke accept client role is missing from the guild.")
 
-            from tests.live.server_init_probes import _collect_leaders_access_gaps
+            from tests.core.server_init_probes import _collect_leaders_access_gaps
 
             leaders_gaps = [
                 gap

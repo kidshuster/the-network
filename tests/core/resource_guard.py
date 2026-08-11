@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from tests.live.constants import TEST_CLEANUP_REASON
+from tests.core.constants import TEST_CLEANUP_REASON
 
 if TYPE_CHECKING:
     from bot.core.runtime import BotContext

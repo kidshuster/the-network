@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from tests.live.constants import (
+from tests.core.constants import (
     SERVER_INIT_PROBE_REASON,
     SMOKE_CLEANUP_REASON,
     TEST_CLEANUP_REASON,
 )
-from tests.live.resource_guard import (
+from tests.core.resource_guard import (
     cleanup_guild_test_artifacts,
     guild_test_resource_guard,
     is_test_category_name,
@@ -123,7 +123,7 @@ async def test_guild_test_resource_guard_does_not_sweep_guild_artifacts(
     guild.channels = []
     sweep = AsyncMock(return_value=[])
     monkeypatch.setattr(
-        "tests.live.resource_guard.cleanup_guild_test_artifacts",
+        "tests.core.resource_guard.cleanup_guild_test_artifacts",
         sweep,
     )
 
@@ -180,7 +180,7 @@ async def test_cleanup_guild_test_artifacts_removes_categories_and_channels() ->
 
 @pytest.mark.asyncio
 async def test_cleanup_orphan_smoke_subscription_channels() -> None:
-    from tests.live.resource_guard import cleanup_orphan_smoke_subscription_channels
+    from tests.core.resource_guard import cleanup_orphan_smoke_subscription_channels
 
     orphan_publish = MagicMock(spec=discord.TextChannel)
     orphan_publish.category = None

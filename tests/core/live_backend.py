@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from tests.live.probes import LiveContext, ProbeOutcome, get_probe
+from tests.core.probes import LiveContext, ProbeOutcome, get_probe
 
 
 def phase_delay_seconds() -> float:

@@ -6,12 +6,12 @@ from typing import Any, Literal
 
 import yaml
 
-from tests.live.client_guard import assert_protected_clients_unchanged
-from tests.live.live_backend import run_live_probe
-from tests.live.mock_backend import MockContext, run_mock_probe
-from tests.live.probes import LiveContext, ProbeOutcome
+from tests.core.client_guard import assert_protected_clients_unchanged
+from tests.core.live_backend import run_live_probe
+from tests.core.mock_backend import MockContext, run_mock_probe
+from tests.core.probes import LiveContext, ProbeOutcome
 
-RECIPE_DIR = Path(__file__).with_name("recipes")
+RECIPE_DIR = Path(__file__).resolve().parents[1] / "recipes"
 
 
 @dataclass(frozen=True)

@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.config import Settings
-from tests.live.client_guard import assert_protected_clients_unchanged
-from tests.live.hub_announcements_probes import run_hub_announcements_smoke_flow
-from tests.live.provision_flow import (
+from tests.core.client_guard import assert_protected_clients_unchanged
+from tests.core.hub_announcements_probes import run_hub_announcements_smoke_flow
+from tests.core.provision_flow import (
     ensure_smoke_network_key,
     run_configured_permission_provision_probe,
     run_hub_rebuild_smoke_flow,
     run_join_approval_smoke_flow,
 )
-from tests.live.resource_guard import cleanup_guild_test_artifacts
-from tests.live.server_init_probes import (
+from tests.core.resource_guard import cleanup_guild_test_artifacts
+from tests.core.server_init_probes import (
     ProbeResult,
     probe_client_layout_reinit,
     probe_hub_announcements,
@@ -30,14 +30,14 @@ from tests.live.server_init_probes import (
     probe_operator_setup,
     probe_reinit_rectifies_clients,
 )
-from tests.live.setup_welcome_probes import run_setup_welcome_smoke_flow
-from tests.live.teardown import teardown_smoke_guild
+from tests.core.setup_welcome_probes import run_setup_welcome_smoke_flow
+from tests.core.teardown import teardown_smoke_guild
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
     from bot.core.database.connection import Database
     from bot.core.runtime import BotContext
-    from tests.live.client_guard import ProtectedClient
+    from tests.core.client_guard import ProtectedClient
 
 
 @dataclass

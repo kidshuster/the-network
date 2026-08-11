@@ -78,13 +78,13 @@ git submodule update --init install
 ./test --dev                # ruff + mypy + pytest (tests/unit)
 ./test --full               # also run tests/live Testwork smoke
 ruff check .
-mypy bot tests/live
+mypy bot tests/core
 pytest tests/unit
 ./bin/test_deploy_bundle.sh # validate install/ submodule
 ```
 
 All pytest tests live under `tests/unit/`; all real-Discord Testwork probes live
-under `tests/live/` (both tracked). Testwork guild IDs/tokens stay in gitignored
+under `tests/core/` and `tests/live/` (both tracked). Testwork guild IDs/tokens stay in gitignored
 `.env` / `.env.staging` only. Local agent notes live under untracked `cursor/`.
 
 ## Install / Docker (production)

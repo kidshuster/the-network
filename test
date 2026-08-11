@@ -27,8 +27,8 @@ session per token). For aggressive probe runs, use a burn-in guild:
   cp .env.example .env.staging   # separate GUILD_ID + DATABASE_PATH
   bin/use-staging-env.sh staging
 
-Live probes all live under tests/live/ (tracked; never bin/ or bot/). Pytest
-tests all live under tests/unit/ (tracked). Testwork IDs stay in gitignored
+Probe and recipe Python lives under tests/core/; live launchers are under
+tests/live/. Pytest tests live under tests/unit/. Testwork IDs stay in gitignored
 .env / .env.staging. Optional local notes: cursor/docs/smoke-testing.md.
 
 Examples:
@@ -39,8 +39,8 @@ Examples:
   SMOKE_PHASE_DELAY_SEC=12 ./test --full
 
 Targeted mock smoke:
-  python -m tests.live.runner probe hub.layout --backend mock
-  python -m tests.live.runner recipe functional --backend mock --scenario stale_permissions
+  python -m tests.core.runner probe hub.layout --backend mock
+  python -m tests.core.runner recipe functional --backend mock --scenario stale_permissions
 EOF
 }
 
@@ -81,7 +81,7 @@ run_dev() {
 
   echo ""
   echo "==> mypy"
-  mypy bot tests/live
+  mypy bot tests/core
 
   echo ""
   echo "==> pytest"
@@ -89,7 +89,7 @@ run_dev() {
 
   echo ""
   echo "==> mock smoke recipe"
-  python -m tests.live.runner recipe full --backend mock
+  python -m tests.core.runner recipe full --backend mock
 
   echo ""
   echo "OK: dev gate passed (ruff, mypy, pytest, mock smoke)"

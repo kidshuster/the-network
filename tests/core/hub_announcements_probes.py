@@ -7,7 +7,7 @@ import discord
 
 from bot.channels.resolve import resolve_network_announcements_channel
 from bot.core.hub.announcements import dispatch_system_announcement
-from tests.live.provision_flow import ensure_smoke_network_key
+from tests.core.provision_flow import ensure_smoke_network_key
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

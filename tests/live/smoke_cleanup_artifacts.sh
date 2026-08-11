@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove leftover probe/diag Discord artifacts (lightweight pre-flight cleanup).
 # For full smoke client + guild teardown after a test batch, use tests/live suite teardown
-# or: python -m tests.live.runner recipe full (includes teardown).
+# or: python -m tests.core.runner recipe full (includes teardown).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
@@ -19,9 +19,9 @@ from dotenv import load_dotenv
 load_dotenv(Path(".env"))
 
 from bot.config import Settings
-from tests.live.discord_client import create_smoke_discord_client
-from tests.live.provision_flow import cleanup_all_hub_rebuild_smoke_clients, create_smoke_context
-from tests.live.resource_guard import cleanup_guild_test_artifacts
+from tests.core.discord_client import create_smoke_discord_client
+from tests.core.provision_flow import cleanup_all_hub_rebuild_smoke_clients, create_smoke_context
+from tests.core.resource_guard import cleanup_guild_test_artifacts
 
 
 async def main() -> None:

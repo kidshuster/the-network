@@ -23,4 +23,4 @@ for arg in "$@"; do
   esac
 done
 
-python -m tests.live.runner recipe "$RECIPE" --backend "$BACKEND" --scenario "$SCENARIO"
+python -m tests.core.runner recipe "$RECIPE" --backend "$BACKEND" --scenario "$SCENARIO"

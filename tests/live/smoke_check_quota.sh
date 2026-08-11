@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(".env"))
 
 from bot.config import Settings
-from tests.live.rate_limit_probe import check_smoke_quota, format_quota_report
+from tests.core.rate_limit_probe import check_smoke_quota, format_quota_report
 
 
 async def main() -> None:

@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from tests.live.provision_flow import (
+from tests.core.provision_flow import (
     cleanup_join_requests_smoke_artifacts,
     cleanup_smoke_client,
 )
-from tests.live.resource_guard import (
+from tests.core.resource_guard import (
     cleanup_guild_test_artifacts,
     cleanup_hub_rebuild_smoke_artifacts,
     cleanup_orphan_smoke_subscription_channels,

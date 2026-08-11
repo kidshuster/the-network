@@ -30,9 +30,9 @@ from bot.core.networks.roles import (
 )
 from bot.widgets.recipes.hub.initialize import initialize_guild
 from bot.widgets.views.persistent_views import PersistentViewRegistry
-from tests.live.constants import SERVER_INIT_PROBE_REASON
-from tests.live.provision_flow import run_configured_permission_provision_probe
-from tests.live.resource_guard import guild_test_resource_guard, is_smoke_client_server_name
+from tests.core.constants import SERVER_INIT_PROBE_REASON
+from tests.core.provision_flow import run_configured_permission_provision_probe
+from tests.core.resource_guard import guild_test_resource_guard, is_smoke_client_server_name
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

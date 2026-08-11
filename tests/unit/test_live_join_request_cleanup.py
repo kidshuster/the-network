@@ -7,7 +7,7 @@ import pytest
 
 from bot.core.database.store import RequestStore
 from bot.core.models.server_request import ServerRequestStatus
-from tests.live.provision_flow import (
+from tests.core.provision_flow import (
     cleanup_join_requests_smoke_artifacts,
     cleanup_smoke_join_request_messages,
 )

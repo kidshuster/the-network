@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from tests.live.resource_guard import is_smoke_client_server_name
+from tests.core.resource_guard import is_smoke_client_server_name
 
 if TYPE_CHECKING:
     from bot.core.runtime import BotContext

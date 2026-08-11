@@ -19,13 +19,13 @@ def _imports_outer_workflows(source: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module and node.module.startswith(
-                ("bot.widgets", "bot.adapters", "tests.live")
+                ("bot.widgets", "bot.adapters", "tests.core")
             ):
                 violations.append(f"from {node.module}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.startswith(
-                    ("bot.widgets", "bot.adapters", "tests.live")
+                    ("bot.widgets", "bot.adapters", "tests.core")
                 ):
                     violations.append(f"import {alias.name}")
     return violations
@@ -47,7 +47,7 @@ def test_core_does_not_import_adapters_or_workflows() -> None:
 def test_bot_modules_import_cleanly() -> None:
     package = Path(bot.__file__).resolve().parent
     for module in pkgutil.walk_packages([str(package)], prefix="bot."):
-        if module.name.startswith("tests.live."):
+        if module.name.startswith("tests.core."):
             continue
         importlib.import_module(module.name)
 
@@ -91,12 +91,12 @@ def test_legacy_packages_are_removed() -> None:
     assert not (package / "core" / "integrations").exists()
 
 
-def test_live_tests_are_not_imported_by_production_code() -> None:
+def test_test_core_is_not_imported_by_production_code() -> None:
     offenders: list[str] = []
     package = Path(bot.__file__).resolve().parent
     for path in package.rglob("*.py"):
         source = path.read_text(encoding="utf-8")
-        if "tests.live" in source or "bot.smoke" in source:
+        if "tests.core" in source or "bot.smoke" in source:
             offenders.append(str(path.relative_to(package.parent)))
     assert offenders == []
 
@@ -124,14 +124,16 @@ def test_test_tree_separates_unit_and_live_code() -> None:
     root_python = sorted(path.name for path in tests_root.glob("*.py"))
     assert root_python == ["__init__.py"]
     assert list((tests_root / "unit").glob("test_*.py"))
-    assert not list((tests_root / "live").glob("test_*.py"))
+    assert list((tests_root / "core").glob("*.py"))
+    assert not list((tests_root / "live").glob("*.py"))
 
 
 def test_live_orchestration_is_recipe_driven() -> None:
-    live_root = Path(__file__).resolve().parents[1] / "live"
-    assert not (live_root / "suite.py").exists()
-    assert list((live_root / "recipes").glob("*.yaml"))
-    assert (live_root / "runner.py").exists()
+    tests_root = Path(__file__).resolve().parents[1]
+    live_root = tests_root / "live"
+    assert not (tests_root / "core" / "suite.py").exists()
+    assert list((tests_root / "recipes").glob("*.yaml"))
+    assert (tests_root / "core" / "runner.py").exists()
     launcher = (live_root / "smoke_server_init.sh").read_text(encoding="utf-8")
-    assert "tests.live.runner recipe" in launcher
+    assert "tests.core.runner recipe" in launcher
     assert "discord" not in launcher.casefold()

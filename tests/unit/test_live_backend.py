@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from tests.live.live_backend import phase_delay_seconds, run_live_probe
-from tests.live.probes import ProbeOutcome
+from tests.core.live_backend import phase_delay_seconds, run_live_probe
+from tests.core.probes import ProbeOutcome
 
 
 def test_phase_delay_uses_default_for_invalid_value(
@@ -32,9 +32,9 @@ async def test_live_backend_owns_requested_pause(
     async def sleep(delay: float) -> None:
         sleeps.append(delay)
 
-    monkeypatch.setattr("tests.live.live_backend.get_probe", lambda _name: probe)
-    monkeypatch.setattr("tests.live.live_backend.phase_delay_seconds", lambda: 3.5)
-    monkeypatch.setattr("tests.live.live_backend.asyncio.sleep", sleep)
+    monkeypatch.setattr("tests.core.live_backend.get_probe", lambda _name: probe)
+    monkeypatch.setattr("tests.core.live_backend.phase_delay_seconds", lambda: 3.5)
+    monkeypatch.setattr("tests.core.live_backend.asyncio.sleep", sleep)
     outcome = await run_live_probe("probe", object(), pause_after=True)  # type: ignore[arg-type]
     assert outcome.detail == "ok"
     assert sleeps == [3.5]
@@ -50,6 +50,6 @@ async def test_live_backend_skips_unrequested_pause(
     async def unexpected_sleep(_delay: float) -> None:
         raise AssertionError("sleep should not be called")
 
-    monkeypatch.setattr("tests.live.live_backend.get_probe", lambda _name: probe)
-    monkeypatch.setattr("tests.live.live_backend.asyncio.sleep", unexpected_sleep)
+    monkeypatch.setattr("tests.core.live_backend.get_probe", lambda _name: probe)
+    monkeypatch.setattr("tests.core.live_backend.asyncio.sleep", unexpected_sleep)
     await run_live_probe("probe", object(), pause_after=False)  # type: ignore[arg-type]

@@ -19,7 +19,8 @@ for arg in "$@"; do
       cat <<'EOF'
 Usage: tests/live/smoke_testwork.sh [--no-restart] [--check-quota] [--stress]
 
-Primary Testwork entry point. All live Discord probes live under tests/live/.
+Primary Testwork entry point. Probe code lives under tests/core/; this directory
+contains only live shell launchers.
 
 Runs the YAML `full` recipe in one Discord session. Use `--stress` to run the
 destructive rectification recipe instead.
@@ -30,9 +31,9 @@ Options:
   --no-restart   Leave the bot stopped when finished (default for ./test --full)
 
 Targeted entry points:
-  python -m tests.live.runner list
-  python -m tests.live.runner probe hub.layout
-  python -m tests.live.runner recipe audit
+  python -m tests.core.runner list
+  python -m tests.core.runner probe hub.layout
+  python -m tests.core.runner recipe audit
 
 Related entry points:
   smoke_cleanup_artifacts.sh   Pre-flight stale artifact cleanup
@@ -56,7 +57,7 @@ if [[ "$CHECK_QUOTA" -eq 1 ]]; then
   "$ROOT/tests/live/smoke_check_quota.sh"
 fi
 
-python -m tests.live.runner recipe "$RECIPE"
+python -m tests.core.runner recipe "$RECIPE"
 echo "OK: live recipe '$RECIPE' passed"
 
 if [[ "$RESTART_BOT" -eq 1 ]]; then

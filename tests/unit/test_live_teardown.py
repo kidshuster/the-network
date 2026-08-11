@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tests.live.resource_guard import (
+from tests.core.resource_guard import (
     SMOKE_CLIENT_SERVER_PREFIXES,
     is_smoke_client_server_name,
     is_test_category_name,
@@ -32,8 +32,8 @@ def test_is_test_role_name_covers_smoke_hubsub() -> None:
 
 @pytest.mark.asyncio
 async def test_teardown_smoke_guild_removes_registered_clients() -> None:
-    from tests.live import teardown as teardown_module
-    from tests.live.teardown import teardown_smoke_guild
+    from tests.core import teardown as teardown_module
+    from tests.core.teardown import teardown_smoke_guild
 
     guild = MagicMock()
     guild.id = 1

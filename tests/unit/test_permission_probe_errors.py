@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from discord_helpers import http_50013
 
-from tests.live.permission_probe import (
+from tests.core.permission_probe import (
     _probe_failure_detail,
     _probe_failure_for_step,
     _provision_probe_failure,

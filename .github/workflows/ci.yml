@@ -26,15 +26,15 @@ jobs:
         run: ruff check .
 
       - name: Mypy
-        run: mypy bot tests/live
+        run: mypy bot tests/core
 
       - name: Unit tests
         run: pytest -q tests/unit
 
       - name: Mock smoke tests
         run: |
-          python -m tests.live.runner recipe full --backend mock
-          python -m tests.live.runner recipe server-init-stress \
+          python -m tests.core.runner recipe full --backend mock
+          python -m tests.core.runner recipe server-init-stress \
             --backend mock --scenario malformed_channels
 
       - name: Install bundle check

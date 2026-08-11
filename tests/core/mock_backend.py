@@ -6,9 +6,9 @@ from typing import Any
 
 import yaml
 
-from tests.live.probes import ProbeOutcome
+from tests.core.probes import ProbeOutcome
 
-SCENARIO_DIR = Path(__file__).with_name("scenarios")
+SCENARIO_DIR = Path(__file__).resolve().parents[1] / "scenarios"
 
 
 @dataclass

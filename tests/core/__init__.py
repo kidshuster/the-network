@@ -1,6 +1,6 @@
 """Live smoke helpers for join-approval provisioning and hub probes."""
 
-from tests.live.constants import (
+from tests.core.constants import (
     SERVER_INIT_PROBE_REASON,
     SMOKE_CLEANUP_REASON,
     TEST_CLEANUP_REASON,

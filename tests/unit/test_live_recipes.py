@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from tests.live.mock_backend import MockContext, MockDiscordState, load_mock_context
-from tests.live.probes import PROBES, ProbeOutcome
-from tests.live.recipes import Recipe, RecipeRunner, RecipeStep, load_recipes
+from tests.core.mock_backend import MockContext, MockDiscordState, load_mock_context
+from tests.core.probes import PROBES, ProbeOutcome
+from tests.core.recipes import Recipe, RecipeRunner, RecipeStep, load_recipes
 
 
 def test_shipped_recipes_only_reference_registered_probes_and_recipes() -> None:
@@ -57,9 +57,9 @@ async def test_runner_composes_recipes_and_runs_finally(
         _ = pause_after
         return await fake_probe(context)
 
-    monkeypatch.setattr("tests.live.recipes.run_mock_probe", fake_mock_probe)
+    monkeypatch.setattr("tests.core.recipes.run_mock_probe", fake_mock_probe)
     monkeypatch.setattr(
-        "tests.live.recipes.assert_protected_clients_unchanged",
+        "tests.core.recipes.assert_protected_clients_unchanged",
         _noop_guard,
     )
     recipes = {

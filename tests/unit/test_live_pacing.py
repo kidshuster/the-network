@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.live import pacing
+from tests.core import pacing
 
 
 def test_delay_seconds_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:

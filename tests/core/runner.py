@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any, cast
 import discord
 
 from bot.config import Settings
-from tests.live.client_guard import snapshot_protected_clients
-from tests.live.discord_client import create_smoke_discord_client
-from tests.live.mock_backend import SCENARIO_DIR, load_mock_context
-from tests.live.probes import PROBES, LiveContext
-from tests.live.provision_flow import create_smoke_context
-from tests.live.recipes import RecipeRunner, load_recipes
+from tests.core.client_guard import snapshot_protected_clients
+from tests.core.discord_client import create_smoke_discord_client
+from tests.core.mock_backend import SCENARIO_DIR, load_mock_context
+from tests.core.probes import PROBES, LiveContext
+from tests.core.provision_flow import create_smoke_context
+from tests.core.recipes import RecipeRunner, load_recipes
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
