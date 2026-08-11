@@ -1,0 +1,34 @@
+stickies:
+  hub-rules:
+    template: hub_rules
+    settings_key: hub_rules_sticky_message
+    version: 2
+    footer_marker: "The Network • hub rules"
+    strategy: replace
+    pin: true
+    require_manage_messages: true
+    setting_format: message_id
+
+  join-the-network:
+    template: join_the_network
+    settings_key: hub_join_the_network_sticky
+    version: 10
+    footer_marker: "The Network • join the network"
+    strategy: replace
+
+  network-admin:
+    template: network_admin
+    settings_key: hub_network_admin_sticky
+    version: 1
+    footer_marker: "The Network • network admin"
+    strategy: replace
+
+  subscription-publish:
+    template: publish_setup_instructions
+    footer_marker: publish setup
+    strategy: scoped
+
+  subscription-subscribe:
+    template: subscribe_setup_instructions
+    footer_marker: subscribe setup
+    strategy: scoped

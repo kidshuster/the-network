@@ -7,7 +7,7 @@ import discord
 from bot.adapters.discord.errors import report_error, respond_to_error
 from bot.adapters.discord.responses import DeferredEphemeralResponse
 from bot.errors import UserFacingError
-from bot.recipes import RecipeRegistryError
+from bot.widgets.recipes import RecipeRegistryError
 
 
 def _guild_with_moderator_channel() -> tuple[MagicMock, MagicMock]:

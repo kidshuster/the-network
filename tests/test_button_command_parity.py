@@ -5,9 +5,13 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.ui.join_views import JoinNetworkModal, JoinNetworkView, ModeratorReviewView
-from bot.ui.network_admin_views import CreateNetworkModal, DeleteNetworkModal, NetworkAdminView
-from bot.ui.network_views import (
+from bot.widgets.views.join_views import JoinNetworkModal, JoinNetworkView, ModeratorReviewView
+from bot.widgets.views.network_admin_views import (
+    CreateNetworkModal,
+    DeleteNetworkModal,
+    NetworkAdminView,
+)
+from bot.widgets.views.network_views import (
     SUBSCRIBED_CHANNEL_CONNECTED_LABEL,
     SubscribeSetupView,
     SubscriptionModerationView,

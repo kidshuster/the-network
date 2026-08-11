@@ -94,7 +94,6 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 | Live smoke modules at low % | Require real Discord guild; protected by smoke scripts |
 | `bot/client.py` full startup | Requires Discord gateway or extensive bot mock; defer to integration/smoke |
 | URL image download (`image_service`) | Requires network mock; lower priority than attachment path |
-| Top.gg posting | External API; warning-only on failure |
 
 ---
 

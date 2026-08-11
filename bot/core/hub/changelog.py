@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import discord
 import yaml
 
-from bot.presentation import render_embed
+from bot.core.templates import render_embed
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -231,7 +231,7 @@ async def sync_changelog_on_ready(
     if access_role is None:
         return
 
-    from bot.core.hub.resolve import resolve_human_moderator_role
+    from bot.channels.resolve import resolve_human_moderator_role
     from bot.core.networks.roles import resolve_operator_role_by_name
 
     human_moderator_role = resolve_human_moderator_role(guild)

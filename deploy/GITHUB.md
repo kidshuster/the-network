@@ -7,7 +7,6 @@
 | Store source code | **Yes** |
 | Run tests on every push (CI) | **Yes** — GitHub Actions |
 | Run the Discord bot 24/7 | **No** — bots need an always-on host elsewhere |
-| Replace top.gg as a bot directory | **No** — use top.gg (or your own README) for discovery |
 
 GitHub is for **code and automation**, not for keeping a Discord gateway connection open.
 
@@ -45,7 +44,7 @@ Pick one host and connect it to your GitHub repo:
 ### Railway / Render / Fly.io
 
 - Connect the GitHub repo in their dashboard
-- Set environment variables: `DISCORD_TOKEN`, `GUILD_ID`, optional `TOPGG_TOKEN`
+- Set environment variables: `DISCORD_TOKEN` and `GUILD_ID`
 - Mount or use persistent disk for `DATABASE_PATH` / `data/relay.db`
 - Start command: `python -m bot.main` or use the included `Dockerfile`
 
@@ -104,14 +103,7 @@ cd the-network
 cd publish && cp .env.example .env && ./scripts/start.sh
 ```
 
-## 4. top.gg vs GitHub
-
-- **GitHub** — source code, issues, CI, releases
-- **top.gg** — optional public bot listing and stats (still needs a running bot somewhere)
-
-You can skip top.gg entirely if this bot is private to your hub.
-
-## 5. GitHub Releases (optional)
+## 4. GitHub Releases (optional)
 
 Tag versions for deploys:
 

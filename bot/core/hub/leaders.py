@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.core.hub.resolve import (
+from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
+from bot.channels.resolve import (
     CHANNEL_CHANGELOG,
     CHANNEL_LEADERS,
     resolve_changelog_channel,
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.core.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
 
 if TYPE_CHECKING:
     from bot.core.runtime import BotContext
@@ -156,7 +156,7 @@ async def grant_leaders_channel_access(
     access_role_name: str,
     operator_role_name: str,
 ) -> LeadersSyncResult:
-    from bot.core.hub.resolve import resolve_human_moderator_role
+    from bot.channels.resolve import resolve_human_moderator_role
     from bot.core.networks.roles import (
         resolve_access_role,
         resolve_operator_role_by_name,

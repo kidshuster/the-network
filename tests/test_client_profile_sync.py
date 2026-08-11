@@ -10,10 +10,10 @@ from bot.core.clients.profile_sync import (
     build_moderation_embed,
     post_subscription_moderation_embed,
 )
+from bot.core.clients.setup_state import SubscriptionSetupState
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
-from bot.core.stickies.subscription_setup import SubscriptionSetupState
 
 
 def _client() -> Client:

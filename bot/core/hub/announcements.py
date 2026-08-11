@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.channels.resolve import resolve_network_announcements_channel
 from bot.config import Settings
-from bot.core.hub.resolve import resolve_network_announcements_channel
 from bot.core.networks.roles import resolve_operator_role_by_name
-from bot.presentation import render_embed
+from bot.core.templates import render_embed
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -64,7 +64,7 @@ def can_post_hub_announcement(
     guild: discord.Guild,
     settings: Settings,
 ) -> bool:
-    from bot.core.hub.resolve import resolve_human_moderator_role
+    from bot.channels.resolve import resolve_human_moderator_role
 
     operator = resolve_operator_role_by_name(
         guild,

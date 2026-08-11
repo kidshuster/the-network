@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from bot.core.stickies.join_requests_sticky import HOW_TO_JOIN_VERSION
-from bot.core.stickies.rules_sticky import RULES_STICKY_VERSION
-from bot.presentation import (
+from bot.channels.stickies.join import HOW_TO_JOIN_VERSION
+from bot.channels.stickies.rules import RULES_STICKY_VERSION
+from bot.widgets import (
     MessageTemplateError,
     clear_template_cache,
     modal_spec,
@@ -15,7 +15,9 @@ from bot.presentation import (
     validate_all_templates,
 )
 
-_MESSAGES_DIR = Path(__file__).resolve().parents[1] / "bot" / "presentation"
+_BOT_DIR = Path(__file__).resolve().parents[1] / "bot"
+_WIDGET_TEMPLATES_DIR = _BOT_DIR / "widgets" / "templates"
+_CHANNEL_TEMPLATES_DIR = _BOT_DIR / "channels" / "templates"
 
 
 def test_validate_all_templates_passes() -> None:
@@ -26,7 +28,7 @@ def test_validate_all_templates_passes() -> None:
 def test_all_yaml_files_load() -> None:
     clear_template_cache()
     for directory in ("embeds", "popups", "modals"):
-        folder = _MESSAGES_DIR / directory
+        folder = _WIDGET_TEMPLATES_DIR / directory
         names = [path.stem for path in folder.glob("*.yaml")]
         assert names, f"expected templates in {directory}/"
         for name in names:
@@ -42,6 +44,12 @@ def test_all_yaml_files_load() -> None:
                 continue
             embed = render_embed(name, version=1, colour="green")
             assert embed.colour is not None
+
+    channel_names = [path.stem for path in _CHANNEL_TEMPLATES_DIR.glob("*.yaml")]
+    assert channel_names
+    for name in channel_names:
+        embed = render_embed(name, version=1, colour="green")
+        assert embed.colour is not None
 
 
 def test_join_the_network_embed() -> None:

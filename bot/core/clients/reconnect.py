@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.channels.stickies.subscription import sync_subscription_setup
 from bot.core.clients.profile_sync import refresh_client_profile_message
 from bot.core.clients.rectification import rectify_client_permissions
 from bot.core.clients.resources import resolve_client_category
@@ -17,7 +18,6 @@ from bot.core.clients.subscription import (
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
-from bot.core.stickies.subscription_setup_sticky import sync_subscription_setup
 from bot.core.views import ViewRegistry
 
 if TYPE_CHECKING:

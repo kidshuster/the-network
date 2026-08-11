@@ -11,13 +11,13 @@ from bot.core.clients.resources import (
     fetch_subscribe_channel,
     resolve_client_profile_channel,
 )
-from bot.core.models.client import Client
-from bot.core.models.client_subscription import ClientSubscription
-from bot.core.models.network import Network
-from bot.core.stickies.subscription_setup import (
+from bot.core.clients.setup_state import (
     SubscriptionSetupState,
     resolve_setup_state,
 )
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
 from bot.core.views import ViewRegistry
 
 if TYPE_CHECKING:
@@ -153,7 +153,7 @@ def build_moderation_embed(
     subscribe_mention: str = "",
 ) -> discord.Embed:
     from bot.core.clients.names import slugify_client_name
-    from bot.presentation import render_embed
+    from bot.core.templates import render_embed
 
     client_slug = slugify_client_name(client_server_name)
     if setup_state is not None and not setup_state.fully_configured:

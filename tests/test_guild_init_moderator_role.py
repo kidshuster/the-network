@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.recipes.hub.initialize import GuildInitResult, _ensure_human_moderator_role
+from bot.widgets.recipes.hub.initialize import GuildInitResult, _ensure_human_moderator_role
 
 
 @pytest.mark.asyncio

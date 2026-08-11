@@ -19,12 +19,14 @@ def _imports_outer_workflows(source: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module and node.module.startswith(
-                ("bot.ui", "bot.adapters", "bot.recipes", "bot.smoke")
+                ("bot.widgets", "bot.adapters", "bot.smoke")
             ):
                 violations.append(f"from {node.module}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith(("bot.ui", "bot.adapters", "bot.recipes", "bot.smoke")):
+                if alias.name.startswith(
+                    ("bot.widgets", "bot.adapters", "bot.smoke")
+                ):
                     violations.append(f"import {alias.name}")
     return violations
 
@@ -52,7 +54,7 @@ def test_bot_modules_import_cleanly() -> None:
 
 def test_retired_yaml_recipe_runtime_does_not_return() -> None:
     package = Path(bot.__file__).resolve().parent
-    recipes = package / "recipes"
+    recipes = package / "widgets" / "recipes"
     assert not list(recipes.rglob("*.yaml"))
     assert not (recipes / "engine.py").exists()
     assert not (recipes / "loader.py").exists()
@@ -80,7 +82,10 @@ def test_discord_event_adapters_dispatch_through_recipe_registry() -> None:
     assert 'recipe_registry.dispatch("discord.webhooks_update"' in event_adapter
 
 
-def test_legacy_cogs_and_messages_packages_are_removed() -> None:
+def test_legacy_packages_are_removed() -> None:
     package = Path(bot.__file__).resolve().parent
-    assert not list((package / "cogs").glob("*.py"))
-    assert not list((package / "messages").glob("*.py"))
+    for retired in ("cogs", "messages", "presentation", "recipes", "ui"):
+        assert not list((package / retired).glob("*.py"))
+    assert not (package / "core" / "layout").exists()
+    assert not (package / "core" / "stickies").exists()
+    assert not (package / "core" / "integrations").exists()

@@ -9,7 +9,7 @@ import discord
 
 from bot.constants import DEGRADED_FALLBACK
 from bot.core.models.client import Client
-from bot.presentation.loader import relay_embed_spec, resolve_colour
+from bot.core.templates import relay_embed_spec, resolve_colour
 
 logger = logging.getLogger(__name__)
 

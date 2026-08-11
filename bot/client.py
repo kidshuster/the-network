@@ -12,12 +12,11 @@ from bot.core.clients.cache import ClientCache
 from bot.core.database import migrations
 from bot.core.database.connection import Database
 from bot.core.database.store import Store
-from bot.core.integrations.topgg import TopggService
 from bot.core.networks.routing import RoutingService
 from bot.core.relay.service import RelayService
 from bot.core.runtime import BotContext
 from bot.core.settings import BotSettingsService
-from bot.recipes import RecipeRegistry, build_recipe_registry
+from bot.widgets.recipes import RecipeRegistry, build_recipe_registry
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -38,7 +37,6 @@ class NetworkRelayBot(commands.Bot):
         self.bot_context: BotContext | None = None
         self.recipe_registry: RecipeRegistry = build_recipe_registry(self)
         self.schema_version: int = 0
-        self._topgg: TopggService | None = None
         self._slash_sync_started = False
         self._subscription_setup_synced = False
         self._changelog_synced = False
@@ -81,11 +79,13 @@ class NetworkRelayBot(commands.Bot):
         register_recipe_commands(self)
         register_recipe_events(self)
 
-        from bot.core.layout import validate_all_layouts
-        from bot.presentation import validate_all_templates
+        from bot.channels.layout import validate_all_layouts
+        from bot.channels.stickies import validate_sticky_catalog
+        from bot.widgets import validate_all_templates
 
         validate_all_templates()
         validate_all_layouts()
+        validate_sticky_catalog()
 
         await self._register_persistent_views()
 
@@ -140,13 +140,9 @@ class NetworkRelayBot(commands.Bot):
             },
         )
 
-        if self.settings.topgg_token and self._topgg is None:
-            self._topgg = TopggService(self, self.settings.topgg_token)
-            await self._topgg.start()
-
         if context is not None and not self._subscription_setup_synced:
-            from bot.core.stickies.subscription_setup_sticky import sync_all_subscription_setups
-            from bot.ui.persistent_views import PersistentViewRegistry
+            from bot.channels.stickies.subscription import sync_all_subscription_setups
+            from bot.widgets.views.persistent_views import PersistentViewRegistry
 
             try:
                 synced = await sync_all_subscription_setups(
@@ -178,9 +174,9 @@ class NetworkRelayBot(commands.Bot):
         if context is None:
             return
 
-        from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
-        from bot.ui.network_admin_views import NetworkAdminView
-        from bot.ui.network_views import (
+        from bot.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
+        from bot.widgets.views.network_admin_views import NetworkAdminView
+        from bot.widgets.views.network_views import (
             NetworkProfileView,
             SubscribeSetupView,
             SubscriptionModerationView,
@@ -225,8 +221,5 @@ class NetworkRelayBot(commands.Bot):
                 self.add_view(SubscribeSetupView(self, sub.id, network_key))
 
     async def close(self) -> None:
-        if self._topgg is not None:
-            await self._topgg.close()
-            self._topgg = None
         await self.db.close()
         await super().close()

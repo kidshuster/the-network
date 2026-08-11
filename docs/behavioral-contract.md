@@ -85,7 +85,7 @@ All commands are in **`ServerCog`** (`bot/cogs/servers.py`), group **`/server`**
 
 **Context commands:** none.
 
-Custom IDs use prefix `tn:` (`bot/ui/custom_ids.py`).
+Custom IDs use prefix `tn:` (`bot/widgets/views/custom_ids.py`).
 
 ### Buttons
 
@@ -306,7 +306,7 @@ Approve: full client provision, role grant, leaders access, DM requester, edit r
 
 ## 8. Message formatting, templates, embeds
 
-### Template system (`bot/messages/`)
+### Template system (`bot/widgets/templates/` and `bot/channels/templates/`)
 
 | Kind | Output |
 |------|--------|
@@ -484,7 +484,6 @@ Idempotency: skip if hash unchanged and emoji exists.
 
 - Slash sync (30s timeout)
 - Guild visibility check
-- Top.gg service start
 - `sync_all_subscription_setups()`
 - `sync_changelog_on_ready()`
 

@@ -10,8 +10,8 @@ from subscription_helpers import make_client_subscription
 
 from bot.core.models.client import Client
 from bot.core.models.network import Network
-from bot.presentation import render_text
-from bot.ui.network_views import (
+from bot.widgets import render_text
+from bot.widgets.views.network_views import (
     NetworkProfileView,
     SubscriptionModerationView,
     handle_subscribe_connected,
@@ -74,7 +74,7 @@ async def test_subscribe_button_success_renders_subscribe_success_embed(
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.core.stickies.subscription_setup_sticky.sync_subscription_setup",
+        "bot.channels.stickies.subscription.sync_subscription_setup",
         AsyncMock(),
     )
 
@@ -276,7 +276,7 @@ async def test_subscribe_button_allows_manage_guild_without_client_role(
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.core.stickies.subscription_setup_sticky.sync_subscription_setup",
+        "bot.channels.stickies.subscription.sync_subscription_setup",
         AsyncMock(),
     )
 

@@ -203,7 +203,7 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
     guild.create_text_channel = AsyncMock(side_effect=[channel, publish_channel])
 
     monkeypatch.setattr(
-        "bot.core.hub.resolve.resolve_human_moderator_role",
+        "bot.channels.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
@@ -214,7 +214,7 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
         "bot.core.networks.roles.validate_provision_permissions",
         MagicMock(),
     )
-    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     batch = BatchApplyResult(
         results=[
@@ -239,7 +239,7 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
         ]
     )
     monkeypatch.setattr(
-        "bot.core.layout.apply_layout",
+        "bot.channels.layout.apply_layout",
         AsyncMock(return_value=batch),
     )
 
@@ -300,10 +300,10 @@ async def test_verify_provision_permissions_live_fails_at_profile_channel_50013(
     guild.create_role = AsyncMock(return_value=client_role)
     guild.create_category = AsyncMock(return_value=category)
 
-    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     monkeypatch.setattr(
-        "bot.core.hub.resolve.resolve_human_moderator_role",
+        "bot.channels.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
@@ -315,7 +315,7 @@ async def test_verify_provision_permissions_live_fails_at_profile_channel_50013(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.core.layout.apply_layout",
+        "bot.channels.layout.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[

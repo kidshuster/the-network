@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.config import Settings
-from bot.core.clients.names import slugify_client_name
-from bot.core.hub.leaders import ensure_leaders_channels
-from bot.core.hub.resolve import (
+from bot.channels.layout import LayoutContext, compile_client, compile_hub
+from bot.channels.layout.compiler import ResourceKind
+from bot.channels.layout.managed import hub_category_names, preserved_channel_names
+from bot.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CHANNEL_CHANGELOG,
@@ -20,19 +20,19 @@ from bot.core.hub.resolve import (
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.core.layout import LayoutContext, compile_client, compile_hub
-from bot.core.layout.compiler import ResourceKind
-from bot.core.layout.managed import hub_category_names, preserved_channel_names
+from bot.config import Settings
+from bot.core.clients.names import slugify_client_name
+from bot.core.hub.leaders import ensure_leaders_channels
 from bot.core.networks.roles import (
     resolve_access_role,
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
-from bot.recipes.hub.initialize import initialize_guild
 from bot.smoke.constants import SERVER_INIT_PROBE_REASON
 from bot.smoke.provision_flow import run_pre_init_smoke_checks
 from bot.smoke.resource_guard import guild_test_resource_guard
-from bot.ui.persistent_views import PersistentViewRegistry
+from bot.widgets.recipes.hub.initialize import initialize_guild
+from bot.widgets.views.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -300,7 +300,7 @@ async def probe_hub_layout(
         except Exception as exc:
             return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
     else:
-        from bot.core.layout.loader import load_layout
+        from bot.channels.layout.loader import load_layout
 
         for category in load_layout().layout.categories.values():
             for channel in category.channels.values():
@@ -339,7 +339,7 @@ async def probe_hub_announcements(
     settings: Settings,
 ) -> ProbeResult:
     del context, settings
-    from bot.core.hub.resolve import (
+    from bot.channels.resolve import (
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )

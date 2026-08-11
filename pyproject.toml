@@ -37,8 +37,8 @@ include = ["bot*"]
 [tool.setuptools.package-data]
 bot = [
     "changelog/*.yaml",
-    "core/layout/*.yaml",
-    "presentation/**/*.yaml",
+    "channels/**/*.yaml",
+    "widgets/templates/**/*.yaml",
 ]
 
 [tool.pytest.ini_options]

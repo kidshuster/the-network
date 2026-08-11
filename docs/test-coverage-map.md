@@ -159,7 +159,6 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 |----------|-------|----------|
 | Bot client startup | `test_client_startup.py` | ⚠️ |
 | Persistent view registration | `test_client_startup.py` | ⚠️ |
-| Top.gg posting | `test_topgg.py` | ⚠️ |
 | Profile parser | `test_profile_parser.py` | ✅ |
 | Discord API compat | `test_discord_api_compat.py` | ⚠️ |
 

@@ -67,7 +67,7 @@ pip install -e ".[dev]"
 ./bin/start.sh
 ```
 
-Systemd deploy: `./deploy/deploy.sh` (see [`deploy/TOPGG.md`](deploy/TOPGG.md)).
+Systemd deploy: `./deploy/deploy.sh`.
 
 6. In Discord, run `/status` in the configured guild to verify connectivity.
 
@@ -110,12 +110,6 @@ Or manually:
 docker build -t the-network .
 docker run --env-file .env -v "$(pwd)/data:/app/data" --restart unless-stopped -d the-network
 ```
-
-## Deploy & top.gg
-
-See [`deploy/TOPGG.md`](deploy/TOPGG.md) for production hosting and listing on [top.gg](https://top.gg). Listing copy is in [`deploy/topgg-listing.md`](deploy/topgg-listing.md).
-
-Set `TOPGG_TOKEN` in `.env` after creating your bot page so server count stays updated.
 
 ## GitHub
 

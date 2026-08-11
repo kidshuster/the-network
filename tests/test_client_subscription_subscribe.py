@@ -83,7 +83,7 @@ async def test_subscribe_client_creates_missing_channels(
         "bot.core.clients.subscription.resolve_access_role",
         MagicMock(return_value=access),
     )
-    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     monkeypatch.setattr(
         "bot.core.clients.subscription.apply_layout",
@@ -150,7 +150,7 @@ async def test_subscribe_client_rolls_back_on_second_channel_failure(
         MagicMock(return_value=access),
     )
 
-    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     monkeypatch.setattr(
         "bot.core.clients.subscription.apply_layout",

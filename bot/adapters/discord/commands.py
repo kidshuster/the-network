@@ -9,8 +9,8 @@ from discord import app_commands
 from bot.adapters.discord.errors import respond_to_error
 from bot.adapters.discord.responses import defer_ephemeral
 from bot.errors import UserFacingError
-from bot.presentation.presenters import present_result
-from bot.recipes.metadata import RecipeSpec
+from bot.widgets.presenters import present_result
+from bot.widgets.recipes.metadata import RecipeSpec
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

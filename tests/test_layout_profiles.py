@@ -6,10 +6,15 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.core.layout import LayoutContext, compile_client, compile_hub
-from bot.core.layout.compiler import ResourceKind
-from bot.core.layout.loader import clear_layout_cache, load_layout, load_roles, validate_all_layouts
-from bot.core.layout.schema import RoleDefaultsSpec
+from bot.channels.layout import LayoutContext, compile_client, compile_hub
+from bot.channels.layout.compiler import ResourceKind
+from bot.channels.layout.loader import (
+    clear_layout_cache,
+    load_layout,
+    load_roles,
+    validate_all_layouts,
+)
+from bot.channels.layout.schema import RoleDefaultsSpec
 
 
 def _context(*, clients: int = 1, network_key: str | None = "stingers") -> LayoutContext:

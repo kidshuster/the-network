@@ -41,8 +41,6 @@ class Settings(BaseSettings):
         """Backwards-compatible alias for the hub access role."""
         return self.network_access_role_name
 
-    topgg_token: str | None = Field(default=None, alias="TOPGG_TOKEN")
-
     @field_validator(
         "discord_application_id",
         "profile_forum_channel_id",
@@ -54,13 +52,6 @@ class Settings(BaseSettings):
         if value is None or value == "":
             return None
         return value
-
-    @field_validator("topgg_token", mode="before")
-    @classmethod
-    def empty_optional_str(cls, value: object) -> object | None:
-        if value is None or value == "":
-            return None
-        return str(value).strip()
 
     @field_validator("guild_id", mode="before")
     @classmethod

@@ -7,15 +7,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.core.models.client import Client
-from bot.core.models.client_subscription import ClientSubscription
-from bot.core.models.network import Network
-from bot.core.stickies.subscription_setup import SubscriptionSetupState
-from bot.core.stickies.subscription_setup_sticky import (
+from bot.channels.stickies.subscription import (
     _maybe_post_activation_welcome,
     sync_subscription_setup,
 )
-from bot.recipes.onboarding.service import ServerRequestService
+from bot.core.clients.setup_state import SubscriptionSetupState
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
 from bot.smoke.permission_probe import PROBE_PNG
 from bot.smoke.provision_flow import (
     _SmokeProfileAttachment,
@@ -23,7 +22,8 @@ from bot.smoke.provision_flow import (
     ensure_smoke_network_key,
 )
 from bot.smoke.resource_guard import guild_test_resource_guard
-from bot.ui.persistent_views import PersistentViewRegistry
+from bot.widgets.recipes.onboarding.service import ServerRequestService
+from bot.widgets.views.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
+from bot.channels.resolve import CHANNEL_MODERATOR_ONLY, CHANNEL_RULES
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
-from bot.core.hub.resolve import CHANNEL_MODERATOR_ONLY, CHANNEL_RULES
-from bot.recipes.hub.uninitialize import (
+from bot.widgets.recipes.hub.uninitialize import (
     collect_uninit_targets,
     is_deletable_hub_role,
     is_hub_managed_category,
@@ -248,8 +248,8 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
 
     delete_channel = AsyncMock(return_value=True)
     delete_role = AsyncMock(return_value=True)
-    monkeypatch.setattr("bot.recipes.hub.uninitialize.delete_channel", delete_channel)
-    monkeypatch.setattr("bot.recipes.hub.uninitialize.delete_role", delete_role)
+    monkeypatch.setattr("bot.widgets.recipes.hub.uninitialize.delete_channel", delete_channel)
+    monkeypatch.setattr("bot.widgets.recipes.hub.uninitialize.delete_role", delete_role)
     rules.edit = AsyncMock()
 
     result = await uninitialize_guild(guild, bot_member)

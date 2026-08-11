@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.core.clients.names import slugify_client_name
 from bot.core.clients.resources import (
     fetch_client_role,
@@ -14,7 +15,6 @@ from bot.core.clients.resources import (
     resolve_client_profile_channel,
 )
 from bot.core.clients.subscription import resolve_subscription_channels_in_category
-from bot.core.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.core.models.client import Client
 from bot.core.networks.roles import resolve_operator_role_by_name
 

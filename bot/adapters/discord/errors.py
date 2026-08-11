@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Protocol
 import discord
 
 from bot.errors import UserFacingError
-from bot.presentation import render_embed
-from bot.recipes import RecipeRegistryError
+from bot.widgets import render_embed
+from bot.widgets.recipes import RecipeRegistryError
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

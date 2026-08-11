@@ -4,12 +4,12 @@ from collections.abc import Awaitable, Callable
 
 import discord
 
-from bot.constants import LEGACY_MODERATOR_ROLE_NAME
-from bot.core.discord.step_runner import run_guild_step
-from bot.core.hub.resolve import (
+from bot.channels.resolve import (
     CHANNEL_JOIN_REQUESTS,
     resolve_human_moderator_role,
 )
+from bot.constants import LEGACY_MODERATOR_ROLE_NAME
+from bot.core.discord.step_runner import run_guild_step
 from bot.core.hub.result import GuildInitResult
 
 _MODERATOR_GUILD_PERMISSIONS = discord.Permissions(

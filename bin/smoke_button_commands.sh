@@ -21,9 +21,9 @@ from bot.onboarding.server_requests import (
     ServerRequestService,
     build_moderator_request_embed,
 )
-from bot.ui.join_views import JoinNetworkView, ModeratorReviewView
-from bot.ui.network_admin_views import NetworkAdminView
-from bot.ui.network_views import NetworkProfileView
+from bot.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
+from bot.widgets.views.network_admin_views import NetworkAdminView
+from bot.widgets.views.network_views import NetworkProfileView
 
 
 def _assert_command(cog_cls: type, group: str, name: str) -> None:

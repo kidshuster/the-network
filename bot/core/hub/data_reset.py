@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from bot.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
+from bot.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
+from bot.channels.stickies.rules import RULES_STICKY_SETTINGS_KEY
 from bot.core.runtime import BotContext
-from bot.core.stickies.join_requests_sticky import HOW_TO_JOIN_SETTINGS_KEY
-from bot.core.stickies.network_admin_sticky import NETWORK_ADMIN_SETTINGS_KEY
-from bot.core.stickies.rules_sticky import RULES_STICKY_SETTINGS_KEY
 
 logger = logging.getLogger(__name__)
 

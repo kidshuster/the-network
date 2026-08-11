@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.recipes import RecipeRegistryError, build_recipe_registry
+from bot.widgets.recipes import RecipeRegistryError, build_recipe_registry
 
 
 def _bot(*, core: object | None = None) -> SimpleNamespace:

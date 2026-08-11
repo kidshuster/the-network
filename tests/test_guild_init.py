@@ -7,8 +7,8 @@ import pytest
 from discord_helpers import http_50013
 
 from bot.core.models.client import Client
-from bot.recipes.hub.initialize import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
+from bot.widgets.recipes.hub.initialize import initialize_guild
 
 
 def _guild_with_roles(
@@ -84,11 +84,11 @@ def _patch_init_roles(
     human_mod: MagicMock,
 ) -> None:
     monkeypatch.setattr(
-        "bot.recipes.hub.initialize.resolve_access_role_by_name",
+        "bot.widgets.recipes.hub.initialize.resolve_access_role_by_name",
         MagicMock(return_value=access_role),
     )
     monkeypatch.setattr(
-        "bot.recipes.hub.initialize.resolve_operator_role_by_name",
+        "bot.widgets.recipes.hub.initialize.resolve_operator_role_by_name",
         MagicMock(return_value=operator_role),
     )
     monkeypatch.setattr(
@@ -96,7 +96,7 @@ def _patch_init_roles(
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
+        "bot.widgets.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category", "create text channel"),
@@ -167,7 +167,7 @@ async def test_initialize_guild_fails_without_operator_role(
     guild, bot, human_mod, access_role, operator_role = _guild_with_roles()
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     monkeypatch.setattr(
-        "bot.recipes.hub.initialize.resolve_operator_role_by_name",
+        "bot.widgets.recipes.hub.initialize.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
 
@@ -391,11 +391,11 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
         ),
     )
     monkeypatch.setattr(
-        "bot.core.stickies.join_requests_sticky.sync_hub_join_sticky",
+        "bot.channels.stickies.join.sync_hub_join_sticky",
         AsyncMock(return_value=MagicMock(message=None)),
     )
     monkeypatch.setattr(
-        "bot.core.stickies.rules_sticky.sync_rules_sticky",
+        "bot.channels.stickies.rules.sync_rules_sticky",
         AsyncMock(return_value=MagicMock(message=None)),
     )
     for cat in guild.categories:

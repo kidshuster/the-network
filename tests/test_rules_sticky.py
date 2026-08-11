@@ -4,18 +4,18 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.core.hub.resolve import (
+from bot.channels.resolve import (
     join_channel_name,
     resolve_join_requests_channel,
     resolve_network_hub_category,
     resolve_network_join_channel,
 )
-from bot.core.models.network import Network
-from bot.core.stickies.rules_sticky import (
+from bot.channels.stickies.rules import (
     RULES_FOOTER,
     RULES_STICKY_SETTINGS_KEY,
     build_rules_embed,
 )
+from bot.core.models.network import Network
 
 
 def _network(*, join_channel_id: int | None = 501) -> Network:

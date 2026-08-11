@@ -6,21 +6,21 @@ import discord
 import pytest
 from view_registry_helpers import make_test_view_registry
 
-from bot.core.models.client import Client
-from bot.core.models.client_subscription import ClientSubscription
-from bot.core.models.network import Network
-from bot.core.stickies.subscription_setup import (
-    SubscriptionSetupState,
-    derive_network_link_status,
-    is_publish_configured,
-)
-from bot.core.stickies.subscription_setup_sticky import (
+from bot.channels.stickies.subscription import (
     _find_setup_sticky_by_scan,
     _maybe_post_activation_welcome,
     _post_network_member_welcome,
     _sync_publish_setup_sticky,
     _sync_subscribe_setup_sticky,
 )
+from bot.core.clients.setup_state import (
+    SubscriptionSetupState,
+    derive_network_link_status,
+    is_publish_configured,
+)
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
 
 
 @pytest.mark.asyncio
@@ -321,7 +321,7 @@ async def test_network_member_welcome_posts_to_network_announcements(
     context = MagicMock()
     dispatch = AsyncMock(return_value=MagicMock(success=True, errors=()))
     monkeypatch.setattr(
-        "bot.core.hub.resolve.resolve_network_announcements_channel",
+        "bot.channels.resolve.resolve_network_announcements_channel",
         lambda guild: channel,
     )
     monkeypatch.setattr("bot.core.hub.announcements.dispatch_system_announcement", dispatch)

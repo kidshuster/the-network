@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
+from bot.channels.resolve import resolve_human_moderator_role
 from bot.core.clients.names import (
     build_client_profile_channel_base,
     build_client_publish_channel_base,
@@ -27,8 +29,6 @@ from bot.core.clients.resources import (
     resolve_client_resources,
 )
 from bot.core.database.store import ClientStore, NetworkStore
-from bot.core.hub.resolve import resolve_human_moderator_role
-from bot.core.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
@@ -575,7 +575,7 @@ async def resync_subscriptions_for_network(
     access_role_name: str,
     view_registry: ViewRegistry,
 ) -> int:
-    from bot.core.stickies.subscription_setup_sticky import sync_subscription_setup
+    from bot.channels.stickies.subscription import sync_subscription_setup
 
     bot_member = guild.me
     if bot_member is None:

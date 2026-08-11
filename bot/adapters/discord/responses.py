@@ -5,7 +5,7 @@ from typing import Any
 
 import discord
 
-from bot.presentation import render_embed, render_text
+from bot.widgets import render_embed, render_text
 
 logger = logging.getLogger(__name__)
 

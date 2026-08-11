@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 
 from bot.adapters.discord.commands import register_recipe_commands
-from bot.recipes.metadata import CommandSpec, RecipeSpec
+from bot.widgets.recipes.metadata import CommandSpec, RecipeSpec
 
 
 def _bot() -> MagicMock:

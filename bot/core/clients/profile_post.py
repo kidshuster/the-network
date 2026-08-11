@@ -3,7 +3,7 @@ from __future__ import annotations
 import discord
 
 from bot.core.relay.formatter import sanitize_author
-from bot.presentation import render_embed
+from bot.core.templates import render_embed
 
 PROFILE_CARD_FOOTER = "The Network • client profile • use Edit Profile or network buttons below"
 

@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.adapters.discord.checks import ensure_manage_guild
-from bot.presentation import render_text
+from bot.widgets import render_text
 
 
 @pytest.mark.asyncio
