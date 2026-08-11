@@ -125,3 +125,11 @@ def test_test_tree_separates_unit_and_live_code() -> None:
     assert root_python == ["__init__.py"]
     assert list((tests_root / "unit").glob("test_*.py"))
     assert not list((tests_root / "live").glob("test_*.py"))
+
+
+def test_live_orchestration_is_recipe_driven() -> None:
+    live_root = Path(__file__).resolve().parents[1] / "live"
+    assert not (live_root / "suite.py").exists()
+    assert not (live_root / "smoke_server_init.sh").exists()
+    assert list((live_root / "recipes").glob("*.yaml"))
+    assert (live_root / "runner.py").exists()

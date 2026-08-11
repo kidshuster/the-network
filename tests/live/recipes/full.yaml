@@ -1,0 +1,21 @@
+name: full
+description: Complete production-behavior smoke test in one Discord session
+steps:
+  - artifacts.cleanup
+  - probe: permissions.provision
+    pause: true
+  - probe: onboarding.join_approval
+    pause: true
+  - probe: relay.setup_welcome
+    pause: true
+  - probe: relay.hub_announcement
+    pause: true
+  - probe: hub.rebuild
+    pause: true
+  - recipe: functional
+  - clients.protected
+finally:
+  - probe: artifacts.teardown
+    protect_clients: false
+  - clients.protected
+

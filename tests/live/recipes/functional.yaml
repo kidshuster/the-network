@@ -1,0 +1,14 @@
+name: functional
+description: Permission and layout rectification checks used by the full suite
+steps:
+  - hub.operator
+  - hub.manage_server
+  - hub.moderator_channel
+  - hub.layout
+  - hub.announcement_channel
+  - probe: hub.leaders_drift
+    pause: true
+  - probe: hub.client_layout_reinit
+    pause: true
+  - hub.leaders_access
+

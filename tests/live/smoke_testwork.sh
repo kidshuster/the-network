@@ -9,12 +9,11 @@ export PYTHONUNBUFFERED=1
 
 RESTART_BOT=1
 CHECK_QUOTA=0
-RUN_STRESS=0
 for arg in "$@"; do
   case "$arg" in
     --no-restart) RESTART_BOT=0 ;;
     --check-quota) CHECK_QUOTA=1 ;;
-    --stress) RUN_STRESS=1 ;;
+    --stress) RECIPE="stress" ;;
     --skip-quota-check) CHECK_QUOTA=0 ;; # Backward-compatible no-op.
     -h|--help)
       cat <<'EOF'
@@ -22,24 +21,30 @@ Usage: tests/live/smoke_testwork.sh [--no-restart] [--check-quota] [--stress]
 
 Primary Testwork entry point. All live Discord probes live under tests/live/.
 
-Runs one consolidated live session covering permissions, provisioning, recipes,
-relay behavior, layout rectification, hub rebuild, and protected-client survival.
+Runs the YAML `full` recipe in one Discord session. Use `--stress` to run the
+destructive rectification recipe instead.
 
 Options:
   --check-quota  Destructive six-call bucket diagnostic (off by default)
-  --stress       After the suite, also run server-init burn-in probes
+  --stress       Run the server-init burn-in recipe instead of the full recipe
   --no-restart   Leave the bot stopped when finished (default for ./test --full)
 
-Related entry points (also under tests/live/):
+Targeted entry points:
+  python -m tests.live.runner list
+  python -m tests.live.runner probe hub.layout
+  python -m tests.live.runner recipe audit
+
+Related entry points:
   smoke_cleanup_artifacts.sh   Pre-flight stale artifact cleanup
   smoke_check_quota.sh         Rate-limit bucket diagnostic
-  smoke_server_init.sh         Audit / leaders / stress probes alone
 EOF
       exit 0
       ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+RECIPE="${RECIPE:-full}"
 
 if pgrep -f "python -m bot.main" >/dev/null 2>&1; then
   echo "Stopping running bot..." >&2
@@ -51,15 +56,8 @@ if [[ "$CHECK_QUOTA" -eq 1 ]]; then
   "$ROOT/tests/live/smoke_check_quota.sh"
 fi
 
-python -m tests.live.suite
-echo "OK: consolidated live suite passed"
-
-if [[ "$RUN_STRESS" -eq 1 ]]; then
-  echo ""
-  echo "==> server-init stress burn-in"
-  "$ROOT/tests/live/smoke_server_init.sh" --stress
-  echo "OK: server-init stress passed"
-fi
+python -m tests.live.runner recipe "$RECIPE"
+echo "OK: live recipe '$RECIPE' passed"
 
 if [[ "$RESTART_BOT" -eq 1 ]]; then
   nohup python -m bot.main > /tmp/the-network-bot.log 2>&1 &
