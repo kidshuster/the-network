@@ -1,4 +1,0 @@
-# Local image override (used when PUBLISH_LOCAL=1 during bin/package.sh)
-services:
-  the-network:
-    image: the-network:__IMAGE_TAG__

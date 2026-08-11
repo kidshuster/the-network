@@ -345,9 +345,8 @@ def _probe_failure_detail(exc: BaseException) -> tuple[str, str]:
         failure = f"Discord rate limit.{wait_hint}"
         guidance = (
             "Too many smoke/probe runs hit the guild **role-creation** bucket. "
-            "Wait for the retry window, then rerun — or use "
-            "`tests/live/smoke_cleanup_artifacts.sh` "
-            "and avoid back-to-back full suites."
+            "Wait for the retry window, then rerun — or run "
+            "`tests/live/smoke_cleanup_artifacts.sh` and avoid back-to-back full suites."
         )
         return failure, guidance
     if isinstance(exc, discord.HTTPException):

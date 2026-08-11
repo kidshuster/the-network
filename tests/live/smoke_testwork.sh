@@ -9,23 +9,31 @@ export PYTHONUNBUFFERED=1
 
 RESTART_BOT=1
 CHECK_QUOTA=0
+RUN_STRESS=0
 for arg in "$@"; do
   case "$arg" in
     --no-restart) RESTART_BOT=0 ;;
     --check-quota) CHECK_QUOTA=1 ;;
+    --stress) RUN_STRESS=1 ;;
     --skip-quota-check) CHECK_QUOTA=0 ;; # Backward-compatible no-op.
     -h|--help)
       cat <<'EOF'
-Usage: tests/live/smoke_testwork.sh [--no-restart] [--check-quota]
+Usage: tests/live/smoke_testwork.sh [--no-restart] [--check-quota] [--stress]
+
+Primary Testwork entry point. All live Discord probes live under tests/live/.
 
 Runs one consolidated live session covering permissions, provisioning, recipes,
 relay behavior, layout rectification, hub rebuild, and protected-client survival.
 
---check-quota runs a destructive six-call bucket diagnostic. It is normally
-omitted to preserve Discord mutation quota.
+Options:
+  --check-quota  Destructive six-call bucket diagnostic (off by default)
+  --stress       After the suite, also run server-init burn-in probes
+  --no-restart   Leave the bot stopped when finished (default for ./test --full)
 
-For repeated destructive burn-in only, run:
-  tests/live/smoke_server_init.sh --stress
+Related entry points (also under tests/live/):
+  smoke_cleanup_artifacts.sh   Pre-flight stale artifact cleanup
+  smoke_check_quota.sh         Rate-limit bucket diagnostic
+  smoke_server_init.sh         Audit / leaders / stress probes alone
 EOF
       exit 0
       ;;
@@ -45,6 +53,13 @@ fi
 
 python -m tests.live.suite
 echo "OK: consolidated live suite passed"
+
+if [[ "$RUN_STRESS" -eq 1 ]]; then
+  echo ""
+  echo "==> server-init stress burn-in"
+  "$ROOT/tests/live/smoke_server_init.sh" --stress
+  echo "OK: server-init stress passed"
+fi
 
 if [[ "$RESTART_BOT" -eq 1 ]]; then
   nohup python -m bot.main > /tmp/the-network-bot.log 2>&1 &

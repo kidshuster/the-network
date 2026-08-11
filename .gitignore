@@ -10,14 +10,23 @@ __pycache__/
 *.egg-info/
 data/*
 !data/.gitkeep
+
+# Legacy generated deploy bundle (removed; install/ submodule owns runtime)
 publish/
 
-# Cursor IDE
-.cursor/
+# Local Cursor / agent workspace (untracked): rules, docs, design archive, foundry work
+cursor/
+.cursor
 .cursorignore
 
-# Coordinator / foundry tooling
+# Legacy paths (pre-cursor/ consolidation)
 work/
 doc/
+docs/
+deploy/
 .coordinator-cache/
 **/.coordinator-cache/
+
+# Local agent entry (symlink into cursor/)
+AGENTS.md
+commands.md

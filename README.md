@@ -67,77 +67,66 @@ pip install -e ".[dev]"
 ./bin/start.sh
 ```
 
-Systemd deploy: `./deploy/deploy.sh`.
+Bare-metal systemd (source tree): `./bin/deploy.sh`.
 
 6. In Discord, run `/status` in the configured guild to verify connectivity.
 
 ## Development
 
 ```bash
+git submodule update --init install
+./test --dev                # ruff + mypy + pytest (tests/unit)
+./test --full               # also run tests/live Testwork smoke
 ruff check .
 mypy bot tests/live
 pytest tests/unit
+./bin/test_deploy_bundle.sh # validate install/ submodule
 ```
 
-## Docker
+All pytest tests live under `tests/unit/`; all real-Discord Testwork probes live
+under `tests/live/` (both tracked). Testwork guild IDs/tokens stay in gitignored
+`.env` / `.env.staging` only. Local agent notes live under untracked `cursor/`.
 
-### Local development
+## Install / Docker (production)
+
+Runtime install content lives in the **`install/`** git submodule
+([the-network-install](https://github.com/kidshuster/the-network-install)). Clone that
+repo alone on any host — no application source required.
 
 ```bash
-./bin/package.sh
-docker compose up -d
-docker compose logs -f
+git clone git@github.com:kidshuster/the-network-install.git
+cd the-network-install
+cp .env.example .env   # DISCORD_TOKEN, GUILD_ID
+chmod +x scripts/*.sh
+./scripts/enable.sh
 ```
 
-### Production publish (Docker + deploy repo)
+Images support **amd64** and **arm64** (Pi 4/5 with 64-bit Raspberry Pi OS).
 
-Build a multi-arch image, push to GHCR, and publish the minimal **the-network-run** deploy repo:
+### Publish a release (from this source repo)
 
 ```bash
 docker login ghcr.io
 ./bin/publish.sh
 ```
 
-Options: `--via-ci` (image already on GHCR from git tag), `--skip-image`, `--skip-deploy-repo`.
+This builds/pushes the multi-arch image to GHCR and updates/pushes the `install/`
+submodule (`the-network-install`). Options: `--via-ci`, `--skip-image`, `--skip-install`.
 
-`./bin/package.sh` alone builds the image and writes a runnable bundle to `./publish/` (gitignored). Use `PUBLISH_LOCAL=1 ./bin/package.sh` to include a local-image compose override for testing without a registry.
+Then commit the submodule pointer here:
 
-On any host (including Raspberry Pi): clone the deploy repo, configure `.env`, and run `./scripts/enable.sh` for systemd + Docker. See [`deploy/RASPBERRY_PI.md`](deploy/RASPBERRY_PI.md).
+```bash
+git add install && git commit -m "Bump install submodule"
+```
 
-Or manually:
+### Local image smoke
 
 ```bash
 docker build -t the-network .
 docker run --env-file .env -v "$(pwd)/data:/app/data" --restart unless-stopped -d the-network
 ```
 
-## GitHub
+## Local agent workspace
 
-GitHub stores code and runs CI — it does **not** host the live bot. See [`deploy/GITHUB.md`](deploy/GITHUB.md) for the repo workflow.
-
-## Raspberry Pi (deploy repo — recommended)
-
-The **the-network-run** deploy repo contains only what you need to run the bot: compose file, env template, lifecycle scripts, and systemd integration. Images are **arm64**-ready (Pi 4/5, 64-bit Raspberry Pi OS).
-
-```bash
-git clone git@github.com:YOUR_USER/the-network-run.git ~/the-network-run
-cd ~/the-network-run
-cp .env.example .env   # DISCORD_TOKEN, GUILD_ID
-chmod +x scripts/*.sh
-./scripts/enable.sh
-```
-
-Full guide: [`deploy/RASPBERRY_PI.md`](deploy/RASPBERRY_PI.md)
-
-### Alternative: pull from GHCR manually
-
-```bash
-export GITHUB_USER=kidshuster
-export IMAGE_TAG=1.1.0
-docker compose -f docker-compose.release.yml pull
-docker compose -f docker-compose.release.yml up -d
-```
-
-## Project docs
-
-Planning artifacts live under `doc/` (design spec, architecture, wireframes). Implementation follows `doc/plan.md` phases 1–8.
+Design archives, Cursor rules, and agent notes live under untracked `cursor/`
+(symlinked as `.cursor` for IDE discovery). They are not part of the published repo.

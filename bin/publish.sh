@@ -7,10 +7,9 @@ cd "$ROOT"
 VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
 GITHUB_USER="${GITHUB_USER:-kidshuster}"
 REGISTRY_IMAGE="ghcr.io/${GITHUB_USER}/the-network"
-PUBLISH_DIR="${THE_NETWORK_PUBLISH_DIR:-${ROOT}/publish}"
-DEPLOY_REPO="${THE_NETWORK_DEPLOY_REPO:-git@github.com:${GITHUB_USER}/the-network-install.git}"
+INSTALL_DIR="${THE_NETWORK_INSTALL_DIR:-${ROOT}/install}"
 VIA_CI=0
-SKIP_DEPLOY_REPO=0
+SKIP_INSTALL=0
 SKIP_IMAGE_PUSH=0
 
 # shellcheck source=lib/docker.sh
@@ -20,20 +19,18 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Build the deploy bundle, push the Docker image to GHCR, and push publish/ to the
-deploy repo (the-network-install).
+Build/push the Docker image to GHCR and update the install/ submodule
+(the-network-install) with the new version tag.
 
 Options:
-  --via-ci           Skip local image push (use after git tag + GitHub Actions)
-  --skip-image       Skip image push (bundle + deploy repo only)
-  --skip-deploy-repo Skip pushing publish/ to THE_NETWORK_DEPLOY_REPO
-  -h, --help         Show this help
+  --via-ci         Skip local image push (use after git tag + GitHub Actions)
+  --skip-image     Skip image push (update install submodule only)
+  --skip-install   Skip install submodule commit/push
+  -h, --help       Show this help
 
 Environment:
   GITHUB_USER              GHCR namespace (default: kidshuster)
-  THE_NETWORK_DEPLOY_REPO  Deploy repo git remote
-  THE_NETWORK_PUBLISH_DIR  Output directory (default: ./publish)
-  PUBLISH_LOCAL            Pass to package.sh to use local image in bundle
+  THE_NETWORK_INSTALL_DIR  Install submodule path (default: ./install)
 
 Examples:
   ./bin/publish.sh
@@ -53,8 +50,13 @@ while [[ $# -gt 0 ]]; do
       SKIP_IMAGE_PUSH=1
       shift
       ;;
+    --skip-install)
+      SKIP_INSTALL=1
+      shift
+      ;;
     --skip-deploy-repo)
-      SKIP_DEPLOY_REPO=1
+      # Backward-compatible alias
+      SKIP_INSTALL=1
       shift
       ;;
     -h | --help)
@@ -69,15 +71,48 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${VIA_CI}" -eq 0 && "${SKIP_IMAGE_PUSH}" -eq 0 ]]; then
-  export PUBLISH_LOCAL=0
-  "${ROOT}/bin/package.sh"
-else
-  export PUBLISH_LOCAL=0
-  "${ROOT}/bin/package.sh"
+if [[ ! -d "${INSTALL_DIR}/.git" && ! -f "${INSTALL_DIR}/.git" ]]; then
+  echo "Missing install submodule at ${INSTALL_DIR}." >&2
+  echo "Run: git submodule update --init install" >&2
+  exit 1
 fi
 
+update_install_bundle() {
+  local version="$1"
+  local user="$2"
+  local image="ghcr.io/${user}/the-network:${version}"
+
+  echo "${version}" >"${INSTALL_DIR}/VERSION"
+
+  cat >"${INSTALL_DIR}/docker-compose.yml" <<EOF
+# The Network — runtime compose
+services:
+  the-network:
+    image: ${image}
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+EOF
+
+  if [[ -f "${INSTALL_DIR}/README.md" ]]; then
+    sed -i \
+      -e "s|ghcr.io/[^/]*/the-network:[0-9][^[:space:]\`]*|${image}|g" \
+      -e "s|git@github.com:[^/]*/the-network-install.git|git@github.com:${user}/the-network-install.git|g" \
+      -e "s|https://github.com/[^/]*/the-network-install|https://github.com/${user}/the-network-install|g" \
+      -e "s|https://github.com/[^/]*/the-network)|https://github.com/${user}/the-network)|g" \
+      "${INSTALL_DIR}/README.md"
+  fi
+
+  rm -f "${INSTALL_DIR}/docker-compose.local.yml"
+}
+
 if [[ "${SKIP_IMAGE_PUSH}" -eq 0 ]]; then
+  echo "Building local image tag the-network:${VERSION}..."
+  require_docker_cli || exit 1
+  docker build -t "the-network:${VERSION}" -t the-network:latest .
+
   echo ""
   echo "Pushing multi-arch image to ${REGISTRY_IMAGE}..."
   require_docker_buildx || exit 1
@@ -97,58 +132,39 @@ if [[ "${SKIP_IMAGE_PUSH}" -eq 0 ]]; then
     .
   echo "Pushed ${REGISTRY_IMAGE}:${VERSION} and :latest"
 elif [[ "${VIA_CI}" -eq 1 ]]; then
-  echo ""
   echo "Skipping image push (--via-ci). Ensure GitHub Actions published ${REGISTRY_IMAGE}:${VERSION}."
+else
+  echo "Skipping image push (--skip-image)."
 fi
 
-if [[ "${SKIP_DEPLOY_REPO}" -eq 1 ]]; then
+if [[ "${SKIP_INSTALL}" -eq 1 ]]; then
   echo ""
-  echo "Skipping deploy repo push (--skip-deploy-repo)."
+  echo "Skipping install submodule update (--skip-install)."
   exit 0
 fi
 
-if [[ ! -d "${PUBLISH_DIR}" ]]; then
-  echo "Missing publish directory at ${PUBLISH_DIR}" >&2
-  exit 1
-fi
-
 echo ""
-echo "Publishing deploy bundle to ${DEPLOY_REPO}..."
+echo "Updating install submodule for ${VERSION}..."
+update_install_bundle "${VERSION}" "${GITHUB_USER}"
 
-WORK="$(mktemp -d)"
-trap 'rm -rf "${WORK}"' EXIT
-
-if git ls-remote "${DEPLOY_REPO}" HEAD >/dev/null 2>&1; then
-  git clone --depth 1 "${DEPLOY_REPO}" "${WORK}/repo"
+git -C "${INSTALL_DIR}" add -A
+if git -C "${INSTALL_DIR}" diff --cached --quiet; then
+  echo "Install submodule unchanged; nothing to commit."
 else
-  echo "Deploy repo not found at ${DEPLOY_REPO}; initializing new repo."
-  mkdir -p "${WORK}/repo"
-  git -C "${WORK}/repo" init -b main
-  git -C "${WORK}/repo" remote add origin "${DEPLOY_REPO}"
-fi
-
-rsync -a --delete \
-  --exclude '.git' \
-  --exclude '.env' \
-  --exclude 'data/relay.db' \
-  --exclude 'data/*.db' \
-  "${PUBLISH_DIR}/" "${WORK}/repo/"
-
-git -C "${WORK}/repo" add -A
-if git -C "${WORK}/repo" diff --cached --quiet; then
-  echo "Deploy repo unchanged; nothing to commit."
-else
-  git -C "${WORK}/repo" commit -m "Release ${VERSION}"
-  git -C "${WORK}/repo" push -u origin HEAD
-  echo "Deploy repo updated for release ${VERSION}."
+  git -C "${INSTALL_DIR}" commit -m "Release ${VERSION}"
+  git -C "${INSTALL_DIR}" push origin HEAD
+  echo "Pushed install submodule (the-network-install) for ${VERSION}."
 fi
 
 echo ""
 echo "Done."
-echo "  Image:  ${REGISTRY_IMAGE}:${VERSION}"
-echo "  Deploy: ${DEPLOY_REPO}"
+echo "  Image:   ${REGISTRY_IMAGE}:${VERSION}"
+echo "  Install: ${INSTALL_DIR} → the-network-install"
 echo ""
-echo "On Raspberry Pi (or any host):"
-echo "  git clone ${DEPLOY_REPO}"
+echo "Commit the updated submodule pointer in this repo when ready:"
+echo "  git add install && git commit -m \"Bump install submodule to ${VERSION}\""
+echo ""
+echo "On any host:"
+echo "  git clone git@github.com:${GITHUB_USER}/the-network-install.git"
 echo "  cd the-network-install && cp .env.example .env"
 echo "  ./scripts/enable.sh"

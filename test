@@ -27,13 +27,16 @@ session per token). For aggressive probe runs, use a burn-in guild:
   cp .env.example .env.staging   # separate GUILD_ID + DATABASE_PATH
   bin/use-staging-env.sh staging
 
-See docs/smoke-testing.md for rate-limit pacing env vars and workflow.
+Live probes all live under tests/live/ (tracked; never bin/ or bot/). Pytest
+tests all live under tests/unit/ (tracked). Testwork IDs stay in gitignored
+.env / .env.staging. Optional local notes: cursor/docs/smoke-testing.md.
 
 Examples:
   ./test              # same as ./test --dev
   ./test --dev
   ./test --full
-  SMOKE_STEP_DELAY_SEC=12 ./test --full
+  ./test --full --check-quota
+  SMOKE_PHASE_DELAY_SEC=12 ./test --full
 EOF
 }
 

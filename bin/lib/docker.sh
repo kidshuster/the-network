@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared Docker CLI checks for bin/package.sh and bin/publish.sh
+# Shared Docker CLI checks for bin/publish.sh
 
 require_docker_cli() {
   if ! command -v docker >/dev/null 2>&1; then
