@@ -153,23 +153,59 @@ def test_app_owns_trigger_entry_catalog() -> None:
     assert "TriggerSpec" in (triggers / "slash.py").read_text(encoding="utf-8")
 
 
-def test_features_widgets_are_yaml_and_presenters_only() -> None:
+def test_features_widgets_have_no_discord_ui_subclasses() -> None:
     widgets = Path(bot.__file__).resolve().parent / "features" / "widgets"
     assert (widgets / "templates").is_dir()
     assert list((widgets / "templates" / "views").glob("*.yaml"))
-    py_files = [path for path in widgets.rglob("*.py") if path.name != "__init__.py"]
-    assert {path.name for path in py_files} == {"presenters.py"}
-    for path in py_files:
+    for path in widgets.rglob("*.py"):
+        if path.name == "__init__.py":
+            continue
         source = path.read_text(encoding="utf-8")
         assert "discord.ui.View" not in source
         assert "discord.ui.Modal" not in source
 
 
-def test_app_owns_declarative_widget_engine() -> None:
+def test_app_owns_widget_renderer_not_interpreter() -> None:
     widgets = Path(bot.__file__).resolve().parent / "app" / "widgets"
-    assert (widgets / "engine.py").is_file()
+    assert (widgets / "renderer.py").is_file()
     assert (widgets / "registry.py").is_file()
-    assert "DeclarativeView" in (widgets / "engine.py").read_text(encoding="utf-8")
+    assert not (widgets / "engine.py").exists()
+    assert not (widgets / "policies.py").exists()
+    assert "RenderedView" in (widgets / "dispatch.py").read_text(encoding="utf-8")
+
+
+def test_presentation_templates_forbid_executable_keys() -> None:
+    import yaml
+
+    forbidden = {
+        "require",
+        "inject",
+        "store",
+        "finish",
+        "on_success",
+        "on_error",
+        "field_map",
+        "options_from",
+        "foreach",
+        "when",
+        "disabled_when",
+    }
+    root = Path(bot.__file__).resolve().parent / "features" / "widgets" / "templates"
+    offenders: list[str] = []
+
+    def walk(obj: object, path: str) -> None:
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key in forbidden:
+                    offenders.append(f"{path}:{key}")
+                walk(value, path)
+        elif isinstance(obj, list):
+            for value in obj:
+                walk(value, path)
+
+    for file_path in root.rglob("*.yaml"):
+        walk(yaml.safe_load(file_path.read_text()), str(file_path))
+    assert offenders == []
 
 
 def test_legacy_packages_are_removed() -> None:
@@ -305,12 +341,15 @@ def test_widget_presenters_do_not_import_hub_process_modules() -> None:
     hits = [name for name in forbidden if name in source]
     assert hits == []
 
-def test_only_generic_feature_loader_imports_feature_package_from_app() -> None:
+def test_only_composition_roots_import_feature_package_from_app() -> None:
     package = Path(bot.__file__).resolve().parent
     offenders: list[str] = []
-    allowed = package / "app" / "features" / "loader.py"
+    allowed = {
+        (package / "app" / "features" / "loader.py").resolve(),
+        (package / "app" / "bot.py").resolve(),
+    }
     for path in (package / "app").rglob("*.py"):
-        if path == allowed:
+        if path.resolve() in allowed:
             continue
         imports = _imports_forbidden_layer(
             path.read_text(encoding="utf-8"),
@@ -318,4 +357,16 @@ def test_only_generic_feature_loader_imports_feature_package_from_app() -> None:
         )
         if imports:
             offenders.append(f"{path.relative_to(package.parent)}: {', '.join(imports)}")
+    assert offenders == []
+
+
+def test_widget_renderer_does_not_import_features_or_repos() -> None:
+    widgets = Path(bot.__file__).resolve().parent / "app" / "widgets"
+    forbidden = ("bot.features", "bot.core.database", "bot.core.repositories")
+    offenders: list[str] = []
+    for name in ("renderer.py", "loader.py", "schema.py", "custom_id.py", "models.py"):
+        path = widgets / name
+        imports = _imports_forbidden_layer(path.read_text(encoding="utf-8"), forbidden)
+        if imports:
+            offenders.append(f"{name}: {', '.join(imports)}")
     assert offenders == []

@@ -153,15 +153,30 @@ def build_moderation_embed(
 
     client_slug = slugify_client_name(client_server_name)
     if setup_state is not None and not setup_state.fully_configured:
+        needs_publish = not setup_state.publish_configured
+        needs_subscribe = not setup_state.subscribe_confirmed
         return render_embed(
             "subscription_moderation_setup",
             network_display_name=network_display_name,
             network_key=network_key,
-            publish_mention=publish_mention,
-            subscribe_mention=subscribe_mention,
             setup_description=_setup_description(network_key, setup_state),
-            needs_publish="1" if not setup_state.publish_configured else "",
-            needs_subscribe="1" if not setup_state.subscribe_confirmed else "",
+            publish_channel_value=(
+                f"{publish_mention} — **not connected**" if needs_publish else ""
+            ),
+            publish_setup_value=(
+                f"Follow the instruction card in {publish_mention}." if needs_publish else ""
+            ),
+            subscribe_channel_value=(
+                f"{subscribe_mention} — **not connected**" if needs_subscribe else ""
+            ),
+            subscribe_setup_value=(
+                (
+                    f"Follow the instruction card in {subscribe_mention}, then click "
+                    "**Subscribed channel connected** here or there."
+                )
+                if needs_subscribe
+                else ""
+            ),
         )
     return render_embed(
         "subscription_moderation",

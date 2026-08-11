@@ -34,7 +34,22 @@ async def replace_blacklist(
     *,
     subscription_id: int,
     selected_client_ids: list[str] | tuple[str, ...] | set[str],
+    guild: discord.Guild | None = None,
+    member: discord.abc.User | None = None,
+    client: Any = None,
 ) -> int:
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
+
+    if guild is not None:
+        require_hub_guild(recipe_context.bot, guild)
+        if member is not None and client is not None:
+            require_client_member(
+                guild,
+                member,
+                client,
+                popup="client_role_required_subscribe",
+                allow_non_member=True,
+            )
     repo = recipe_context.core.store.clients
     subscription = await repo.get_subscription_by_id(subscription_id)
     if subscription is None or subscription.network_id is None:
@@ -62,11 +77,22 @@ async def create_subscription(
     client: Any,
     network: Any,
     view_registry: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.channels.stickies.subscription import sync_subscription_setup
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.subscription import subscribe_client
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if member is not None:
+        require_client_member(
+            guild,
+            member,
+            client,
+            popup="client_role_required_subscribe",
+            allow_non_member=True,
+        )
     result = await subscribe_client(
         guild,
         bot_member,
@@ -112,10 +138,21 @@ async def leave_subscription(
     subscription: Any,
     network_key: str,
     view_registry: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.subscription import unsubscribe_client
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if member is not None:
+        require_client_member(
+            guild,
+            member,
+            client,
+            popup="client_role_required_subscribe",
+            allow_non_member=True,
+        )
     result = await unsubscribe_client(
         guild,
         bot_member,
@@ -148,9 +185,20 @@ async def confirm_subscription_connected(
     subscription: Any,
     network: Any,
     view_registry: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.channels.stickies.subscription import sync_subscription_setup
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if member is not None:
+        require_client_member(
+            guild,
+            member,
+            client,
+            popup="client_role_required_subscribe",
+            allow_non_member=True,
+        )
     updated = await recipe_context.core.store.clients.set_subscribe_confirmed(
         subscription.id,
         True,

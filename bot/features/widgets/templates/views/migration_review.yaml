@@ -2,33 +2,5 @@ kind: view
 id: migration_review
 timeout: 300
 components:
-  - type: select
-    id: map
-    foreach: ambiguous
-    placeholder: "Map {resource_key}"
-    min_values: 1
-    max_values: 1
-    options_from: item.options
-    custom_id: "hub_migrate:{resource_key}"
-    params:
-      resource_key: item.resource_key
-    action:
-      store:
-        "{resource_key}": select.values.0
-      defer: false
-  - type: button
-    id: confirm
-    label: "Confirm migration"
-    style: danger
-    custom_id: "hub_migrate:confirm"
-    action:
-      finish: confirm
-      defer: false
-  - type: button
-    id: cancel
-    label: Cancel
-    style: secondary
-    custom_id: "hub_migrate:cancel"
-    action:
-      finish: cancel
-      defer: false
+  - slot: ambiguous
+  - slot: actions

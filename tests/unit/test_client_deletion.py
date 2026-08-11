@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from widget_helpers import wire_widget_bot
 
 from bot.app.context import BotContext
 from bot.app.widgets import render_view
@@ -30,7 +31,7 @@ def _make_context(db) -> BotContext:
 
 
 def test_network_profile_view_has_edit_and_delete_buttons() -> None:
-    bot = MagicMock()
+    bot = wire_widget_bot()
     view = render_view("network_profile", bot, client_id=1, network_keys=["stingers"])
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
     assert "Edit Profile" in labels
@@ -38,7 +39,7 @@ def test_network_profile_view_has_edit_and_delete_buttons() -> None:
 
 
 def test_network_profile_view_stays_within_discord_component_limit() -> None:
-    bot = MagicMock()
+    bot = wire_widget_bot()
     network_keys = [f"net{i}" for i in range(30)]
     view = render_view(
         "network_profile",

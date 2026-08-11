@@ -101,7 +101,7 @@ def test_network_created_optional_field() -> None:
         "network_created",
         key="a",
         display_name="A",
-        updated_count=2,
+        updated_count="Refreshed buttons on **2** client profile(s).",
         relinked="",
     )
     assert len(with_update.fields) == 4
@@ -111,7 +111,7 @@ def test_network_created_optional_field() -> None:
         key="a",
         display_name="A",
         updated_count="",
-        relinked="1",
+        relinked="Existing client subscriptions were relinked and forwarding resumed.",
     )
     assert len(relinked.fields) == 4
 

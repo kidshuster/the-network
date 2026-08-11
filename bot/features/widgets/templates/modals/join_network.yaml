@@ -1,19 +1,8 @@
 kind: modal
+id: join_network
 title: "Join the network"
-trigger: request.submit
-require:
-  - hub_guild:
-      popup: hub_guild_only
-inject: [guild, requester, view_registry]
-field_map:
-  name: server_name
-on_success:
-  reply:
-    embed: join_request_submitted
-    map:
-      client_name: params.client_name
 fields:
-  - id: name
+  - id: server_name
     type: text
     label: "Name"
     description: "Your community name on the hub. Shown on relayed messages; editable via Edit Profile."

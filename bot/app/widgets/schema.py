@@ -1,72 +1,102 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+FORBIDDEN_KEYS = frozenset(
+    {
+        "require",
+        "inject",
+        "store",
+        "finish",
+        "on_success",
+        "on_error",
+        "field_map",
+        "options_from",
+        "foreach",
+        "when",
+        "disabled_when",
+        "trigger",
+        "open_modal",
+        "open_view",
+        "reply",
+        "params",
+        "custom_id",
+        "action",
+        "defer",
+    }
+)
 
 
-class ReplySpec(BaseModel):
-    embed: str | None = None
-    popup: str | None = None
-    map: dict[str, str] = Field(default_factory=dict)
-    ephemeral: bool = True
-    edit_message: bool = False
-    clear_view: bool = False
+def reject_forbidden(raw: dict[str, Any], *, where: str) -> None:
+    found = sorted(FORBIDDEN_KEYS.intersection(raw))
+    if found:
+        raise ValueError(f"{where}: forbidden executable keys {found}")
 
 
-class ActionSpec(BaseModel):
-    trigger: str | None = None
-    open_modal: str | None = None
-    open_view: str | None = None
-    reply: ReplySpec | None = None
-    on_success: ReplySpec | None = None
-    on_error: ReplySpec | None = None
-    require: list[str | dict[str, Any]] = Field(default_factory=list)
-    inject: list[str] = Field(default_factory=list)
-    # Migration / local state helpers
-    store: dict[str, str] | None = None
-    finish: Literal["confirm", "cancel"] | None = None
-    defer: bool = True
-
-
-class ComponentSpec(BaseModel):
-    type: Literal["button", "select"] = "button"
+class StaticButtonSpec(BaseModel):
+    type: Literal["button"] = "button"
     id: str
-    label: str | None = None
+    label: str
     style: str = "secondary"
     row: int | None = None
-    custom_id: str | None = None
+    emoji: str | None = None
     disabled: bool = False
-    disabled_when: str | None = None
-    when: str | None = None
-    foreach: str | None = None
-    params: dict[str, str] = Field(default_factory=dict)
-    action: ActionSpec = Field(default_factory=ActionSpec)
-    # Select
-    placeholder: str | None = None
-    min_values: int = 1
-    max_values: int = 1
-    options_from: str | None = None
+
+
+class SlotSpec(BaseModel):
+    slot: str
 
 
 class ViewTemplateSpec(BaseModel):
     kind: Literal["view"] = "view"
     id: str
     timeout: float | None = None
-    components: list[ComponentSpec] = Field(default_factory=list)
+    components: list[StaticButtonSpec | SlotSpec] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_forbidden(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            reject_forbidden(data, where="view")
+            for index, component in enumerate(data.get("components") or []):
+                if isinstance(component, dict):
+                    reject_forbidden(component, where=f"components[{index}]")
+        return data
 
 
-class ModalOnSuccessSpec(BaseModel):
-    reply: ReplySpec | None = None
+class ModalFieldSpec(BaseModel):
+    id: str
+    type: Literal["text", "file_upload", "short", "paragraph"] = "text"
+    label: str = Field(max_length=45)
+    description: str | None = Field(default=None, max_length=100)
+    placeholder: str | None = None
+    max_length: int = 100
+    required: bool = True
+    max_values: int = 1
 
 
-class ModalTemplateExtras(BaseModel):
-    """Fields layered onto ModalTemplateSpec via widget loading."""
+class ModalTemplateSpec(BaseModel):
+    kind: Literal["modal"] = "modal"
+    id: str | None = None
+    title: str
+    fields: list[ModalFieldSpec]
 
-    require: list[str | dict[str, Any]] = Field(default_factory=list)
-    inject: list[str] = Field(default_factory=list)
-    on_success: ReplySpec | None = None
-    on_error: ReplySpec | None = None
-    field_defaults: dict[str, str] = Field(default_factory=dict)
-    # Map modal field ids → trigger kwargs (default: same names)
-    field_map: dict[str, str] = Field(default_factory=dict)
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_forbidden(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            reject_forbidden(data, where="modal")
+        return data
+
+    @model_validator(mode="after")
+    def _normalize_field_types(self) -> Self:
+        normalized: list[ModalFieldSpec] = []
+        for field in self.fields:
+            field_type = field.type
+            if field_type in ("short", "paragraph"):
+                field_type = "text"
+            normalized.append(field.model_copy(update={"type": field_type}))
+        self.fields = normalized
+        return self

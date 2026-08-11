@@ -9,7 +9,7 @@ class EmbedFieldSpec(BaseModel):
     name: str
     value: str
     inline: bool = False
-    when: str | None = None
+    optional: bool = False
 
 
 class EmbedTemplateSpec(BaseModel):
@@ -42,7 +42,6 @@ class ModalFieldSpec(BaseModel):
 class ModalTemplateSpec(BaseModel):
     kind: Literal["modal"] = "modal"
     title: str
-    trigger: str | None = None
     fields: list[ModalFieldSpec]
 
 

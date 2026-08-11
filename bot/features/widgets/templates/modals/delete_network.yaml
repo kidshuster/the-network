@@ -1,13 +1,6 @@
 kind: modal
+id: delete_network
 title: "Delete network"
-trigger: network.delete
-require: [manage_guild, hub_guild]
-inject: [guild, view_registry]
-on_success:
-  reply:
-    popup: network_deleted
-    map:
-      key: params.key
 fields:
   - id: key
     type: text

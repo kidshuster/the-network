@@ -54,13 +54,6 @@ def _substitute(text: str, ctx: dict[str, Any]) -> str:
     return _PLACEHOLDER_RE.sub(replacer, text)
 
 
-def _field_visible(when: str | None, ctx: dict[str, Any]) -> bool:
-    if when is None:
-        return True
-    substituted = _substitute(when, ctx).strip()
-    return bool(substituted) and substituted not in ("0", "False", "false")
-
-
 def resolve_colour(name: str, ctx: dict[str, Any] | None = None) -> discord.Colour:
     ctx = ctx or {}
     colour_key = str(ctx.get("colour", name))
@@ -141,13 +134,11 @@ def render_embed(name: str, **ctx: Any) -> discord.Embed:
                 author_kwargs["icon_url"] = icon
         embed.set_author(**author_kwargs)
     for field in spec.fields:
-        if not _field_visible(field.when, ctx):
+        name = _substitute(field.name, ctx)
+        value = _substitute(field.value, ctx).strip()
+        if field.optional and not value:
             continue
-        embed.add_field(
-            name=_substitute(field.name, ctx),
-            value=_substitute(field.value, ctx),
-            inline=field.inline,
-        )
+        embed.add_field(name=name, value=value or "\u200b", inline=field.inline)
     if spec.footer is not None:
         embed.set_footer(text=_substitute(spec.footer, ctx))
     return embed

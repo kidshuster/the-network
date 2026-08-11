@@ -12,6 +12,7 @@ from bot.features.recipes.hub.onboarding.service import (
     ServerRequestService,
     SubmitRequestResult,
 )
+from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
 
 @recipe("request.submit")
@@ -25,6 +26,7 @@ async def submit_request(
     view_registry: ViewRegistry,
     display_name: str | None = None,
 ) -> SubmitRequestResult:
+    require_hub_guild(recipe_context.bot, guild)
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
@@ -47,6 +49,8 @@ async def approve_request(
     moderator: discord.Member,
     view_registry: ViewRegistry,
 ) -> ReviewRequestResult:
+    require_hub_guild(recipe_context.bot, guild)
+    require_manage_guild(moderator)
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
@@ -65,7 +69,11 @@ async def deny_request(
     request_id: int,
     moderator: discord.Member,
     view_registry: ViewRegistry,
+    guild: discord.Guild | None = None,
 ) -> ReviewRequestResult:
+    if guild is not None:
+        require_hub_guild(recipe_context.bot, guild)
+    require_manage_guild(moderator)
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,

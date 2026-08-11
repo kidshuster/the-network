@@ -5,7 +5,10 @@ from typing import Any
 
 import discord
 
-from bot.app.widgets.engine import render_view
+from bot.app.widgets import custom_id as codec
+from bot.app.widgets.dispatch import RenderedView
+from bot.app.widgets.models import ActionBinding, ButtonSpec, SelectOptionSpec, SelectSpec
+from bot.app.widgets.renderer import view as render_view
 from bot.core.channels.migration import MigrationPlan
 
 
@@ -25,10 +28,10 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
         color=discord.Color.orange(),
     )
     if plan.ambiguous:
-        lines = []
-        for item in plan.ambiguous:
-            choices = ", ".join(f"#{name}" for name in item.candidate_names)
-            lines.append(f"`{item.resource_key}` ← {choices}")
+        lines = [
+            f"`{item.resource_key}` ← {', '.join(f'#{name}' for name in item.candidate_names)}"
+            for item in plan.ambiguous
+        ]
         embed.add_field(name="Ambiguous maps", value="\n".join(lines)[:1024], inline=False)
     if plan.delete_candidates:
         deletes = ", ".join(f"#{item.name}" for item in plan.delete_candidates)
@@ -37,9 +40,6 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
             value=deletes[:1024],
             inline=False,
         )
-    if plan.preserve_client:
-        preserved = ", ".join(f"#{item.name}" for item in plan.preserve_client[:20])
-        embed.add_field(name="Preserved as client", value=preserved[:1024], inline=False)
     return embed
 
 
@@ -47,60 +47,95 @@ async def present_migration_review(
     interaction: discord.Interaction,
     plan: MigrationPlan,
 ) -> MigrationReviewDecision | None:
-    ambiguous: list[dict[str, Any]] = []
+    selects: list[SelectSpec] = []
     for item in plan.ambiguous[:4]:
-        options = [
-            {
-                "label": name[:100],
-                "value": str(discord_id),
-                "description": f"id {discord_id}"[:100],
-            }
+        options = tuple(
+            SelectOptionSpec(
+                label=name[:100],
+                value=str(discord_id),
+                description=f"id {discord_id}"[:100],
+            )
             for discord_id, name in zip(
                 item.candidate_ids,
                 item.candidate_names,
                 strict=True,
             )
-        ][:25]
+        )[:25]
         if not options:
             continue
-        ambiguous.append(
-            {
-                "resource_key": item.resource_key,
-                "options": options,
-            }
+        selects.append(
+            SelectSpec(
+                id=item.resource_key,
+                placeholder=item.resource_key,
+                options=options,
+                action=ActionBinding(
+                    action="ui.migrate.store",
+                    arguments={"resource_key": item.resource_key},
+                ),
+            )
         )
-    view = render_view(
-        "migration_review",
-        interaction.client,  # type: ignore[arg-type]
-        ambiguous=ambiguous,
-        has_deletes=bool(plan.delete_candidates),
+    actions = (
+        ButtonSpec(
+            id="confirm",
+            label="Confirm",
+            style="danger" if plan.delete_candidates else "primary",
+            action=ActionBinding(action="ui.migrate.confirm"),
+        ),
+        ButtonSpec(
+            id="cancel",
+            label="Cancel",
+            style="secondary",
+            action=ActionBinding(action="ui.migrate.cancel"),
+        ),
     )
-    if plan.delete_candidates:
-        for child in view.children:
-            if getattr(child, "custom_id", None) == "hub_migrate:confirm":
-                child.style = discord.ButtonStyle.danger  # type: ignore[attr-defined]
+    built = render_view(
+        interaction.client,
+        "migration_review",
+        slots={"ambiguous": tuple(selects), "actions": actions},
+    )
+    assert isinstance(built, RenderedView)
+    built.decision = {}
+    resolutions: dict[str, int] = {}
+
+    for child in built.children:
+        if not isinstance(child, discord.ui.Select):
+            continue
+
+        async def _on_select(
+            interaction: discord.Interaction,
+            *,
+            select: discord.ui.Select[Any] = child,
+        ) -> None:
+            binding = codec.decode(select.custom_id or "")
+            key = str(binding.arguments.get("resource_key") or "")
+            raw: dict[str, Any] = (
+                dict(interaction.data) if isinstance(interaction.data, dict) else {}
+            )
+            selected = raw.get("values")
+            values = [str(v) for v in selected] if isinstance(selected, list) else []
+            if key and values:
+                resolutions[key] = int(values[0])
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+
+        child.callback = _on_select  # type: ignore[method-assign]
+
     embed = migration_review_embed(plan)
     if interaction.response.is_done():
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=built, ephemeral=True)
         message = await interaction.original_response()
     else:
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.response.send_message(embed=embed, view=built, ephemeral=True)
         message = await interaction.original_response()
-    await view.wait()
-    if view.decision is None:
+    await built.wait()
+    if built.decision is None:
         try:
             await message.edit(
-                content="Migration review timed out. Server init aborted.",
+                content="Migration review cancelled or timed out.",
                 embed=None,
                 view=None,
             )
         except discord.HTTPException:
             pass
         return None
-    # decision is resolutions dict from finish:confirm
-    resolutions = {
-        key: int(value)
-        for key, value in dict(view.decision).items()
-        if not str(key).startswith("_")
-    }
     return MigrationReviewDecision(resolutions=resolutions, confirm_deletes=True)

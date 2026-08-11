@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from bot.app.widgets.engine import render_view
 from bot.core.clients.setup_state import SubscriptionSetupState
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
@@ -20,18 +19,23 @@ class PersistentViewRegistry:
     def __init__(self, bot: NetworkRelayBot) -> None:
         self._bot = bot
 
+    def _render(self, name: str, **context: Any) -> discord.ui.View:
+        from bot.app.widgets import render_view
+
+        return cast("discord.ui.View", render_view(name, self._bot, **context))
+
     def register_join_network_view(self) -> discord.ui.View:
-        view = render_view("join_network", self._bot)
+        view = self._render("join_network")
         self._bot.add_view(view)
         return view
 
     def register_network_admin_view(self) -> discord.ui.View:
-        view = render_view("network_admin", self._bot)
+        view = self._render("network_admin")
         self._bot.add_view(view)
         return view
 
     def register_moderator_review_view(self, request_id: int) -> discord.ui.View:
-        view = render_view("moderator_review", self._bot, request_id=request_id)
+        view = self._render("moderator_review", request_id=request_id)
         self._bot.add_view(view)
         return view
 
@@ -43,9 +47,8 @@ class PersistentViewRegistry:
         subscribed_keys: set[str] | None = None,
         timecode_enabled: bool = False,
     ) -> discord.ui.View:
-        view = render_view(
+        view = self._render(
             "network_profile",
-            self._bot,
             client_id=client_id,
             network_keys=network_keys,
             subscribed_keys=subscribed_keys or set(),
@@ -59,9 +62,8 @@ class PersistentViewRegistry:
         subscription_id: int,
         network_key: str,
     ) -> discord.ui.View:
-        view = render_view(
+        view = self._render(
             "subscribe_setup",
-            self._bot,
             subscription_id=subscription_id,
             network_key=network_key,
         )
@@ -74,9 +76,8 @@ class PersistentViewRegistry:
         network: Network,
         setup_state: SubscriptionSetupState,
     ) -> discord.ui.View:
-        view = render_view(
+        view = self._render(
             "subscription_moderation",
-            self._bot,
             subscription_id=subscription.id,
             network_key=network.key,
             show_subscribe_connected=not setup_state.subscribe_confirmed,

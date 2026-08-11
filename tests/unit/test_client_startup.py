@@ -8,7 +8,7 @@ from context_helpers import make_test_context
 from bot.app.bot import NetworkRelayBot
 from bot.app.features import build_recipe_registry
 from bot.app.widgets import render_view
-from bot.app.widgets.engine import DeclarativeView
+from bot.app.widgets.dispatch import RenderedView
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,9 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
     pending = await context.store.requests.list_pending()
     assert len(pending) == 1
 
-    bot = MagicMock(spec=NetworkRelayBot)
+    from widget_helpers import wire_widget_bot
+
+    bot = wire_widget_bot(MagicMock(spec=NetworkRelayBot))
     bot.bot_context = context
     added: list[object] = []
     bot.add_view = MagicMock(side_effect=lambda view: added.append(view))
@@ -54,8 +56,8 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
 
     await build_recipe_registry(bot).run("app.register_persistent_views")
 
-    assert all(isinstance(view, DeclarativeView) for view in added)
-    view_ids = {view.spec.id for view in added if isinstance(view, DeclarativeView)}
+    assert all(isinstance(view, RenderedView) for view in added)
+    view_ids = {view.template_id for view in added if isinstance(view, RenderedView)}
     assert view_ids >= {
         "join_network",
         "network_admin",

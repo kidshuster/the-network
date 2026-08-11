@@ -86,9 +86,16 @@ async def delete_client(
     guild: discord.Guild,
     bot_member: discord.Member,
     client: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.deletion import delete_client_resources
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if member is not None:
+        require_client_member(
+            guild, member, client, popup="client_role_required_delete", allow_non_member=True
+        )
     return await delete_client_resources(
         guild,
         bot_member,
@@ -108,9 +115,19 @@ async def edit_client_profile(
     display_name: str,
     profile_image: discord.Attachment | None = None,
     view_registry: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_edit import apply_client_profile_edit
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    client = await recipe_context.core.store.clients.get_by_id(client_id)
+    if client is None:
+        raise ValueError("Client was not found.")
+    if member is not None:
+        require_client_member(
+            guild, member, client, popup="client_role_required_edit", allow_non_member=True
+        )
     return await apply_client_profile_edit(
         recipe_context.bot,
         recipe_context.core,
@@ -129,9 +146,16 @@ async def toggle_client_timecode(
     guild: discord.Guild,
     client: Any,
     view_registry: Any,
+    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
+    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if member is not None:
+        require_client_member(
+            guild, member, client, popup="client_role_required_edit", allow_non_member=True
+        )
     updated = await recipe_context.core.store.clients.set_timecode_enabled(
         client.id,
         not client.timecode_enabled,

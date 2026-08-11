@@ -268,10 +268,12 @@ async def test_network_create_recipe_stops_before_mutation_for_duplicate() -> No
     core = SimpleNamespace(store=SimpleNamespace(networks=networks))
     registry = build_recipe_registry(_bot(core=core))
 
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
     with pytest.raises(RecipeRegistryError, match="network.create") as raised:
         await registry.run(
             "network.create",
-            guild=MagicMock(spec=discord.Guild),
+            guild=guild,
             key="alpha",
             display_name="Alpha",
             view_registry=MagicMock(),
@@ -299,6 +301,7 @@ async def test_network_delete_recipe_refreshes_state_and_profiles(
     )
     registry = build_recipe_registry(_bot(core=core))
     guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
 
     result = await registry.run(
         "network.delete",

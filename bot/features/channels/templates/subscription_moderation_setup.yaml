@@ -1,22 +1,22 @@
 kind: embed
-title: "Moderation — {network_display_name}"
+title: Moderation — {network_display_name}
 colour: dark_grey
-description: "{setup_description}"
+description: '{setup_description}'
 fields:
-  - name: Publish channel
-    value: "{publish_mention} — **not connected**"
-    inline: false
-    when: "{needs_publish}"
-  - name: Publish setup
-    value: "Follow the instruction card in {publish_mention}."
-    inline: false
-    when: "{needs_publish}"
-  - name: Subscribe channel
-    value: "{subscribe_mention} — **not connected**"
-    inline: false
-    when: "{needs_subscribe}"
-  - name: Subscribe setup
-    value: "Follow the instruction card in {subscribe_mention}, then click **Subscribed channel connected** here or there."
-    inline: false
-    when: "{needs_subscribe}"
-footer: "The Network • subscription setup"
+- name: Publish channel
+  value: '{publish_channel_value}'
+  inline: false
+  optional: true
+- name: Publish setup
+  value: '{publish_setup_value}'
+  inline: false
+  optional: true
+- name: Subscribe channel
+  value: '{subscribe_channel_value}'
+  inline: false
+  optional: true
+- name: Subscribe setup
+  value: '{subscribe_setup_value}'
+  inline: false
+  optional: true
+footer: The Network • subscription setup

@@ -18,11 +18,16 @@ async def create_network(
     key: str,
     display_name: str,
     view_registry: Any,
+    moderator: discord.Member | None = None,
 ) -> tuple[Any, int, int]:
     from bot.features.channels.stickies.admin import refresh_network_admin_sticky_from_settings
     from bot.features.recipes.hub.clients.profile_sync import refresh_all_client_profiles
     from bot.features.recipes.hub.clients.subscription import resync_subscriptions_for_network
+    from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if moderator is not None:
+        require_manage_guild(moderator)
     core = recipe_context.core
     existing = await core.store.networks.get_by_key(key)
     if existing is not None:
@@ -57,10 +62,15 @@ async def delete_network(
     guild: discord.Guild,
     key: str,
     view_registry: Any,
+    moderator: discord.Member | None = None,
 ) -> Any:
     from bot.features.channels.stickies.admin import refresh_network_admin_sticky_from_settings
     from bot.features.recipes.hub.clients.profile_sync import refresh_all_client_profiles
+    from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
+    require_hub_guild(recipe_context.bot, guild)
+    if moderator is not None:
+        require_manage_guild(moderator)
     core = recipe_context.core
     network = await core.store.networks.get_by_key(key)
     if network is None:

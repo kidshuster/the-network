@@ -7,6 +7,7 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 from subscription_helpers import make_client_subscription
+from widget_helpers import wire_widget_bot
 
 from bot.app.widgets import render_view
 from bot.core.models.client import Client
@@ -34,7 +35,7 @@ def _client() -> Client:
 
 
 def _bot(context: MagicMock) -> MagicMock:
-    bot = MagicMock()
+    bot = wire_widget_bot()
     bot.bot_context = context
     bot.settings.guild_id = 100
     bot.settings.network_access_role_name = "The Network"
@@ -203,7 +204,7 @@ async def test_subscribe_button_reports_network_not_found() -> None:
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["missing"])
     await _click_label(view, "Join missing", interaction)
 
-    assert interaction.followup.send.await_args.args[0] == render_text(
+    assert interaction.response.send_message.await_args.args[0] == render_text(
         "network_not_found",
         network_key="missing",
     )
@@ -343,9 +344,14 @@ async def test_delete_button_shows_confirm_prompt_for_client_role_holder() -> No
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Delete Client", interaction)
 
-    prompt = interaction.response.send_message.await_args.args[0]
+    kwargs = interaction.response.send_message.await_args.kwargs
+    prompt = kwargs.get("content") or (
+        interaction.response.send_message.await_args.args[0]
+        if interaction.response.send_message.await_args.args
+        else ""
+    )
     assert client.server_name in prompt
-    assert interaction.response.send_message.await_args.kwargs["view"] is not None
+    assert kwargs["view"] is not None
 
 
 @pytest.mark.asyncio
@@ -359,6 +365,8 @@ async def test_leave_network_blocks_without_client_role() -> None:
     context = MagicMock()
     context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
     context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_id = AsyncMock(return_value=None)
+    context.store.networks.get_by_key = AsyncMock(return_value=None)
 
     bot = _bot(context)
     interaction = make_interaction(guild=guild, user=member)
@@ -475,4 +483,6 @@ async def test_subscribe_connected_reports_missing_subscription() -> None:
     )
     await _click_label(view, "Subscribed channel connected", interaction)
 
-    assert interaction.followup.send.await_args.args[0] == render_text("subscription_not_found")
+    assert interaction.response.send_message.await_args.args[0] == render_text(
+        "subscription_not_found"
+    )

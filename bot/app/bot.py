@@ -65,10 +65,43 @@ class NetworkRelayBot(commands.Bot):
 
         return PersistentViewRegistry(self)
 
-    def render_view(self, name: str, **params: Any) -> Any:
-        from bot.app.widgets import render_view
+    def build_widget_view(self, template_id: str, **kwargs: Any) -> Any:
+        from bot.app.widgets import view
 
-        return render_view(name, self, **params)
+        return view(self, template_id, **kwargs)
+
+    def build_widget_modal(self, template_id: str, **kwargs: Any) -> Any:
+        from bot.app.widgets import modal
+
+        return modal(self, template_id, **kwargs)
+
+    def render_named_view(self, name: str, **params: Any) -> Any:
+        from bot.features.widgets.render import render_named_view
+
+        return render_named_view(self, name, **params)
+
+    def render_named_modal(self, name: str, **params: Any) -> Any:
+        from bot.features.widgets.render import render_named_modal
+
+        return render_named_modal(self, name, **params)
+
+    async def build_ui_modal(self, modal_id: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
+        from bot.features.widgets.render import build_ui_modal
+
+        return await build_ui_modal(self, modal_id, arguments, **kwargs)
+
+    async def build_ui_view(self, view_id: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
+        from bot.features.widgets.render import build_ui_view
+
+        return await build_ui_view(self, view_id, arguments, **kwargs)
+
+    async def enrich_widget_trigger(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from bot.features.widgets.bindings import enrich_trigger_payload
+
+        return await enrich_trigger_payload(self, action, payload)
+
+    def render_view(self, name: str, **params: Any) -> Any:
+        return self.render_named_view(name, **params)
 
     async def present_migration_review(self, interaction: Any, plan: Any) -> Any:
         from bot.app.widgets.migration import present_migration_review

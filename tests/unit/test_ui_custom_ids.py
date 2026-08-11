@@ -1,47 +1,31 @@
 from __future__ import annotations
 
-from bot.app.widgets.legacy_ids import (
-    delete_client_button,
-    join_server_button,
-    parse_delete_client_button,
-    parse_join_server_button,
-    parse_profile_edit_button,
-    parse_request_action_button,
-    parse_timecode_toggle_button,
-    profile_edit_button,
-    request_approve_button,
-    request_deny_button,
-    timecode_toggle_button,
-)
+from bot.app.widgets.custom_id import decode, encode
+from bot.app.widgets.models import ActionBinding
 
 
-def test_join_server_custom_id_roundtrip() -> None:
-    custom_id = join_server_button("stingers")
-    assert parse_join_server_button(custom_id) == "stingers"
+def test_action_custom_id_roundtrip() -> None:
+    binding = ActionBinding(
+        action="subscription.create",
+        arguments={"client_id": 12, "network_key": "stingers"},
+    )
+    assert decode(encode(binding)) == binding
 
 
-def test_profile_edit_custom_id_roundtrip() -> None:
-    custom_id = profile_edit_button(12345)
-    assert parse_profile_edit_button(custom_id) == 12345
+def test_ui_modal_custom_id_roundtrip() -> None:
+    binding = ActionBinding(action="ui.modal:join_network")
+    assert decode(encode(binding)).action == "ui.modal:join_network"
 
 
-def test_delete_client_custom_id_roundtrip() -> None:
-    custom_id = delete_client_button(12345)
-    assert parse_delete_client_button(custom_id) == 12345
+def test_legacy_request_custom_ids() -> None:
+    approve = decode("tn:req_approve:9")
+    deny = decode("tn:req_deny:9")
+    assert approve.action == "request.approve"
+    assert approve.arguments["request_id"] == 9
+    assert deny.action == "request.deny"
 
 
-def test_timecode_toggle_custom_id_roundtrip() -> None:
-    custom_id = timecode_toggle_button(12345)
-    assert parse_timecode_toggle_button(custom_id) == 12345
-
-
-def test_network_create_button() -> None:
-    from bot.app.widgets.legacy_ids import network_create_button, network_delete_button
-
-    assert network_create_button() == "tn:network_create"
-    assert network_delete_button() == "tn:network_delete"
-
-
-def test_request_action_custom_ids() -> None:
-    assert parse_request_action_button(request_approve_button(9)) == ("approve", 9)
-    assert parse_request_action_button(request_deny_button(9)) == ("deny", 9)
+def test_legacy_profile_and_delete() -> None:
+    assert decode("tn:profile_edit:123").action == "ui.modal:edit_client_profile"
+    assert decode("tn:delete_client:123").action == "ui.view:delete_client_confirm"
+    assert decode("tn:network_create").action == "ui.modal:create_network"
