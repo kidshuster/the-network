@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.channels.resolve import resolve_network_announcements_channel
+from bot.channels.resolve import HUB_CHANNEL_NETWORK_ANNOUNCEMENTS, resolve_hub_channel
 from bot.core.hub.announcements import dispatch_system_announcement
 from tests.core.provision_flow import ensure_smoke_network_key
 
@@ -26,7 +26,7 @@ async def run_hub_announcements_smoke_flow(
     context: BotContext,
 ) -> HubAnnouncementsSmokeResult:
     """Exercise the direct announcement dispatcher without a synthetic client."""
-    channel = resolve_network_announcements_channel(guild)
+    channel = resolve_hub_channel(guild, HUB_CHANNEL_NETWORK_ANNOUNCEMENTS)
     if channel is None:
         raise RuntimeError("#network-announcements is missing")
     network_key = await ensure_smoke_network_key(context, bot, guild)

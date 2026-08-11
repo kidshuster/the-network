@@ -20,6 +20,7 @@ def _setup():
     channel.id = 700
     channel.overwrites = {}
     channel.edit = AsyncMock()
+    channel.set_permissions = AsyncMock()
     return guild, bot, moderator, access, bot_access, context, channel
 
 
@@ -106,9 +107,29 @@ async def test_reconcile_does_not_mutate_when_role_is_unconfigurable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bulk_failure_keeps_existing_permissions_and_reports_failure() -> None:
+async def test_bulk_failure_falls_back_to_incremental_set_permissions() -> None:
     _, _, _, _, bot_access, context, channel = _setup()
     channel.edit.side_effect = http_50013()
+    desired = discord.PermissionOverwrite(view_channel=True)
+    result = await PermissionService().reconcile(
+        channel,
+        context,
+        {bot_access: desired},
+        managed_targets={bot_access},
+        reason="test",
+    )
+    assert result.success and result.changed and result.verified
+    assert channel.edit.await_count == 1
+    channel.set_permissions.assert_awaited_once_with(
+        bot_access, overwrite=desired, reason="test"
+    )
+
+
+@pytest.mark.asyncio
+async def test_incremental_failure_reports_failure() -> None:
+    _, _, _, _, bot_access, context, channel = _setup()
+    channel.edit.side_effect = http_50013()
+    channel.set_permissions.side_effect = http_50013()
     result = await PermissionService().reconcile(
         channel,
         context,
@@ -119,6 +140,29 @@ async def test_bulk_failure_keeps_existing_permissions_and_reports_failure() -> 
     assert not result.success and not result.changed
     assert result.failures
     assert channel.edit.await_count == 1
+    assert channel.set_permissions.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_failure_on_category_uses_incremental() -> None:
+    _, _, _, _, bot_access, context, _ = _setup()
+    category = MagicMock(spec=discord.CategoryChannel)
+    category.id = 701
+    category.overwrites = {}
+    category.edit = AsyncMock(side_effect=http_50013())
+    category.set_permissions = AsyncMock()
+    desired = discord.PermissionOverwrite(view_channel=True)
+    result = await PermissionService().reconcile(
+        category,
+        context,
+        {bot_access: desired},
+        managed_targets={bot_access},
+        reason="test",
+    )
+    assert result.success and result.changed
+    category.set_permissions.assert_awaited_once_with(
+        bot_access, overwrite=desired, reason="test"
+    )
 
 
 @pytest.mark.asyncio
@@ -133,6 +177,7 @@ async def test_reconcile_stress_cleans_every_owned_subset() -> None:
         channel = MagicMock(spec=discord.TextChannel)
         channel.id = 800
         channel.edit = AsyncMock()
+        channel.set_permissions = AsyncMock()
         current = {
             target: discord.PermissionOverwrite(view_channel=False)
             for target, included in zip(owned, present, strict=True)

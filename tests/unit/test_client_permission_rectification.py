@@ -6,28 +6,37 @@ import discord
 import pytest
 
 from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
-from bot.channels.resolve import resolve_leaders_channel
+from bot.channels.layout.managed import hub_category_name
+from bot.channels.resolve import HUB_CATEGORY_LEADERS, HUB_CHANNEL_LEADERS, resolve_hub_channel
 from bot.core.clients.rectification import rectify_client_permissions
 from bot.core.models.client import Client
 
 
-def test_resolve_leaders_channel_finds_legacy_name_in_leaders_category() -> None:
+def test_resolve_hub_channel_finds_legacy_name_in_leaders_category() -> None:
     guild = MagicMock(spec=discord.Guild)
     guild.text_channels = []
 
     leaders_category = MagicMock(spec=discord.CategoryChannel)
     leaders_category.id = 100
-    leaders_category.name = "Leaders"
+    leaders_category.name = hub_category_name(HUB_CATEGORY_LEADERS)
 
     legacy = MagicMock(spec=discord.TextChannel)
     legacy.id = 200
     legacy.name = "leaders"
     legacy.category_id = 100
+    legacy.is_news = MagicMock(return_value=False)
 
     guild.categories = [leaders_category]
     guild.text_channels = [legacy]
 
-    assert resolve_leaders_channel(guild) is legacy
+    assert (
+        resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_LEADERS,
+            category_id=leaders_category.id,
+        )
+        is legacy
+    )
 
 
 async def test_rectify_client_permissions_syncs_category_and_profile(

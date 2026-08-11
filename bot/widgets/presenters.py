@@ -5,6 +5,7 @@ from typing import Any
 
 import discord
 
+from bot.core.hub.probe import ServerProbeReport
 from bot.core.hub.result import GuildInitResult
 from bot.errors import UserFacingError
 from bot.widgets import render_embed
@@ -37,7 +38,13 @@ def _add_field(embed: discord.Embed, name: str, items: list[str]) -> None:
 def server_init_embed(result: GuildInitResult) -> discord.Embed:
     if not result.success:
         raise UserFacingError(result.reason or "Server initialization failed.")
-    embed = render_embed("server_init_success")
+    from bot.channels.layout.managed import hub_channel_name
+    from bot.channels.resolve import HUB_CHANNEL_COMMANDS
+
+    embed = render_embed(
+        "server_init_success",
+        admin_channel=hub_channel_name(HUB_CHANNEL_COMMANDS),
+    )
     for name, items in (
         ("Categories created", result.created_categories),
         ("Channels created", result.created_channels),
@@ -123,8 +130,35 @@ async def _present_join_guide(response: Any, value: object) -> None:
     )
 
 
+def server_probe_embed(report: ServerProbeReport) -> discord.Embed:
+    embed = render_embed("server_probe_report")
+    passed = [f"**{check.name}**: {check.detail}" for check in report.passed_checks]
+    failed = [f"**{check.name}**: {check.detail}" for check in report.failed_checks]
+    if report.passed:
+        embed.description = (
+            f"All {len(report.checks)} hub health check(s) passed."
+        )
+        embed.colour = discord.Colour.green()
+    else:
+        embed.description = (
+            f"{len(failed)} of {len(report.checks)} check(s) failed. "
+            "Fix the issues below, then re-run `/server probe` or `/server init`."
+        )
+        embed.colour = discord.Colour.gold()
+    _add_field(embed, "Passed", passed)
+    _add_field(embed, "Failed", failed)
+    return embed
+
+
+async def _present_server_probe(response: Any, value: object) -> None:
+    if not isinstance(value, ServerProbeReport):
+        raise TypeError("server.probe returned an invalid result")
+    await response.send(embed=server_probe_embed(value), ephemeral=True)
+
+
 _PRESENTERS: dict[str, Presenter] = {
     "server.init": _present_server_init,
+    "server.probe": _present_server_probe,
     "server.uninit": _present_server_uninit,
     "server.sync_join_guide": _present_join_guide,
 }

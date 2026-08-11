@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.channels.resolve import HUB_CATEGORY_LEADERS, HUB_CHANNEL_CHANGELOG, HUB_CHANNEL_LEADERS
 from tests.core.server_init_probes import (
     _collect_leaders_access_gaps,
     _role_can_view_channel,
@@ -41,6 +42,42 @@ def _client_context(*, roles: list[MagicMock]) -> MagicMock:
     return context
 
 
+def _patch_leaders_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    category: MagicMock,
+    leaders: MagicMock | None,
+    changelog: MagicMock | None,
+) -> None:
+    def fake_resolve_hub_category(_guild: object, category_id: str) -> MagicMock | None:
+        if category_id == HUB_CATEGORY_LEADERS:
+            return category
+        return None
+
+    def fake_resolve_hub_channel(
+        _guild: object,
+        channel_id: str,
+        *,
+        category_id: int | None = None,
+        include_announcement: bool = True,
+    ) -> MagicMock | None:
+        del category_id, include_announcement
+        if channel_id == HUB_CHANNEL_LEADERS:
+            return leaders
+        if channel_id == HUB_CHANNEL_CHANGELOG:
+            return changelog
+        return None
+
+    monkeypatch.setattr(
+        "tests.core.server_init_probes.resolve_hub_category",
+        fake_resolve_hub_category,
+    )
+    monkeypatch.setattr(
+        "tests.core.server_init_probes.resolve_hub_channel",
+        fake_resolve_hub_channel,
+    )
+
+
 @pytest.mark.asyncio
 async def test_collect_leaders_access_gaps_when_all_clients_can_view(
     monkeypatch: pytest.MonkeyPatch,
@@ -57,17 +94,11 @@ async def test_collect_leaders_access_gaps_when_all_clients_can_view(
         channel.overwrites_for.return_value = discord.PermissionOverwrite()
         channel.permissions_for.return_value = discord.Permissions(view_channel=True)
 
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_leaders_category",
-        MagicMock(return_value=category),
-    )
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_leaders_channel",
-        MagicMock(return_value=leaders),
-    )
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_changelog_channel",
-        MagicMock(return_value=changelog),
+    _patch_leaders_layout(
+        monkeypatch,
+        category=category,
+        leaders=leaders,
+        changelog=changelog,
     )
 
     gaps = await _collect_leaders_access_gaps(guild, _client_context(roles=[role_a, role_b]))
@@ -90,17 +121,11 @@ async def test_collect_leaders_access_gaps_reports_missing_leaders_view(
     leaders.overwrites_for.return_value = discord.PermissionOverwrite(view_channel=False)
     leaders.permissions_for.return_value = discord.Permissions(view_channel=False)
 
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_leaders_category",
-        MagicMock(return_value=category),
-    )
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_leaders_channel",
-        MagicMock(return_value=leaders),
-    )
-    monkeypatch.setattr(
-        "tests.core.server_init_probes.resolve_changelog_channel",
-        MagicMock(return_value=None),
+    _patch_leaders_layout(
+        monkeypatch,
+        category=category,
+        leaders=leaders,
+        changelog=None,
     )
 
     gaps = await _collect_leaders_access_gaps(guild, _client_context(roles=[role]))

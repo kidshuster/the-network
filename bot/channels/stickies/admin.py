@@ -88,9 +88,19 @@ async def refresh_network_admin_sticky_from_settings(
     guild: discord.Guild,
     view: discord.ui.View,
 ) -> None:
-    from bot.channels.resolve import resolve_network_admin_channel
+    from bot.channels.resolve import (
+        HUB_CATEGORY_MODERATION,
+        HUB_CHANNEL_COMMANDS,
+        resolve_hub_category,
+        resolve_hub_channel,
+    )
 
-    channel = resolve_network_admin_channel(guild)
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_COMMANDS,
+        category_id=None if mod_category is None else mod_category.id,
+    )
     if channel is None:
         return
 

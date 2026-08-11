@@ -32,6 +32,7 @@ def test_catalog_exposes_stable_public_operations() -> None:
         "relay.deliver",
         "relay.on_message",
         "server.init",
+        "server.probe",
         "server.sync_join_guide",
         "server.uninit",
         "subscription.webhook_updated",
@@ -54,6 +55,7 @@ def test_command_metadata_is_owned_by_recipes() -> None:
 
     assert set(commands) == {
         ("server", "init"),
+        ("server", "probe"),
         ("server", "sync-join-guide"),
         ("server", "uninit"),
     }

@@ -52,6 +52,37 @@ async def initialize_server(
 
 
 @recipe(
+    "server.probe",
+    command=CommandSpec(
+        group="server",
+        name="probe",
+        description="Run read-only checks for hub permissions, layout, and community slots",
+        default_permissions=("manage_guild",),
+        background=True,
+        presenter="server.probe",
+        group_description="Initialize and maintain the Discord hub server",
+    ),
+)
+async def probe_server(
+    recipe_context: RecipeContext, *, interaction: discord.Interaction
+) -> Any:
+    from bot.core.hub.probe import run_server_probe
+
+    guild = interaction.guild
+    if guild is None or guild.id != recipe_context.bot.settings.guild_id:
+        raise UserFacingError("This command can only be used in the configured hub guild.")
+    bot_member = guild.me
+    if bot_member is None:
+        raise UserFacingError("Bot member is unavailable.")
+    return await run_server_probe(
+        guild,
+        bot_member,
+        settings=recipe_context.bot.settings,
+        context=recipe_context.core,
+    )
+
+
+@recipe(
     "server.uninit",
     command=CommandSpec(
         group="server",
@@ -101,14 +132,24 @@ async def uninitialize_server(
 async def sync_join_guide(
     recipe_context: RecipeContext, *, interaction: discord.Interaction
 ) -> tuple[Any, discord.TextChannel]:
-    from bot.channels.resolve import resolve_join_the_network_channel
+    from bot.channels.resolve import (
+        HUB_CATEGORY_NETWORK,
+        HUB_CHANNEL_JOIN_THE_NETWORK,
+        resolve_hub_category,
+        resolve_hub_channel,
+    )
     from bot.channels.stickies.join import sync_hub_join_sticky
     from bot.widgets.views.persistent_views import PersistentViewRegistry
 
     guild = interaction.guild
     if guild is None or guild.me is None:
         raise UserFacingError("Guild or bot member is unavailable.")
-    channel = resolve_join_the_network_channel(guild)
+    network_hub = resolve_hub_category(guild, HUB_CATEGORY_NETWORK)
+    channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_JOIN_THE_NETWORK,
+        category_id=None if network_hub is None else network_hub.id,
+    )
     if channel is None:
         raise UserFacingError("The join-the-network channel was not found.")
     view = PersistentViewRegistry(recipe_context.bot).register_join_network_view()

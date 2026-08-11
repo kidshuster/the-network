@@ -38,4 +38,4 @@ jobs:
             --backend mock --scenario malformed_channels
 
       - name: Install bundle check
-        run: ./bin/test_deploy_bundle.sh
+        run: ./bin/domain/test-install-bundle.sh

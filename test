@@ -25,7 +25,7 @@ Live smoke uses the guild in .env. Stop the running bot first (one gateway
 session per token). For aggressive probe runs, use a burn-in guild:
 
   cp .env.example .env.staging   # separate GUILD_ID + DATABASE_PATH
-  bin/use-staging-env.sh staging
+  bin/domain/use-staging-env.sh staging
 
 Probe and recipe Python lives under tests/core/; live launchers are under
 tests/live/. Pytest tests live under tests/unit/. Testwork IDs stay in gitignored

@@ -14,11 +14,11 @@ def _hub_category_by_id() -> dict[str, str]:
 
 
 @lru_cache(maxsize=1)
-def _hub_channel_by_id() -> dict[str, str]:
+def _hub_channel_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
     from bot.channels.layout.loader import load_layout
 
     return {
-        key: channel.name
+        key: (channel.name, tuple(channel.legacy_names))
         for category in load_layout().layout.categories.values()
         for key, channel in category.channels.items()
     }
@@ -29,7 +29,22 @@ def hub_category_name(category_id: str) -> str:
 
 
 def hub_channel_name(channel_id: str) -> str:
-    return _hub_channel_by_id()[channel_id]
+    return _hub_channel_by_id()[channel_id][0]
+
+
+def hub_category_aliases(category_id: str) -> tuple[str, ...]:
+    """Current category display name (single entry; categories have no legacy list)."""
+    return (hub_category_name(category_id),)
+
+
+def hub_channel_aliases(channel_id: str) -> tuple[str, ...]:
+    """Current channel display name plus YAML legacy_names for resolution after renames."""
+    name, legacy = _hub_channel_by_id()[channel_id]
+    aliases: list[str] = [name]
+    for item in legacy:
+        if item.casefold() not in {alias.casefold() for alias in aliases}:
+            aliases.append(item)
+    return tuple(aliases)
 
 
 def hub_category_names() -> frozenset[str]:

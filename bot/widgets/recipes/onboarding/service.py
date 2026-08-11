@@ -150,9 +150,19 @@ class ServerRequestService:
             profile_image_data=image.data,
         )
 
-        from bot.channels.resolve import resolve_join_requests_channel
+        from bot.channels.resolve import (
+            HUB_CATEGORY_MODERATION,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            resolve_hub_category,
+            resolve_hub_channel,
+        )
 
-        requests_channel = resolve_join_requests_channel(guild)
+        mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+        requests_channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            category_id=None if mod_category is None else mod_category.id,
+        )
         if requests_channel is None:
             return SubmitRequestResult(
                 success=False,
@@ -364,9 +374,19 @@ class ServerRequestService:
     ) -> None:
         if request.moderator_message_id is None:
             return
-        from bot.channels.resolve import resolve_join_requests_channel
+        from bot.channels.resolve import (
+            HUB_CATEGORY_MODERATION,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            resolve_hub_category,
+            resolve_hub_channel,
+        )
 
-        channel = resolve_join_requests_channel(guild)
+        mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+        channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            category_id=None if mod_category is None else mod_category.id,
+        )
         if channel is None:
             return
         try:

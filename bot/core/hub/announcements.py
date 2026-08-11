@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.channels.resolve import resolve_network_announcements_channel
+from bot.channels.resolve import (
+    HUB_CATEGORY_MODERATION,
+    HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+    resolve_hub_category,
+    resolve_hub_channel,
+)
 from bot.config import Settings
 from bot.core.networks.roles import resolve_operator_role_by_name
 from bot.core.templates import render_embed
@@ -78,11 +83,23 @@ def can_post_hub_announcement(
     )
 
 
+def _resolve_network_announcements_channel(
+    guild: discord.Guild,
+) -> discord.TextChannel | None:
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    return resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=None if mod_category is None else mod_category.id,
+        include_announcement=False,
+    )
+
+
 async def sync_announcements_guide(
     guild: discord.Guild,
     bot_member: discord.Member,
 ) -> None:
-    channel = resolve_network_announcements_channel(guild)
+    channel = _resolve_network_announcements_channel(guild)
     if channel is None:
         return
     embed = render_embed("hub_announcements_guide")
@@ -139,7 +156,7 @@ async def handle_network_announcements_message(
     guild = message.guild
     if context is None or guild is None or message.author.bot:
         return
-    channel = resolve_network_announcements_channel(guild)
+    channel = _resolve_network_announcements_channel(guild)
     if channel is None or message.channel.id != channel.id:
         return
     if not isinstance(message.author, discord.Member):

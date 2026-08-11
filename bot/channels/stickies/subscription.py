@@ -64,10 +64,21 @@ async def _post_network_member_welcome(
     network: Network,
 ) -> None:
     """Post once to #network-announcements and dispatch through the relay recipe."""
-    from bot.channels.resolve import resolve_network_announcements_channel
+    from bot.channels.resolve import (
+        HUB_CATEGORY_MODERATION,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        resolve_hub_category,
+        resolve_hub_channel,
+    )
     from bot.core.hub.announcements import dispatch_system_announcement
 
-    channel = resolve_network_announcements_channel(guild)
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=None if mod_category is None else mod_category.id,
+        include_announcement=False,
+    )
     if channel is None:
         return
     embed = render_embed(

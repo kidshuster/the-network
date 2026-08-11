@@ -285,9 +285,9 @@ async def cleanup_smoke_join_request_messages(
     if not request_ids:
         return
 
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.channels.resolve import HUB_CHANNEL_JOIN_REQUESTS, resolve_hub_channel
 
-    channel = resolve_join_requests_channel(guild)
+    channel = resolve_hub_channel(guild, HUB_CHANNEL_JOIN_REQUESTS)
     for request_id in request_ids:
         request = await context.store.requests.get_by_id(request_id)
         if request is None:
@@ -315,9 +315,9 @@ async def cleanup_join_requests_smoke_artifacts(
     bot_member: discord.Member,
 ) -> None:
     """Remove smoke join-request messages and DB rows from `#join-requests`."""
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.channels.resolve import HUB_CHANNEL_JOIN_REQUESTS, resolve_hub_channel
 
-    channel = resolve_join_requests_channel(guild)
+    channel = resolve_hub_channel(guild, HUB_CHANNEL_JOIN_REQUESTS)
     if channel is not None:
         try:
             async for message in channel.history(limit=200):
@@ -703,7 +703,7 @@ async def run_hub_rebuild_smoke_flow(
     skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.channels.resolve import HUB_CHANNEL_JOIN_REQUESTS, resolve_hub_channel
     from bot.core.hub.data_reset import reset_hub_layout_data
     from bot.widgets.recipes.hub.initialize import initialize_guild
     from bot.widgets.recipes.hub.uninitialize import uninitialize_guild
@@ -719,7 +719,7 @@ async def run_hub_rebuild_smoke_flow(
     network_key = network_key or resolve_smoke_network_key(context)
     await cleanup_all_hub_rebuild_smoke_clients(guild, context, bot_member)
 
-    if resolve_join_requests_channel(guild) is None:
+    if resolve_hub_channel(guild, HUB_CHANNEL_JOIN_REQUESTS) is None:
         clients = await context.store.clients.list_all()
         bootstrap = await initialize_guild(
             guild,

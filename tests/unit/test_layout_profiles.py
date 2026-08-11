@@ -122,6 +122,16 @@ def test_commands_adds_slash_permission_without_repeating_moderator_defaults() -
     assert _overwrite(commands, ctx.moderator_role).manage_channels is True
 
 
+def test_hub_profiles_grant_operator_role_access() -> None:
+    ctx = _context()
+    assert ctx.operator_role is not None
+    for resource_id in ("moderation", "commands", "leaders", "leaders_channel"):
+        resource = _resource(compile_hub(ctx), resource_id)
+        overwrite = _overwrite(resource, ctx.operator_role)
+        assert overwrite.view_channel is True
+        assert overwrite.manage_channels is True
+
+
 def test_client_layout_has_one_profile_and_subscription_pair() -> None:
     ctx = _context()
     base = compile_client(ctx, include_subscribed=False)
@@ -150,24 +160,24 @@ def test_client_category_defaults_propagate_until_profile_replacement() -> None:
     assert ctx.access_role in publish.managed_targets
 
 
-def test_compiled_recipes_use_bot_access_role_not_bot_member_or_operator() -> None:
+def test_compiled_recipes_use_bot_access_and_operator_not_bot_member() -> None:
     ctx = _context(clients=2)
     bot_access = discord.utils.get(ctx.guild.roles, name="The Network Bot Access")
     assert bot_access is not None
+    assert ctx.operator_role is not None
     for resource in [*compile_hub(ctx), *compile_client(ctx, include_subscribed=True)]:
         assert bot_access in resource.overwrites
+        assert ctx.operator_role in resource.overwrites
         assert ctx.bot_member not in resource.overwrites
-        assert ctx.operator_role not in resource.overwrites
         assert ctx.bot_member in resource.managed_targets
         assert ctx.operator_role in resource.managed_targets
         assert set(ctx.client_roles) <= set(resource.managed_targets)
-        assert ctx.operator_role in resource.managed_targets
-        assert set(ctx.client_roles) <= set(resource.managed_targets)
 
 
-def test_missing_bot_access_role_is_not_replaced_with_operator_or_member() -> None:
+def test_missing_bot_access_role_still_grants_operator_not_member() -> None:
     ctx = _context()
     ctx.guild.roles = [role for role in ctx.guild.roles if role.name != "The Network Bot Access"]
+    assert ctx.operator_role is not None
     for resource in compile_hub(ctx):
-        assert ctx.operator_role not in resource.overwrites
+        assert ctx.operator_role in resource.overwrites
         assert ctx.bot_member not in resource.overwrites

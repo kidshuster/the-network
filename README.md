@@ -67,7 +67,7 @@ pip install -e ".[dev]"
 ./bin/start.sh
 ```
 
-Bare-metal systemd (source tree): `./bin/deploy.sh`.
+Bare-metal systemd (source tree): `./bin/domain/deploy-source.sh`.
 
 6. In Discord, run `/status` in the configured guild to verify connectivity.
 
@@ -75,17 +75,16 @@ Bare-metal systemd (source tree): `./bin/deploy.sh`.
 
 ```bash
 git submodule update --init install
-./test --dev                # ruff + mypy + pytest (tests/unit)
-./test --full               # also run tests/live Testwork smoke
+./test --dev                # ruff + mypy + pytest + mock smoke
+./test --full               # also run live Testwork smoke
 ruff check .
 mypy bot tests/core
 pytest tests/unit
-./bin/test_deploy_bundle.sh # validate install/ submodule
+./bin/domain/test-install-bundle.sh
 ```
 
-All pytest tests live under `tests/unit/`; all real-Discord Testwork probes live
-under `tests/core/` and `tests/live/` (both tracked). Testwork guild IDs/tokens stay in gitignored
-`.env` / `.env.staging` only. Local agent notes live under untracked `cursor/`.
+Everyday scripts live in `bin/` (`start`, `stop`, `deploy`). Less common helpers are
+under `bin/domain/`. Testwork guild IDs/tokens stay in gitignored `.env` / `.env.staging`.
 
 ## Install / Docker (production)
 
@@ -103,11 +102,11 @@ chmod +x scripts/*.sh
 
 Images support **amd64** and **arm64** (Pi 4/5 with 64-bit Raspberry Pi OS).
 
-### Publish a release (from this source repo)
+### Deploy a release (from this source repo)
 
 ```bash
 docker login ghcr.io
-./bin/publish.sh
+./bin/deploy.sh
 ```
 
 This builds/pushes the multi-arch image to GHCR and updates/pushes the `install/`

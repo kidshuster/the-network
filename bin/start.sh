@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Start the bot from a source checkout (venv). Docker hosts should use install/scripts/.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,6 +10,12 @@ PID_FILE="${PID_FILE:-$DATA_DIR/bot.pid}"
 LOG_FILE="${LOG_FILE:-$DATA_DIR/bot.log}"
 PYTHON="${PYTHON:-python3}"
 INSTALL_STAMP="${INSTALL_STAMP:-$ROOT/.venv/.install-stamp}"
+
+if [[ ! -f "${ROOT}/pyproject.toml" || ! -d "${ROOT}/bot" ]]; then
+  echo "ERROR: ${ROOT} does not look like the the-network source tree." >&2
+  echo "For Docker runtime, use the-network-install (./scripts/start.sh)." >&2
+  exit 1
+fi
 
 mkdir -p "$DATA_DIR"
 
@@ -43,12 +50,16 @@ if [[ "$need_install" -eq 1 ]]; then
   touch "$INSTALL_STAMP"
 fi
 
-if [[ -f "$ROOT/.env" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$ROOT/.env"
-  set +a
+# Fail fast if the editable install is stale relative to the adapters/core layout.
+if ! python -c "import bot.adapters, bot.core, bot.channels, bot.widgets" >/dev/null 2>&1; then
+  echo "Package import check failed — reinstalling editable package..."
+  pip install -q -e .
+  touch "$INSTALL_STAMP"
+  python -c "import bot.adapters, bot.core, bot.channels, bot.widgets"
 fi
+
+# Do not `source` .env here — values with spaces (role names) break shell parsing.
+# bot.main loads Settings from .env via pydantic-settings.
 
 export PYTHONUNBUFFERED=1
 log_lines_before=0

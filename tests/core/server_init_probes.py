@@ -8,17 +8,23 @@ import discord
 
 from bot.channels.layout import LayoutContext, compile_client, compile_hub
 from bot.channels.layout.compiler import ResourceKind
-from bot.channels.layout.managed import hub_category_names, preserved_channel_names
+from bot.channels.layout.managed import (
+    hub_category_name,
+    hub_category_names,
+    hub_channel_aliases,
+    hub_channel_name,
+    preserved_channel_names,
+)
 from bot.channels.resolve import (
-    CATEGORY_LEADERS,
-    CATEGORY_MODERATION,
-    CHANNEL_CHANGELOG,
-    CHANNEL_LEADERS,
-    CHANNEL_MODERATOR_ONLY,
-    resolve_changelog_channel,
+    HUB_CATEGORY_LEADERS,
+    HUB_CATEGORY_MODERATION,
+    HUB_CHANNEL_CHANGELOG,
+    HUB_CHANNEL_LEADERS,
+    HUB_CHANNEL_MODERATOR_ONLY,
+    HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+    resolve_hub_category,
+    resolve_hub_channel,
     resolve_human_moderator_role,
-    resolve_leaders_category,
-    resolve_leaders_channel,
 )
 from bot.config import Settings
 from bot.core.clients.names import slugify_client_name
@@ -72,6 +78,30 @@ def _role_can_view_channel(
     return channel.permissions_for(role).view_channel
 
 
+def _resolve_leaders_layout(
+    guild: discord.Guild,
+) -> tuple[
+    discord.CategoryChannel | None,
+    discord.TextChannel | None,
+    discord.TextChannel | None,
+]:
+    category = resolve_hub_category(guild, HUB_CATEGORY_LEADERS)
+    leaders_cat_id = None if category is None else category.id
+    leaders = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_LEADERS,
+        category_id=leaders_cat_id,
+    )
+    if leaders is None:
+        leaders = resolve_hub_channel(guild, HUB_CHANNEL_LEADERS)
+    changelog = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_CHANGELOG,
+        category_id=leaders_cat_id,
+    )
+    return category, leaders, changelog
+
+
 async def _list_guild_clients(
     guild: discord.Guild,
     context: BotContext,
@@ -92,13 +122,11 @@ async def _collect_leaders_access_gaps(
     context: BotContext,
 ) -> list[str]:
     gaps: list[str] = []
-    category = resolve_leaders_category(guild)
-    leaders = resolve_leaders_channel(guild)
-    changelog = resolve_changelog_channel(guild)
+    category, leaders, changelog = _resolve_leaders_layout(guild)
     targets: list[tuple[str, discord.abc.GuildChannel | None]] = [
-        (f"{CATEGORY_LEADERS} category", category),
-        (CHANNEL_LEADERS, leaders),
-        (CHANNEL_CHANGELOG, changelog),
+        (f"{hub_category_name(HUB_CATEGORY_LEADERS)} category", category),
+        (hub_channel_name(HUB_CHANNEL_LEADERS), leaders),
+        (hub_channel_name(HUB_CHANNEL_CHANGELOG), changelog),
     ]
     for server_name, role in await _list_guild_clients(guild, context):
         for label, target in targets:
@@ -176,8 +204,11 @@ async def probe_moderator_only_channel(
     guild: discord.Guild,
     bot_member: discord.Member,
 ) -> ProbeResult:
+    mod_aliases = {alias.casefold() for alias in hub_channel_aliases(HUB_CHANNEL_MODERATOR_ONLY)}
+    moderation_name = hub_category_name(HUB_CATEGORY_MODERATION)
+    moderator_only_name = hub_channel_name(HUB_CHANNEL_MODERATOR_ONLY)
     for channel in guild.text_channels:
-        if channel.name.casefold() != CHANNEL_MODERATOR_ONLY:
+        if channel.name.casefold() not in mod_aliases:
             continue
         perms = channel.permissions_for(bot_member)
         if not perms.view_channel:
@@ -190,24 +221,24 @@ async def probe_moderator_only_channel(
                     "init cannot move it; delete it or grant **The Testwork +** view access"
                 ),
             )
-        if channel.category is None or channel.category.name != CATEGORY_MODERATION:
+        if channel.category is None or channel.category.name != moderation_name:
             return ProbeResult(
                 "moderator-only channel",
                 False,
                 (
-                    f"#{channel.name} is visible but not in **{CATEGORY_MODERATION}** — "
+                    f"#{channel.name} is visible but not in **{moderation_name}** — "
                     "re-run `/server init` after fixing layout"
                 ),
             )
         return ProbeResult(
             "moderator-only channel",
             True,
-            f"#{CHANNEL_MODERATOR_ONLY} is in **{CATEGORY_MODERATION}**",
+            f"#{moderator_only_name} is in **{moderation_name}**",
         )
     return ProbeResult(
         "moderator-only channel",
         True,
-        f"no #{CHANNEL_MODERATOR_ONLY} channel present (init will create one)",
+        f"no #{moderator_only_name} channel present (init will create one)",
     )
 
 
@@ -339,13 +370,13 @@ async def probe_hub_announcements(
     settings: Settings,
 ) -> ProbeResult:
     del context, settings
-    from bot.channels.resolve import (
-        resolve_moderation_category,
-        resolve_network_announcements_channel,
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    mod_channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=None if mod_category is None else mod_category.id,
+        include_announcement=False,
     )
-
-    mod_category = resolve_moderation_category(guild)
-    mod_channel = resolve_network_announcements_channel(guild)
     if mod_channel is None:
         return ProbeResult(
             "hub announcements channel",
@@ -423,9 +454,7 @@ async def probe_leaders_drift_resync(
         )
 
     server_name, client_role = clients[0]
-    category = resolve_leaders_category(guild)
-    leaders = resolve_leaders_channel(guild)
-    changelog = resolve_changelog_channel(guild)
+    category, leaders, changelog = _resolve_leaders_layout(guild)
     if category is None or leaders is None or changelog is None:
         return ProbeResult(
             "leaders drift resync",
@@ -481,7 +510,7 @@ async def probe_leaders_drift_resync(
         "leaders drift resync",
         True,
         f"restored Leaders access for **{server_name}** on category, "
-        f"#{CHANNEL_LEADERS}, and #{CHANNEL_CHANGELOG}",
+        f"#{hub_channel_name(HUB_CHANNEL_LEADERS)}, and #{hub_channel_name(HUB_CHANNEL_CHANGELOG)}",
     )
 
 
@@ -613,8 +642,7 @@ async def probe_reinit_rectifies_clients(
         )
 
     server_name, client_role = (await _list_guild_clients(guild, context))[0]
-    category = resolve_leaders_category(guild)
-    leaders = resolve_leaders_channel(guild)
+    category, leaders, _changelog = _resolve_leaders_layout(guild)
     if category is None or leaders is None:
         return ProbeResult(
             "reinit rectification",
@@ -685,8 +713,7 @@ async def probe_leaders_delete_double_reinit(
             "skipped — no registered clients",
         )
 
-    leaders = resolve_leaders_channel(guild)
-    changelog = resolve_changelog_channel(guild)
+    leaders, changelog = _resolve_leaders_layout(guild)[1:]
     if leaders is None or changelog is None:
         return ProbeResult(
             "leaders delete reinit",
@@ -721,7 +748,7 @@ async def probe_leaders_delete_double_reinit(
                 "first reinit reported failures: " + "; ".join(first.rectification_failures[:5]),
             )
 
-        restored = resolve_leaders_channel(guild)
+        _category, restored, _changelog = _resolve_leaders_layout(guild)
         if restored is None:
             return ProbeResult(
                 "leaders delete reinit",

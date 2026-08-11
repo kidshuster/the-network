@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared Docker CLI checks for bin/publish.sh
+# Shared Docker CLI checks for bin/deploy.sh
 
 require_docker_cli() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -26,7 +26,7 @@ Fix:
   sudo usermod -aG docker "$USER"
   # log out and back in (or reboot), then verify: docker info
 
-Until then you can use: sudo ./bin/publish.sh
+Until then you can use: sudo ./bin/deploy.sh
 EOF
     elif grep -qi 'WSL' <<<"${info_err}"; then
       cat >&2 <<'EOF'
@@ -53,7 +53,7 @@ EOF
 require_docker_buildx() {
   require_docker_cli || return 1
   if ! docker buildx version >/dev/null 2>&1; then
-    echo "docker buildx is required for multi-arch publish." >&2
+    echo "docker buildx is required for multi-arch deploy." >&2
     echo "Update Docker Desktop or install docker-buildx-plugin." >&2
     return 1
   fi

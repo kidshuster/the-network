@@ -74,7 +74,7 @@ def _compile_profile(
     if context.access_role is not None:
         owned.add(context.access_role)  # clean the Discord-managed integration role
     if context.operator_role is not None:
-        owned.add(context.operator_role)  # clean the legacy operator overwrite
+        owned.add(context.operator_role)
     for role_spec in roles_spec.roles.values():
         owned.update(resolve_targets(context, role_spec.target))
     for logical_name in profile.roles:
@@ -87,6 +87,13 @@ def _compile_profile(
         overwrite = discord.PermissionOverwrite(**fields)
         for target in targets:
             desired[target] = overwrite
+    # Grant the bot's operator role the same hub access as bot_access. Private
+    # categories deny @everyone; without an overwrite on a role the bot holds,
+    # later sync hits Missing Access (50001).
+    if context.operator_role is not None and "bot_access" in profile.roles:
+        fields = _merged_fields("bot_access", profile.overrides, *overrides)
+        if fields is not None:
+            desired[context.operator_role] = discord.PermissionOverwrite(**fields)
     return desired, frozenset(owned)
 
 

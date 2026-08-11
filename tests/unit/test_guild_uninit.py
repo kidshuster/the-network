@@ -5,7 +5,8 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.channels.resolve import CHANNEL_MODERATOR_ONLY, CHANNEL_RULES
+from bot.channels.layout.managed import hub_channel_name
+from bot.channels.resolve import HUB_CHANNEL_MODERATOR_ONLY, HUB_CHANNEL_RULES
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
@@ -23,10 +24,10 @@ from bot.widgets.recipes.hub.uninitialize import (
 def test_is_preserved_hub_channel_rules_and_moderator_only() -> None:
     guild = MagicMock(spec=discord.Guild)
     rules = MagicMock(spec=discord.TextChannel, id=10)
-    rules.name = CHANNEL_RULES
+    rules.name = hub_channel_name(HUB_CHANNEL_RULES)
     guild.rules_channel = rules
     mod = MagicMock(spec=discord.TextChannel, id=11)
-    mod.name = CHANNEL_MODERATOR_ONLY
+    mod.name = hub_channel_name(HUB_CHANNEL_MODERATOR_ONLY)
     other = MagicMock(spec=discord.TextChannel, id=12)
     other.name = "commands"
 
@@ -145,9 +146,9 @@ def test_collect_uninit_targets_preserves_rules_and_moderator_only() -> None:
     guild.categories = [subscribe, feed]
 
     rules = MagicMock(spec=discord.TextChannel, id=1, category_id=100)
-    rules.name = CHANNEL_RULES
+    rules.name = hub_channel_name(HUB_CHANNEL_RULES)
     mod = MagicMock(spec=discord.TextChannel, id=2, category_id=100)
-    mod.name = CHANNEL_MODERATOR_ONLY
+    mod.name = hub_channel_name(HUB_CHANNEL_MODERATOR_ONLY)
     announce = MagicMock(
         spec=discord.TextChannel, id=3, name="stingers-announcements", category_id=100
     )
@@ -225,7 +226,7 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
 
     guild = MagicMock(spec=discord.Guild)
     rules = MagicMock(spec=discord.TextChannel, id=99, category_id=100)
-    rules.name = CHANNEL_RULES
+    rules.name = hub_channel_name(HUB_CHANNEL_RULES)
     guild.rules_channel = rules
 
     hub_channel = MagicMock(spec=discord.TextChannel, id=200, category_id=100)

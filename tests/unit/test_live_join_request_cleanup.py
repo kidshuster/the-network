@@ -41,7 +41,7 @@ async def test_cleanup_smoke_join_request_messages_deletes_discord_and_db(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.channels.resolve.resolve_join_requests_channel",
+        "bot.channels.resolve.resolve_hub_channel",
         MagicMock(return_value=channel),
     )
 
@@ -95,7 +95,7 @@ async def test_cleanup_join_requests_smoke_artifacts_sweeps_channel_and_db(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.channels.resolve.resolve_join_requests_channel",
+        "bot.channels.resolve.resolve_hub_channel",
         MagicMock(return_value=channel),
     )
 
@@ -129,7 +129,7 @@ async def test_cleanup_smoke_join_request_messages_skips_missing_message(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.channels.resolve.resolve_join_requests_channel",
+        "bot.channels.resolve.resolve_hub_channel",
         MagicMock(return_value=channel),
     )
 

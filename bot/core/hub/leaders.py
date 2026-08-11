@@ -8,11 +8,11 @@ import discord
 
 from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
 from bot.channels.resolve import (
-    CHANNEL_CHANGELOG,
-    CHANNEL_LEADERS,
-    resolve_changelog_channel,
-    resolve_leaders_category,
-    resolve_leaders_channel,
+    HUB_CATEGORY_LEADERS,
+    HUB_CHANNEL_CHANGELOG,
+    HUB_CHANNEL_LEADERS,
+    resolve_hub_category,
+    resolve_hub_channel,
 )
 
 if TYPE_CHECKING:
@@ -128,11 +128,22 @@ async def ensure_leaders_channels(
     )
 
     # Prefer resolved channels if batch missed (e.g. reconcile quirks)
+    leaders_category = resolve_hub_category(guild, HUB_CATEGORY_LEADERS)
+    leaders_cat_id = None if leaders_category is None else leaders_category.id
     if sync_result.leaders_channel is None:
-        sync_result.leaders_channel = resolve_leaders_channel(guild)
+        sync_result.leaders_channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_LEADERS,
+            category_id=leaders_cat_id,
+        )
+        if sync_result.leaders_channel is None:
+            sync_result.leaders_channel = resolve_hub_channel(guild, HUB_CHANNEL_LEADERS)
     if sync_result.changelog_channel is None:
-        sync_result.changelog_channel = resolve_changelog_channel(guild)
-    _ = resolve_leaders_category(guild)
+        sync_result.changelog_channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_CHANGELOG,
+            category_id=leaders_cat_id,
+        )
 
     if sync_result.leaders_channel is not None:
         await context.store.settings.set(
@@ -182,8 +193,6 @@ async def grant_leaders_channel_access(
 
 __all__ = [
     "CHANGELOG_CHANNEL_SETTINGS_KEY",
-    "CHANNEL_CHANGELOG",
-    "CHANNEL_LEADERS",
     "LEADERS_CHANNEL_SETTINGS_KEY",
     "LeadersSyncResult",
     "ensure_leaders_channels",
