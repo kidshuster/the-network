@@ -19,12 +19,12 @@ def _imports_outer_workflows(source: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module and node.module.startswith(
-                ("bot.ui", "bot.cogs", "bot.recipes", "bot.smoke")
+                ("bot.ui", "bot.adapters", "bot.recipes", "bot.smoke")
             ):
                 violations.append(f"from {node.module}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith(("bot.ui", "bot.cogs", "bot.recipes", "bot.smoke")):
+                if alias.name.startswith(("bot.ui", "bot.adapters", "bot.recipes", "bot.smoke")):
                     violations.append(f"import {alias.name}")
     return violations
 
@@ -73,8 +73,14 @@ def test_retired_yaml_recipe_runtime_does_not_return() -> None:
 
 
 def test_discord_event_adapters_dispatch_through_recipe_registry() -> None:
-    relay_cog = (Path(bot.__file__).resolve().parent / "cogs" / "relay.py").read_text(
-        encoding="utf-8"
-    )
-    assert 'recipe_registry.dispatch("discord.message"' in relay_cog
-    assert 'recipe_registry.dispatch("discord.webhooks_update"' in relay_cog
+    event_adapter = (
+        Path(bot.__file__).resolve().parent / "adapters" / "discord" / "events.py"
+    ).read_text(encoding="utf-8")
+    assert 'recipe_registry.dispatch("discord.message"' in event_adapter
+    assert 'recipe_registry.dispatch("discord.webhooks_update"' in event_adapter
+
+
+def test_legacy_cogs_and_messages_packages_are_removed() -> None:
+    package = Path(bot.__file__).resolve().parent
+    assert not list((package / "cogs").glob("*.py"))
+    assert not list((package / "messages").glob("*.py"))

@@ -90,9 +90,7 @@ async def read_profile_image_attachment(
         raise ProfileValidationError(f"Profile image exceeds the {max_mb}MB limit.")
 
     if not _is_supported_attachment(attachment):
-        raise ProfileValidationError(
-            "Profile image must be a PNG, JPG, WebP, or GIF file."
-        )
+        raise ProfileValidationError("Profile image must be a PNG, JPG, WebP, or GIF file.")
 
     try:
         raw = await attachment.read()

@@ -84,9 +84,7 @@ async def initialize_guild(
 
     try:
         access_role = resolve_access_role_by_name(guild, role_name=access_role_name)
-        operator_role = resolve_operator_role_by_name(
-            guild, role_name=operator_role_name
-        )
+        operator_role = resolve_operator_role_by_name(guild, role_name=operator_role_name)
         if operator_role is None:
             validate_hub_permissions(
                 bot_member,
@@ -121,18 +119,12 @@ async def initialize_guild(
         )
         result.updated_roles.append(f"Using access role {access_role.name}")
         result.updated_roles.append(f"Using operator role {operator_role.name}")
+        result.notes.append("Permission smoke passed: " + ", ".join(smoke.operator_steps) + ".")
         result.notes.append(
-            "Permission smoke passed: " + ", ".join(smoke.operator_steps) + "."
-        )
-        result.notes.append(
-            "Provision smoke passed (Accept path): "
-            + ", ".join(smoke.provision_steps)
-            + "."
+            "Provision smoke passed (Accept path): " + ", ".join(smoke.provision_steps) + "."
         )
 
-        human_moderator_role = await _ensure_human_moderator_role(
-            guild, bot_member, result=result
-        )
+        human_moderator_role = await _ensure_human_moderator_role(guild, bot_member, result=result)
 
         client_roles: list[discord.Role] = []
         for client in clients or []:
@@ -158,9 +150,7 @@ async def initialize_guild(
         )
         for item in hub_batch.results:
             if not item.success:
-                result.failed_steps.append(
-                    f"layout {item.resource_id}: {item.detail or 'failed'}"
-                )
+                result.failed_steps.append(f"layout {item.resource_id}: {item.detail or 'failed'}")
             elif item.changed and item.channel is not None:
                 result.rectifications.append(
                     f"Synced layout resource `{item.resource_id}` ({item.channel.mention})."
@@ -212,9 +202,7 @@ async def initialize_guild(
 
         await sync_announcements_guide(guild, bot_member)
 
-        guild_clients = [
-            client for client in (clients or []) if client.guild_id == guild.id
-        ]
+        guild_clients = [client for client in (clients or []) if client.guild_id == guild.id]
         if clients and bot is not None and context is not None and view_registry is not None:
             from bot.core.clients.reconnect import reconnect_clients_on_init
 
@@ -236,9 +224,7 @@ async def initialize_guild(
             for client in guild_clients:
                 role = guild.get_role(client.client_role_id)
                 if role is None:
-                    result.notes.append(
-                        f"Skipped client {client.server_name}: role missing"
-                    )
+                    result.notes.append(f"Skipped client {client.server_name}: role missing")
                     continue
                 client_ctx = LayoutContext(
                     guild=guild,
@@ -332,9 +318,7 @@ async def initialize_guild(
                     wipe_channel=True,
                 )
                 if join_result.message is not None:
-                    result.notes.append(
-                        f"Join guide synced in {join_channel.mention}."
-                    )
+                    result.notes.append(f"Join guide synced in {join_channel.mention}.")
 
             rules_result = await sync_rules_sticky(
                 guild,
@@ -362,13 +346,9 @@ async def initialize_guild(
                     wipe_channel=True,
                 )
                 if admin_result.message is not None:
-                    result.notes.append(
-                        f"Network admin panel synced in {admin_channel.mention}."
-                    )
+                    result.notes.append(f"Network admin panel synced in {admin_channel.mention}.")
                 elif admin_result.reason:
-                    result.failed_steps.append(
-                        f"Network admin sticky: {admin_result.reason}"
-                    )
+                    result.failed_steps.append(f"Network admin sticky: {admin_result.reason}")
 
             try:
                 if not skip_join_smoke:
@@ -412,10 +392,7 @@ async def initialize_guild(
         logger.exception("Guild init failed unexpectedly")
         return GuildInitResult(
             success=False,
-            reason=(
-                "Unexpected error during server init:\n"
-                f"• **{type(exc).__name__}**: {exc}"
-            ),
+            reason=(f"Unexpected error during server init:\n• **{type(exc).__name__}**: {exc}"),
         )
 
     return result

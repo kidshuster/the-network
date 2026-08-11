@@ -45,7 +45,7 @@ def build_moderator_request_embed(
     server_name: str,
     request_id: int,
 ) -> discord.Embed:
-    from bot.messages import render_embed
+    from bot.presentation import render_embed
 
     return render_embed(
         "join_request_moderator",

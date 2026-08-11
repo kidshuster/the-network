@@ -26,8 +26,12 @@ async def test_layout_snapshot_is_guild_scoped(db) -> None:
     client = await create_test_client(store.clients)
     subscription = await create_test_subscription(store.clients, client=client, network=network)
     await create_test_client(
-        store.clients, guild_id=999, server_name="Other", category_id=91,
-        client_role_id=92, profile_channel_id=93,
+        store.clients,
+        guild_id=999,
+        server_name="Other",
+        category_id=91,
+        client_role_id=92,
+        profile_channel_id=93,
     )
     resource = ManagedResource(100, "client.custom.category", "category", 9876, "client", client.id)
     await store.resources.upsert(resource)
@@ -53,8 +57,11 @@ async def _related_client_data(store: Store):
     network = await create_test_network(store.networks)
     client = await create_test_client(store.clients)
     blocked = await create_test_client(
-        store.clients, server_name="Blocked", category_id=41,
-        client_role_id=42, profile_channel_id=43,
+        store.clients,
+        server_name="Blocked",
+        category_id=41,
+        client_role_id=42,
+        profile_channel_id=43,
     )
     subscription = await create_test_subscription(store.clients, client=client, network=network)
     await store.blacklists.add_blacklist(subscription.id, blocked.id)

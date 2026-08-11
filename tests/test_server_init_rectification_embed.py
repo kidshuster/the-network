@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.cogs.servers import _format_bullet_list, _server_init_rectification_embed
+from bot.presentation.presenters import _bullet_list, server_rectification_embeds
 from bot.recipes.hub.initialize import GuildInitResult
 
 
@@ -14,8 +14,7 @@ def test_server_init_rectification_embed_lists_work_done() -> None:
         rectification_skipped=["**Beta**: client role missing in Discord"],
     )
 
-    embed = _server_init_rectification_embed(result)
-    assert embed is not None
+    embed = server_rectification_embeds(result)[0]
     assert embed.title == "Server Init — Permissions Rectified"
     field_names = {field.name for field in embed.fields}
     assert "Rectified" in field_names
@@ -25,8 +24,7 @@ def test_server_init_rectification_embed_lists_work_done() -> None:
 def test_server_init_rectification_embed_when_no_clients() -> None:
     result = GuildInitResult(success=True)
 
-    embed = _server_init_rectification_embed(result)
-    assert embed is not None
+    embed = server_rectification_embeds(result)[0]
     assert "No registered clients" in embed.description
 
 
@@ -43,5 +41,5 @@ def test_build_changelog_embed_splits_long_change_lists() -> None:
 
 def test_format_bullet_list_truncates_to_discord_limit() -> None:
     items = [f"Entry {index}: {'x' * 80}" for index in range(50)]
-    value = _format_bullet_list(items)
+    value = _bullet_list(items)
     assert len(value) <= 1024

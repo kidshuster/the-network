@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 
-from bot.messages import render_text
+from bot.presentation import render_text
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -62,9 +62,7 @@ async def ensure_client_access(
         member, discord.Member
     ):
         return True
-    elif membership_policy is MembershipPolicy.OPTIONAL and not isinstance(
-        member, discord.Member
-    ):
+    elif membership_policy is MembershipPolicy.OPTIONAL and not isinstance(member, discord.Member):
         return True
 
     if not isinstance(member, discord.Member):

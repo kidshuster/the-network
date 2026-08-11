@@ -123,9 +123,7 @@ async def rectify_client_permissions(
             continue
         network = await context.store.networks.get_by_id(network_id)
         if network is None:
-            outcome.skipped.append(
-                f"subscription network id {network_id} missing from database"
-            )
+            outcome.skipped.append(f"subscription network id {network_id} missing from database")
             continue
 
         publish = await fetch_publish_channel(guild, subscription)
@@ -168,9 +166,7 @@ async def rectify_client_permissions(
                 )
                 continue
         except discord.HTTPException as exc:
-            outcome.failures.append(
-                f"could not sync `{network.key}` subscription channels ({exc})"
-            )
+            outcome.failures.append(f"could not sync `{network.key}` subscription channels ({exc})")
             continue
 
         if isinstance(publish, discord.TextChannel):

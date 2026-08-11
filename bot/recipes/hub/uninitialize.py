@@ -201,6 +201,7 @@ async def uninitialize_guild(
         if channel.id in seen_channel_ids:
             continue
         seen_channel_ids.add(channel.id)
+
         async def _delete_step(ch: discord.abc.GuildChannel = channel) -> bool:
             return await delete_channel(guild, ch.id, label="guild uninit")
 
@@ -217,6 +218,7 @@ async def uninitialize_guild(
         if category.id in seen_category_ids:
             continue
         seen_category_ids.add(category.id)
+
         async def _delete_category_step(
             cat: discord.CategoryChannel = category,
         ) -> bool:
@@ -232,6 +234,7 @@ async def uninitialize_guild(
 
     if perms.manage_roles:
         for role in sorted(roles, key=lambda r: r.position):
+
             async def _delete_role_step(r: discord.Role = role) -> bool:
                 return await delete_role(guild, r.id, label="guild uninit role")
 
@@ -248,11 +251,7 @@ async def uninitialize_guild(
             "**Moderator** and **Partner:** roles."
         )
 
-    if (
-        not result.deleted_channels
-        and not result.deleted_categories
-        and not result.deleted_roles
-    ):
+    if not result.deleted_channels and not result.deleted_categories and not result.deleted_roles:
         result.notes.append("No hub channels, categories, or roles matched the uninit targets.")
 
     if result.failed_steps:

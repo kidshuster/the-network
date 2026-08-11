@@ -10,7 +10,7 @@ from subscription_helpers import make_client_subscription
 
 from bot.core.models.client import Client
 from bot.core.models.network import Network
-from bot.messages import render_text
+from bot.presentation import render_text
 from bot.ui.network_views import (
     NetworkProfileView,
     SubscriptionModerationView,

@@ -2,3 +2,4 @@ kind: embed
 title: "{title}"
 colour: red
 description: "{description}"
+footer: "Error reference: {reference}"

@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.cogs._responses import defer_ephemeral
-from bot.messages import render_embed, render_text
+from bot.adapters.discord.errors import respond_with_error
+from bot.adapters.discord.responses import defer_ephemeral
+from bot.presentation import render_embed, render_text
 from bot.ui._auth import MembershipPolicy, ensure_client_access
 from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import (
@@ -144,12 +145,13 @@ class NetworkProfileView(discord.ui.View):
             access_role_name=self._bot.settings.network_access_role_name,
         )
         if not result.success or result.subscription is None:
-            await response.send(
-                embed=render_embed(
-                    "subscribe_failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="subscription.create",
+                title="Subscribe Failed",
             )
             return
 
@@ -352,8 +354,7 @@ async def handle_subscribe_connected(
             label="Confirmed",
             colour="green",
             description=(
-                "Subscribe channel marked as connected. "
-                "Relays can flow once both links are active."
+                "Subscribe channel marked as connected. Relays can flow once both links are active."
             ),
         ),
         ephemeral=True,
@@ -505,12 +506,13 @@ class SubscriptionModerationView(discord.ui.View):
             network_repo=context.store.networks,
         )
         if not result.success:
-            await response.send(
-                embed=render_embed(
-                    "leave_network_failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="subscription.delete",
+                title="Could not leave network",
             )
             return
 
@@ -586,9 +588,7 @@ class SubscriptionModerationView(discord.ui.View):
             subscription.network_id,
         )
         other_client_ids = [
-            sub.client_id
-            for sub in network_subs
-            if sub.client_id != subscription.client_id
+            sub.client_id for sub in network_subs if sub.client_id != subscription.client_id
         ]
         if not other_client_ids:
             await interaction.response.send_message(
@@ -598,9 +598,7 @@ class SubscriptionModerationView(discord.ui.View):
             return
 
         options: list[discord.SelectOption] = []
-        blocked = set(
-            await context.store.clients.list_blacklisted_client_ids(subscription.id)
-        )
+        blocked = set(await context.store.clients.list_blacklisted_client_ids(subscription.id))
         for other_id in other_client_ids[:25]:
             other = await context.store.clients.get_by_id(other_id)
             if other is None:

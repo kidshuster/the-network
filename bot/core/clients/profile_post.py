@@ -3,7 +3,7 @@ from __future__ import annotations
 import discord
 
 from bot.core.relay.formatter import sanitize_author
-from bot.messages import render_embed
+from bot.presentation import render_embed
 
 PROFILE_CARD_FOOTER = "The Network • client profile • use Edit Profile or network buttons below"
 
@@ -23,9 +23,7 @@ def build_client_profile_embed(
         author_icon_url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png?size=128"
 
     has_subscriptions = bool(subscribed_networks)
-    networks_value = "\n".join(
-        f"`{key}` — {status}" for key, status in subscribed_networks
-    )
+    networks_value = "\n".join(f"`{key}` — {status}" for key, status in subscribed_networks)
 
     return render_embed(
         "client_profile",

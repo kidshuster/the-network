@@ -10,7 +10,7 @@ import discord
 from bot.config import Settings
 from bot.core.hub.resolve import resolve_network_announcements_channel
 from bot.core.networks.roles import resolve_operator_role_by_name
-from bot.messages import render_embed
+from bot.presentation import render_embed
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -53,7 +53,7 @@ def parse_announcement_content(
                 return ParsedAnnouncement(
                     (),
                     body,
-                    f"Unknown network `{key}`. Available: {available or '(none)' }.",
+                    f"Unknown network `{key}`. Available: {available or '(none)'}.",
                 )
             return ParsedAnnouncement((key,), body)
     return ParsedAnnouncement(tuple(sorted(available_keys)), (content or "").strip())
@@ -149,9 +149,7 @@ async def handle_network_announcements_message(
 
     result = await dispatch_system_announcement(context, guild, message)
     if result.networks_relayed:
-        description = "Relayed to " + ", ".join(
-            f"`{key}`" for key in result.networks_relayed
-        )
+        description = "Relayed to " + ", ".join(f"`{key}`" for key in result.networks_relayed)
         colour = "green" if not result.errors else "yellow"
     else:
         description = result.errors[0] if result.errors else "Announcement was not relayed."

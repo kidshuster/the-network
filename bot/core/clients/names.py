@@ -22,9 +22,7 @@ def build_client_role_name(server_name: str) -> str:
 
 
 def build_unique_channel_name(guild: discord.Guild, base_name: str) -> str:
-    existing = {
-        channel.name.casefold() for channel in guild.channels if hasattr(channel, "name")
-    }
+    existing = {channel.name.casefold() for channel in guild.channels if hasattr(channel, "name")}
     candidate = base_name[:100]
     if candidate.casefold() not in existing:
         return candidate

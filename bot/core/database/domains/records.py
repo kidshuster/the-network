@@ -115,9 +115,7 @@ class NetworkStore:
                 ),
             )
         except aiosqlite.IntegrityError as exc:
-            raise NetworkValidationError(
-                "A network with that key already exists."
-            ) from exc
+            raise NetworkValidationError("A network with that key already exists.") from exc
         row = await _fetch_row_by_id(
             self._db,
             table="networks",
@@ -209,7 +207,6 @@ class NetworkStore:
             )
             await connection.execute("DELETE FROM networks WHERE id = ?", (network.id,))
         return network
-
 
 
 class RelayStore:
@@ -565,9 +562,7 @@ class ClientStore:
                 ),
             )
         except aiosqlite.IntegrityError as exc:
-            raise ProfileValidationError(
-                f"A client named {server_name!r} already exists."
-            ) from exc
+            raise ProfileValidationError(f"A client named {server_name!r} already exists.") from exc
         row = await _fetch_row_by_id(
             self._db,
             table="clients",

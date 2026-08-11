@@ -31,9 +31,7 @@ def _guild_with_roles(
 
     human_mod = MagicMock(spec=discord.Role, name="Moderator", id=30, position=human_mod_position)
     human_mod.is_default.return_value = False
-    access_role = MagicMock(
-        spec=discord.Role, name="The Network", id=40, position=access_position
-    )
+    access_role = MagicMock(spec=discord.Role, name="The Network", id=40, position=access_position)
     access_role.name = "The Network"
     access_role.is_default.return_value = False
     access_role.managed = False
@@ -380,11 +378,17 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
     )
     monkeypatch.setattr(
         "bot.core.hub.leaders.ensure_leaders_channels",
-        AsyncMock(return_value=(None, None, MagicMock(
-            rectification_notes=lambda: [],
-            skip_notes=lambda: [],
-            failures=[],
-        ))),
+        AsyncMock(
+            return_value=(
+                None,
+                None,
+                MagicMock(
+                    rectification_notes=lambda: [],
+                    skip_notes=lambda: [],
+                    failures=[],
+                ),
+            )
+        ),
     )
     monkeypatch.setattr(
         "bot.core.stickies.join_requests_sticky.sync_hub_join_sticky",

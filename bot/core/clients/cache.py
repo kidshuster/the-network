@@ -35,9 +35,7 @@ class ClientCache:
         clients = await self._client_repo.list_all()
         subscriptions = await self._client_repo.list_all_subscriptions()
         self._by_id = {client.id: client for client in clients}
-        self._by_publish_channel = {
-            sub.publish_channel_id: sub for sub in subscriptions
-        }
+        self._by_publish_channel = {sub.publish_channel_id: sub for sub in subscriptions}
         self._by_subscription_id = {sub.id: sub for sub in subscriptions}
         self._subscriptions_by_network = {}
         for sub in subscriptions:

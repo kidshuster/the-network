@@ -116,4 +116,3 @@ async def test_sync_stored_embed_sticky_skips_when_current() -> None:
     assert result.skipped is True
     channel.send.assert_not_called()
     set_setting.assert_awaited_once_with("test_sticky", "10:55")
-

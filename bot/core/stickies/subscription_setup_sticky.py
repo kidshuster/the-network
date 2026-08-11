@@ -17,7 +17,7 @@ from bot.core.stickies.sync import (
     sync_footer_marker_embed_sticky,
 )
 from bot.core.views import ViewRegistry
-from bot.messages import render_embed
+from bot.presentation import render_embed
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -311,8 +311,7 @@ async def sync_subscription_setup(
                 context=context,
                 bot_user_id=bot_user_id,
                 configured=state.publish_configured,
-                allow_create=allow_create
-                or subscription.publish_setup_message_id is None,
+                allow_create=allow_create or subscription.publish_setup_message_id is None,
             )
             state = await resolve_setup_state(
                 guild,
@@ -328,8 +327,7 @@ async def sync_subscription_setup(
                 network=network,
                 bot_user_id=bot_user_id,
                 confirmed=state.subscribe_confirmed,
-                allow_create=allow_create
-                or subscription.subscribe_setup_message_id is None,
+                allow_create=allow_create or subscription.subscribe_setup_message_id is None,
                 view_registry=view_registry,
             )
             state = await resolve_setup_state(

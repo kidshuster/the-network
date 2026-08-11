@@ -1,6 +1,0 @@
-kind: embed
-title: "Command Error"
-colour: red
-description: |
-  The command finished without sending a response.
-  Check bot logs for details.

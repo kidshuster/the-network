@@ -38,7 +38,7 @@ include = ["bot*"]
 bot = [
     "changelog/*.yaml",
     "core/layout/*.yaml",
-    "messages/**/*.yaml",
+    "presentation/**/*.yaml",
 ]
 
 [tool.pytest.ini_options]

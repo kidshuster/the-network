@@ -101,10 +101,7 @@ async def test_init_moves_channel_from_wrong_category(
 
     assert result.success is True
     join_requests.edit.assert_awaited()
-    category_edits = [
-        call.kwargs.get("category")
-        for call in join_requests.edit.await_args_list
-    ]
+    category_edits = [call.kwargs.get("category") for call in join_requests.edit.await_args_list]
     assert categories["Moderation"] in category_edits
 
 
@@ -201,11 +198,17 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
     monkeypatch.setattr("bot.core.clients.reconnect.reconnect_clients_on_init", reconnect)
     monkeypatch.setattr(
         "bot.core.hub.leaders.ensure_leaders_channels",
-        AsyncMock(return_value=(None, None, MagicMock(
-            rectification_notes=lambda: [],
-            skip_notes=lambda: [],
-            failures=[],
-        ))),
+        AsyncMock(
+            return_value=(
+                None,
+                None,
+                MagicMock(
+                    rectification_notes=lambda: [],
+                    skip_notes=lambda: [],
+                    failures=[],
+                ),
+            )
+        ),
     )
     guild.create_text_channel = AsyncMock()
     guild.create_category = AsyncMock()

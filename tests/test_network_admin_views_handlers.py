@@ -6,7 +6,7 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
-from bot.messages import render_text
+from bot.presentation import render_text
 from bot.ui.network_admin_views import NetworkAdminView
 
 

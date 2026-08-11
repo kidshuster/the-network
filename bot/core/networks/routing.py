@@ -64,9 +64,7 @@ class RoutingService:
             raise RoutingError(f"Network '{key}' was not found.")
         return network
 
-    def resolve_publish_subscription(
-        self, publish_channel_id: int
-    ) -> ClientSubscription | None:
+    def resolve_publish_subscription(self, publish_channel_id: int) -> ClientSubscription | None:
         if self._client_cache is None:
             return None
         return self._client_cache.get_enabled_subscription_by_publish(publish_channel_id)

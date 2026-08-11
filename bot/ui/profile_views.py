@@ -5,9 +5,14 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.cogs._responses import defer_ephemeral
-from bot.messages import modal_spec, render_embed, render_text
-from bot.messages.modals_builder import add_modal_fields, modal_file_attachments, modal_text_value
+from bot.adapters.discord.errors import respond_with_error
+from bot.adapters.discord.responses import defer_ephemeral
+from bot.presentation import modal_spec, render_embed, render_text
+from bot.presentation.modals_builder import (
+    add_modal_fields,
+    modal_file_attachments,
+    modal_text_value,
+)
 from bot.ui._auth import MembershipPolicy, ensure_client_access, validate_client_modal_context
 from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import profile_edit_button
@@ -78,12 +83,13 @@ class EditClientProfileModal(discord.ui.Modal):
             view_registry=PersistentViewRegistry(self._bot),
         )
         if not result.success or result.client is None:
-            await response.send(
-                embed=render_embed(
-                    "profile_update_failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="client.profile.update",
+                title="Profile Update Failed",
             )
             return
 
@@ -195,11 +201,13 @@ class DeleteClientConfirmView(discord.ui.View):
             context=context,
         )
         if not result.success:
-            await response.send(
-                embed=render_embed(
-                    "delete_client_failed",
-                    error=result.error or "Unknown error",
-                ),
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="client.delete",
+                title="Client Delete Failed",
             )
             return
 

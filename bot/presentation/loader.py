@@ -8,9 +8,8 @@ import discord
 import yaml
 from pydantic import ValidationError
 
-from bot.messages.schema import (
+from bot.presentation.schema import (
     EmbedTemplateSpec,
-    InteractionSpec,
     ModalTemplateSpec,
     RelayEmbedSpec,
     TextTemplateSpec,
@@ -170,21 +169,6 @@ def relay_embed_spec(name: str = "relay_message") -> RelayEmbedSpec:
     if not isinstance(spec, RelayEmbedSpec):
         raise MessageTemplateError(f"{name} is not a relay embed template")
     return spec
-
-
-def interaction_specs(name: str) -> list[InteractionSpec]:
-    spec = load_template(name)
-    if isinstance(spec, (EmbedTemplateSpec, TextTemplateSpec)):
-        return spec.interactions
-    return []
-
-
-def all_interaction_specs() -> list[tuple[str, InteractionSpec]]:
-    bindings: list[tuple[str, InteractionSpec]] = []
-    for directory in (_EMBEDS_DIR, _POPUPS_DIR):
-        for path in sorted(directory.glob("*.yaml")):
-            bindings.extend((path.stem, spec) for spec in interaction_specs(path.stem))
-    return bindings
 
 
 def validate_all_templates() -> None:

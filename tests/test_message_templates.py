@@ -6,7 +6,7 @@ import pytest
 
 from bot.core.stickies.join_requests_sticky import HOW_TO_JOIN_VERSION
 from bot.core.stickies.rules_sticky import RULES_STICKY_VERSION
-from bot.messages import (
+from bot.presentation import (
     MessageTemplateError,
     clear_template_cache,
     modal_spec,
@@ -15,7 +15,7 @@ from bot.messages import (
     validate_all_templates,
 )
 
-_MESSAGES_DIR = Path(__file__).resolve().parents[1] / "bot" / "messages"
+_MESSAGES_DIR = Path(__file__).resolve().parents[1] / "bot" / "presentation"
 
 
 def test_validate_all_templates_passes() -> None:

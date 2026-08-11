@@ -58,7 +58,7 @@ def build_how_to_join_footer() -> str:
 
 
 def build_how_to_join_embed() -> discord.Embed:
-    from bot.messages import render_embed
+    from bot.presentation import render_embed
 
     return render_embed("join_the_network", version=HOW_TO_JOIN_VERSION)
 

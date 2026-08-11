@@ -1,6 +1,8 @@
-# Message templates
+# Presentation templates
 
-User-facing bot copy lives here as YAML files. Edit these files to change embeds, popups, and modal labels without touching Python.
+User-facing Discord presentation lives here as YAML files. Edit these files to change embeds,
+popups, and modal labels without touching recipes or core APIs. All failure embeds use the
+single dynamic `embeds/error.yaml` template.
 
 ## Layout
 

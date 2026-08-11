@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
+from bot.adapters.discord import register_recipe_commands, register_recipe_events
 from bot.core.clients.cache import ClientCache
 from bot.core.database import migrations
 from bot.core.database.connection import Database
@@ -77,11 +78,12 @@ class NetworkRelayBot(commands.Bot):
         self.bot_context.client_count = client_cache.client_count
         self.bot_context.enabled_client_count = client_cache.enabled_client_count
 
-        await self.load_extension("bot.cogs.servers")
-        await self.load_extension("bot.cogs.relay")
+        register_recipe_commands(self)
+        register_recipe_events(self)
 
         from bot.core.layout import validate_all_layouts
-        from bot.messages import validate_all_templates
+        from bot.presentation import validate_all_templates
+
         validate_all_templates()
         validate_all_layouts()
 

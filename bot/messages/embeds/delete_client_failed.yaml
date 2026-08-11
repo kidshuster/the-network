@@ -1,4 +1,0 @@
-kind: embed
-title: Client deletion failed
-colour: red
-description: "{error}"

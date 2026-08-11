@@ -17,9 +17,7 @@ _HUB_CHANNEL_TYPES = (
 
 
 def count_hub_guild_channels(guild: discord.Guild) -> int:
-    return sum(
-        1 for channel in guild.channels if isinstance(channel, _HUB_CHANNEL_TYPES)
-    )
+    return sum(1 for channel in guild.channels if isinstance(channel, _HUB_CHANNEL_TYPES))
 
 
 async def ensure_guild_only_mention_notifications(
@@ -61,19 +59,14 @@ async def sync_guild_notification_policy(
             reason=reason,
         )
     except discord.HTTPException as exc:
-        message = (
-            f"Could not set server default notifications to **Only @mentions**: {exc}"
-        )
+        message = f"Could not set server default notifications to **Only @mentions**: {exc}"
         if result is not None:
             result.notes.append(message)
         return
 
     channel_count = count_hub_guild_channels(guild)
     if error is not None:
-        message = (
-            f"Could not set server default notifications to **Only @mentions** "
-            f"({error})."
-        )
+        message = f"Could not set server default notifications to **Only @mentions** ({error})."
     elif changed:
         message = (
             "Server default notifications set to **Only @mentions**. "

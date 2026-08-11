@@ -115,7 +115,7 @@ def test_resolve_network_announcement_channel() -> None:
     assert resolve_network_announcement_channel(guild, "stingers", category=category) is match
 
 
-def test_resolve_network_announcements_channel_requires_announcement_type() -> None:
+def test_resolve_network_announcements_channel_uses_regular_text_channel() -> None:
     guild = MagicMock(spec=discord.Guild)
     mod_category = MagicMock(spec=discord.CategoryChannel)
     mod_category.name = CATEGORY_MODERATION
@@ -134,7 +134,10 @@ def test_resolve_network_announcements_channel_requires_announcement_type() -> N
     guild.categories = [mod_category]
     guild.text_channels = [plain, announcement]
 
-    assert resolve_network_announcements_channel(guild) is announcement
+    assert resolve_network_announcements_channel(guild) is plain
+
+    guild.text_channels = [announcement]
+    assert resolve_network_announcements_channel(guild) is None
 
 
 def test_resolve_announcement_channel_in_category_ignores_plain_text() -> None:

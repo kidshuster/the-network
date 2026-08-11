@@ -70,9 +70,7 @@ def _network() -> Network:
 async def test_moderation_embed_posts_to_profile_channel() -> None:
     profile_channel = MagicMock(spec=discord.TextChannel)
     profile_channel.id = 30
-    profile_channel.send = AsyncMock(
-        return_value=MagicMock(spec=discord.Message, id=999)
-    )
+    profile_channel.send = AsyncMock(return_value=MagicMock(spec=discord.Message, id=999))
     profile_channel.fetch_message = AsyncMock()
 
     subscribe_channel = MagicMock(spec=discord.TextChannel)
@@ -81,9 +79,7 @@ async def test_moderation_embed_posts_to_profile_channel() -> None:
 
     guild = MagicMock(spec=discord.Guild)
     guild.get_channel = MagicMock(
-        side_effect=lambda channel_id: (
-            profile_channel if channel_id == 30 else subscribe_channel
-        )
+        side_effect=lambda channel_id: profile_channel if channel_id == 30 else subscribe_channel
     )
 
     bot = MagicMock()

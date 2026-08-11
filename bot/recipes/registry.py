@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import contextvars
 import inspect
+import secrets
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, TypeVar, cast
 
+from bot.errors import UserFacingError
 from bot.recipes.metadata import CommandSpec, RecipeSpec
 from bot.recipes.runtime import RecipeContext
 
@@ -19,7 +21,16 @@ _call_stack: contextvars.ContextVar[tuple[str, ...]] = contextvars.ContextVar(
 
 
 class RecipeRegistryError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        recipe: str | None = None,
+        reference: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.recipe = recipe
+        self.reference = reference or secrets.token_hex(4)
 
 
 def recipe(
@@ -104,11 +115,22 @@ class RecipeRegistry:
             raise RecipeRegistryError(f"Invalid inputs for {name!r}: {exc}") from exc
         token = _call_stack.set((*stack, name))
         try:
-            return await function(RecipeContext(self._bot, self), **inputs)
+            result = await function(RecipeContext(self._bot, self), **inputs)
+            if getattr(result, "success", None) is False:
+                message = (
+                    getattr(result, "error", None)
+                    or getattr(result, "reason", None)
+                    or f"{name} did not complete successfully."
+                )
+                raise UserFacingError(str(message))
+            return result
         except RecipeRegistryError:
             raise
         except Exception as exc:
-            raise RecipeRegistryError(f"Recipe {name!r} failed: {exc}") from exc
+            raise RecipeRegistryError(
+                f"Recipe {name!r} failed",
+                recipe=name,
+            ) from exc
         finally:
             _call_stack.reset(token)
 

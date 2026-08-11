@@ -114,9 +114,7 @@ async def test_sync_recreates_when_emoji_missing_from_guild() -> None:
     service = EmojiService()
     guild = MagicMock(spec=discord.Guild)
     guild.emojis = []
-    guild.create_custom_emoji = AsyncMock(
-        return_value=MagicMock(id=555, name="net_partner_000201")
-    )
+    guild.create_custom_emoji = AsyncMock(return_value=MagicMock(id=555, name="net_partner_000201"))
 
     target = EmojiSyncTarget(
         emoji_id=999,

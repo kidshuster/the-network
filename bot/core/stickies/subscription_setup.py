@@ -18,11 +18,7 @@ class SubscriptionSetupState:
 
     @property
     def fully_configured(self) -> bool:
-        return (
-            self.network_active
-            and self.publish_configured
-            and self.subscribe_confirmed
-        )
+        return self.network_active and self.publish_configured and self.subscribe_confirmed
 
     @property
     def link_status(self) -> NetworkLinkStatus:

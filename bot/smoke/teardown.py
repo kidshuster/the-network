@@ -63,9 +63,7 @@ async def teardown_smoke_guild(
         result.errors.append(f"join-requests cleanup: {exc}")
 
     result.removed_artifacts.extend(await cleanup_guild_test_artifacts(guild))
-    result.removed_artifacts.extend(
-        await cleanup_hub_rebuild_smoke_artifacts(guild, bot_member)
-    )
+    result.removed_artifacts.extend(await cleanup_hub_rebuild_smoke_artifacts(guild, bot_member))
     result.removed_artifacts.extend(await cleanup_guild_test_artifacts(guild))
 
     try:

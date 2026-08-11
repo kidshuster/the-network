@@ -171,9 +171,7 @@ async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_self_relay_to_own_subscribe_channel(
-    db, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_self_relay_to_own_subscribe_channel(db, monkeypatch: pytest.MonkeyPatch) -> None:
     network_repo = NetworkStore(db)
     client_repo = ClientStore(db)
     network = await network_repo.create(

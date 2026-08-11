@@ -143,13 +143,14 @@ async def test_blacklist_recipe_hides_missing_record_handling() -> None:
     core = SimpleNamespace(store=SimpleNamespace(clients=repo))
     registry = build_recipe_registry(_bot(core=core))
 
-    with pytest.raises(RecipeRegistryError, match="Subscription was not found") as raised:
+    with pytest.raises(RecipeRegistryError, match="blacklist.replace") as raised:
         await registry.run(
             "blacklist.replace",
             subscription_id=4,
             selected_client_ids=[],
         )
     assert isinstance(raised.value.__cause__, ValueError)
+    assert str(raised.value.__cause__) == "Subscription was not found."
 
 
 async def test_command_recipe_rejects_wrong_guild_at_boundary() -> None:
@@ -158,8 +159,10 @@ async def test_command_recipe_rejects_wrong_guild_at_boundary() -> None:
     interaction.guild = MagicMock(spec=discord.Guild)
     interaction.guild.id = 999
 
-    with pytest.raises(RecipeRegistryError, match="configured hub guild"):
+    with pytest.raises(RecipeRegistryError, match="server.init") as raised:
         await registry.run("server.init", interaction=interaction)
+    assert raised.value.__cause__ is not None
+    assert "configured hub guild" in str(raised.value.__cause__)
 
 
 async def test_network_create_recipe_owns_complete_operation(
@@ -208,7 +211,7 @@ async def test_network_create_recipe_stops_before_mutation_for_duplicate() -> No
     core = SimpleNamespace(store=SimpleNamespace(networks=networks))
     registry = build_recipe_registry(_bot(core=core))
 
-    with pytest.raises(RecipeRegistryError, match="already exists"):
+    with pytest.raises(RecipeRegistryError, match="network.create") as raised:
         await registry.run(
             "network.create",
             guild=MagicMock(spec=discord.Guild),
@@ -217,6 +220,8 @@ async def test_network_create_recipe_stops_before_mutation_for_duplicate() -> No
             view_registry=MagicMock(),
         )
     networks.create.assert_not_awaited()
+    assert raised.value.__cause__ is not None
+    assert "already exists" in str(raised.value.__cause__)
 
 
 async def test_network_delete_recipe_refreshes_state_and_profiles(

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.cogs._responses import DeferredEphemeralResponse
-from bot.messages import render_embed
+from bot.adapters.discord.responses import DeferredEphemeralResponse
+from bot.presentation import render_embed
 
 
 @pytest.mark.asyncio
@@ -23,13 +23,17 @@ async def test_send_marks_sent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_failure_renders_command_failure_embed() -> None:
+async def test_send_error_renders_central_error_embed() -> None:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.followup = MagicMock()
     interaction.followup.send = AsyncMock()
 
     response = DeferredEphemeralResponse(interaction)
-    await response.send_failure("Init failed", "Missing permissions")
+    await response.send_error(
+        "Missing permissions",
+        title="Init failed",
+        reference="abc123",
+    )
 
     args, kwargs = interaction.followup.send.await_args
     assert kwargs["ephemeral"] is True
@@ -39,7 +43,7 @@ async def test_send_failure_renders_command_failure_embed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ensure_sent_sends_command_error_when_nothing_sent() -> None:
+async def test_ensure_sent_sends_central_error_when_nothing_sent() -> None:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.followup = MagicMock()
     interaction.followup.send = AsyncMock()
@@ -48,7 +52,12 @@ async def test_ensure_sent_sends_command_error_when_nothing_sent() -> None:
     await response.ensure_sent()
 
     kwargs = interaction.followup.send.await_args.kwargs
-    expected = render_embed("command_error")
+    expected = render_embed(
+        "error",
+        title="Unexpected Error",
+        description="The operation completed without returning a response.",
+        reference="none",
+    )
     assert kwargs["embed"].title == expected.title
     assert response.sent is True
 

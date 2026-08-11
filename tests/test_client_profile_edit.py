@@ -113,9 +113,7 @@ async def test_apply_edit_invalid_image_returns_validation_error(
 
 
 @pytest.mark.asyncio
-async def test_apply_edit_with_valid_image_syncs_emoji(
-    db, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_apply_edit_with_valid_image_syncs_emoji(db, monkeypatch: pytest.MonkeyPatch) -> None:
     from store_helpers import create_test_client
 
     guild, _, _, _, _ = make_guild_with_roles()

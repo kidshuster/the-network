@@ -217,9 +217,7 @@ def validate_provision_permissions(
     if not perms.manage_channels:
         issues.append("**Manage Channels** — required to create categories and channels.")
     if not perms.manage_roles:
-        issues.append(
-            "**Manage Roles** — required to set private channel permission overwrites."
-        )
+        issues.append("**Manage Roles** — required to set private channel permission overwrites.")
     if not perms.manage_webhooks:
         issues.append("**Manage Webhooks** — required for partner feed channels.")
 

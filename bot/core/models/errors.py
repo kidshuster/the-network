@@ -1,4 +1,7 @@
-class NetworkRelayError(Exception):
+from bot.errors import UserFacingError
+
+
+class NetworkRelayError(UserFacingError):
     """Base error for relay bot operations."""
 
 

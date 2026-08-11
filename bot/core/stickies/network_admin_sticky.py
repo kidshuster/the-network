@@ -12,7 +12,7 @@ from bot.core.stickies.sync import (
     StoredStickySyncResult,
     sync_stored_sticky,
 )
-from bot.messages import render_embed
+from bot.presentation import render_embed
 
 if TYPE_CHECKING:
     from bot.core.runtime import BotContext

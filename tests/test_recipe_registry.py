@@ -107,6 +107,7 @@ async def test_registry_preserves_recipe_boundary_and_cause() -> None:
 
     registry.register(failure)
 
-    with pytest.raises(RecipeRegistryError, match="test.failure.*bad state") as raised:
+    with pytest.raises(RecipeRegistryError, match="test.failure") as raised:
         await registry.run("test.failure")
     assert isinstance(raised.value.__cause__, ValueError)
+    assert str(raised.value.__cause__) == "bad state"

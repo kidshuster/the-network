@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import discord
 import yaml
 
-from bot.messages import render_embed
+from bot.presentation import render_embed
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot

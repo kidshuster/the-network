@@ -488,8 +488,7 @@ async def run_join_approval_smoke_flow(
             ]
             if leaders_gaps:
                 raise RuntimeError(
-                    "Smoke accept did not grant Leaders access: "
-                    + "; ".join(leaders_gaps),
+                    "Smoke accept did not grant Leaders access: " + "; ".join(leaders_gaps),
                 )
 
             profile_channel_id = client.profile_channel_id
@@ -556,9 +555,7 @@ async def run_join_approval_smoke_flow(
             if not submit_deny.success:
                 raise RuntimeError(f"Smoke submit (deny path) failed: {submit_deny.error}")
 
-            pending_deny = await context.store.requests.get_pending_for_requester(
-                bot_member.id
-            )
+            pending_deny = await context.store.requests.get_pending_for_requester(bot_member.id)
             if pending_deny is None:
                 raise RuntimeError("Smoke deny-path submit did not create a pending request.")
             request_ids_for_cleanup.append(pending_deny.id)
@@ -739,9 +736,7 @@ async def provision_smoke_client_with_subscription(
         access_role_name=bot.settings.network_access_role_name,
     )
     if not subscribe.success or subscribe.subscription is None:
-        raise RuntimeError(
-            f"Smoke network subscribe failed: {subscribe.error or 'unknown error'}"
-        )
+        raise RuntimeError(f"Smoke network subscribe failed: {subscribe.error or 'unknown error'}")
 
     return HubRebuildSmokeState(
         client_id=client.id,
@@ -831,14 +826,11 @@ async def run_hub_rebuild_smoke_flow(
             raise RuntimeError("Client subscribe channel was deleted during hub uninit.")
 
         remaining_hub_cats = [
-            cat.name
-            for cat in guild.categories
-            if cat.name.casefold() in hub_category_names()
+            cat.name for cat in guild.categories if cat.name.casefold() in hub_category_names()
         ]
         if remaining_hub_cats:
             raise RuntimeError(
-                "Hub categories still present after uninit: "
-                + ", ".join(remaining_hub_cats)
+                "Hub categories still present after uninit: " + ", ".join(remaining_hub_cats)
             )
         for preserved in preserved_channel_names():
             # Community/preserved channels may remain; never treat as failure if present.
@@ -905,9 +897,7 @@ async def run_hub_rebuild_smoke_flow(
 
             refreshed = await context.store.clients.get_by_id(state.client_id)
             expected_name = (
-                build_client_role_name(refreshed.server_name)
-                if refreshed is not None
-                else None
+                build_client_role_name(refreshed.server_name) if refreshed is not None else None
             )
             if expected_name is not None:
                 client_role = discord.utils.get(guild.roles, name=expected_name)
@@ -924,9 +914,7 @@ async def run_hub_rebuild_smoke_flow(
                 fetched = await guild.fetch_channel(state.category_id)
             except discord.NotFound:
                 fetched = None
-            category = (
-                fetched if isinstance(fetched, discord.CategoryChannel) else None
-            )
+            category = fetched if isinstance(fetched, discord.CategoryChannel) else None
         if category is None:
             raise RuntimeError("Client category was removed during hub rebuild.")
 
@@ -974,9 +962,12 @@ async def run_hub_rebuild_smoke_flow(
                     "Client category overwrites do not match compile_client after re-init."
                 )
 
-        if context.routing_service.resolve_publish_subscription(
-            state.publish_channel_id,
-        ) is None:
+        if (
+            context.routing_service.resolve_publish_subscription(
+                state.publish_channel_id,
+            )
+            is None
+        ):
             raise RuntimeError("Routing cache does not resolve smoke publish channel.")
 
         return state

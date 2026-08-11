@@ -146,9 +146,7 @@ async def _provision_smoke_welcome_client(
         access_role_name=bot.settings.network_access_role_name,
     )
     if not subscribe.success or subscribe.subscription is None:
-        raise RuntimeError(
-            f"Smoke welcome subscribe failed: {subscribe.error or 'unknown error'}"
-        )
+        raise RuntimeError(f"Smoke welcome subscribe failed: {subscribe.error or 'unknown error'}")
 
     await context.store.requests.delete_by_id(pending.id)
     return client, subscribe.subscription
@@ -201,8 +199,7 @@ async def verify_setup_sticky_copy(
     subscribe_text = _embed_blob(subscribe_stickies[0])
     if expected_channel_name not in subscribe_text:
         raise RuntimeError(
-            "Subscribe setup sticky missing uniform channel name "
-            f"{expected_channel_name!r}."
+            f"Subscribe setup sticky missing uniform channel name {expected_channel_name!r}."
         )
 
     if publish_channel is None:

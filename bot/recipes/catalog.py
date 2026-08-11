@@ -6,6 +6,7 @@ from typing import Any
 import discord
 
 from bot.core.models.errors import NetworkValidationError
+from bot.errors import UserFacingError
 from bot.recipes.metadata import CommandSpec
 from bot.recipes.registry import RecipeRegistry, collect_recipes, recipe
 from bot.recipes.runtime import RecipeContext
@@ -21,6 +22,8 @@ logger = logging.getLogger(__name__)
         description="Set up hub categories/channels and run permission smoke checks",
         default_permissions=("manage_guild",),
         background=True,
+        presenter="server.init",
+        group_description="Initialize and maintain the Discord hub server",
     ),
 )
 async def initialize_server(
@@ -31,10 +34,10 @@ async def initialize_server(
 
     guild = interaction.guild
     if guild is None or guild.id != recipe_context.bot.settings.guild_id:
-        raise ValueError("This command can only be used in the configured hub guild.")
+        raise UserFacingError("This command can only be used in the configured hub guild.")
     bot_member = guild.me
     if bot_member is None:
-        raise ValueError("Bot member is unavailable.")
+        raise UserFacingError("Bot member is unavailable.")
     core = recipe_context.core
     return await initialize_guild(
         guild,
@@ -56,6 +59,8 @@ async def initialize_server(
         description="Remove managed hub resources while preserving community channels",
         default_permissions=("manage_guild",),
         background=True,
+        presenter="server.uninit",
+        group_description="Initialize and maintain the Discord hub server",
     ),
 )
 async def uninitialize_server(
@@ -66,10 +71,10 @@ async def uninitialize_server(
 
     guild = interaction.guild
     if guild is None or guild.id != recipe_context.bot.settings.guild_id:
-        raise ValueError("This command can only be used in the configured hub guild.")
+        raise UserFacingError("This command can only be used in the configured hub guild.")
     bot_member = guild.me
     if bot_member is None:
-        raise ValueError("Bot member is unavailable.")
+        raise UserFacingError("Bot member is unavailable.")
     result = await uninitialize_guild(
         guild,
         bot_member,
@@ -89,6 +94,8 @@ async def uninitialize_server(
         name="sync-join-guide",
         description="Refresh the join guide in the join-the-network channel",
         default_permissions=("manage_guild",),
+        presenter="server.sync_join_guide",
+        group_description="Initialize and maintain the Discord hub server",
     ),
 )
 async def sync_join_guide(
@@ -100,10 +107,10 @@ async def sync_join_guide(
 
     guild = interaction.guild
     if guild is None or guild.me is None:
-        raise ValueError("Guild or bot member is unavailable.")
+        raise UserFacingError("Guild or bot member is unavailable.")
     channel = resolve_join_the_network_channel(guild)
     if channel is None:
-        raise ValueError("The join-the-network channel was not found.")
+        raise UserFacingError("The join-the-network channel was not found.")
     view = PersistentViewRegistry(recipe_context.bot).register_join_network_view()
     result = await sync_hub_join_sticky(
         guild,

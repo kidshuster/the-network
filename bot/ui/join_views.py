@@ -5,10 +5,15 @@ from typing import TYPE_CHECKING, Any, cast
 
 import discord
 
-from bot.cogs._checks import ensure_manage_guild
-from bot.cogs._responses import defer_ephemeral
-from bot.messages import modal_spec, render_embed
-from bot.messages.modals_builder import add_modal_fields, modal_file_attachments, modal_text_value
+from bot.adapters.discord.checks import ensure_manage_guild
+from bot.adapters.discord.errors import respond_to_error, respond_with_error
+from bot.adapters.discord.responses import defer_ephemeral
+from bot.presentation import modal_spec, render_embed
+from bot.presentation.modals_builder import (
+    add_modal_fields,
+    modal_file_attachments,
+    modal_text_value,
+)
 from bot.ui._auth import validate_hub_modal_context
 from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import join_network_button, request_approve_button, request_deny_button
@@ -41,12 +46,13 @@ class JoinNetworkModal(discord.ui.Modal):
 
         attachments = modal_file_attachments(self._fields["profile_image"])
         if not attachments:
-            await response.send(
-                embed=render_embed(
-                    "join_request_failed",
-                    description="A profile image upload is required.",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                "A profile image upload is required.",
+                operation="join.submit",
+                title="Request Failed",
             )
             return
 
@@ -66,12 +72,13 @@ class JoinNetworkModal(discord.ui.Modal):
             profile_image=attachments[0],
         )
         if not result.success:
-            await response.send(
-                embed=render_embed(
-                    "join_request_failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="join.submit",
+                title="Request Failed",
             )
             return
 
@@ -160,27 +167,24 @@ class ModeratorReviewView(discord.ui.View):
                     request_id=self._request_id,
                     moderator=member,
                 )
-        except Exception:
-            logger.exception(
-                "Join request button review failed",
-                extra={"request_id": self._request_id, "approved": approved},
-            )
-            await response.send(
-                embed=render_embed(
-                    "review_failed",
-                    description="An unexpected error occurred. Check bot logs.",
-                ),
-                ephemeral=True,
+        except Exception as error:
+            await respond_to_error(
+                self._bot,
+                interaction,
+                response,
+                error,
+                operation="join.review",
             )
             return
 
         if not result.success:
-            await response.send(
-                embed=render_embed(
-                    "review_failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="join.review",
+                title="Review Failed",
             )
             return
 
@@ -194,4 +198,3 @@ class ModeratorReviewView(discord.ui.View):
             ),
             ephemeral=True,
         )
-

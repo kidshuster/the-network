@@ -137,15 +137,9 @@ def _setup_description(
     if needs_publish and needs_subscribe:
         return f"Finish connecting **`{network_key}`** before relays can flow."
     if needs_publish:
-        return (
-            f"Connect your **publish** channel for **`{network_key}`** "
-            "to finish setup."
-        )
+        return f"Connect your **publish** channel for **`{network_key}`** to finish setup."
     if needs_subscribe:
-        return (
-            f"Connect your **subscribe** channel for **`{network_key}`** "
-            "to finish setup."
-        )
+        return f"Connect your **subscribe** channel for **`{network_key}`** to finish setup."
     return f"**`{network_key}`** is connected."
 
 
@@ -159,7 +153,7 @@ def build_moderation_embed(
     subscribe_mention: str = "",
 ) -> discord.Embed:
     from bot.core.clients.names import slugify_client_name
-    from bot.messages import render_embed
+    from bot.presentation import render_embed
 
     client_slug = slugify_client_name(client_server_name)
     if setup_state is not None and not setup_state.fully_configured:
@@ -223,9 +217,7 @@ async def post_subscription_moderation_embed(
     publish_channel = await fetch_publish_channel(guild, subscription)
     subscribe_channel = await fetch_subscribe_channel(guild, subscription)
     publish_mention = publish_channel.mention if publish_channel is not None else "#publish"
-    subscribe_mention = (
-        subscribe_channel.mention if subscribe_channel is not None else "#subscribe"
-    )
+    subscribe_mention = subscribe_channel.mention if subscribe_channel is not None else "#subscribe"
 
     view = _moderation_view(view_registry, subscription, network, setup_state)
     embed = build_moderation_embed(

@@ -45,10 +45,7 @@ async def _ensure_human_moderator_role(
     role = resolve_human_moderator_role(guild)
     if role is not None:
         if bot_member.top_role.position > role.position:
-            needs_update = (
-                role.permissions != _MODERATOR_GUILD_PERMISSIONS
-                or not role.mentionable
-            )
+            needs_update = role.permissions != _MODERATOR_GUILD_PERMISSIONS or not role.mentionable
 
             if needs_update:
 

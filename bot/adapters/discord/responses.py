@@ -5,7 +5,7 @@ from typing import Any
 
 import discord
 
-from bot.messages import render_embed, render_text
+from bot.presentation import render_embed, render_text
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,20 @@ class DeferredEphemeralResponse:
             ephemeral=ephemeral,
         )
 
-    async def send_failure(self, title: str, description: str) -> None:
+    async def send_error(
+        self,
+        description: str,
+        *,
+        title: str = "Operation Failed",
+        reference: str = "none",
+    ) -> None:
         await self.send(
-            embed=render_embed("command_failure", title=title, description=description),
+            embed=render_embed(
+                "error",
+                title=title,
+                description=description,
+                reference=reference,
+            ),
             ephemeral=True,
         )
 
@@ -54,7 +65,12 @@ class DeferredEphemeralResponse:
         logger.error("Deferred slash command finished without sending a followup")
         try:
             await self.send(
-                embed=render_embed("command_error"),
+                embed=render_embed(
+                    "error",
+                    title="Unexpected Error",
+                    description="The operation completed without returning a response.",
+                    reference="none",
+                ),
                 ephemeral=True,
             )
         except discord.HTTPException:

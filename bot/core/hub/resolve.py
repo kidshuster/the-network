@@ -192,16 +192,16 @@ def resolve_network_announcements_channel(
 ) -> discord.TextChannel | None:
     mod_category = resolve_moderation_category(guild)
     if mod_category is not None:
-        match = resolve_announcement_channel_in_category(
+        match = find_network_announcements_text_channel(
             guild,
-            name=CHANNEL_NETWORK_ANNOUNCEMENTS,
             category_id=mod_category.id,
+            include_announcement=False,
         )
         if match is not None:
             return match
-    return resolve_announcement_channel_in_category(
+    return find_network_announcements_text_channel(
         guild,
-        name=CHANNEL_NETWORK_ANNOUNCEMENTS,
+        include_announcement=False,
     )
 
 

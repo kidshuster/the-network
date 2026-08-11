@@ -278,9 +278,7 @@ async def _teardown_hub(
         if r.kind is ResourceKind.CATEGORY and r.managed == "hub"
     }
     preserve_names = {
-        r.name.casefold()
-        for r in resources
-        if r.preserve_on_uninit or r.community_slot is not None
+        r.name.casefold() for r in resources if r.preserve_on_uninit or r.community_slot is not None
     }
     for resource in resources:
         preserve_names.update(n.casefold() for n in resource.legacy_names)

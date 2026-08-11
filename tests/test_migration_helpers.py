@@ -16,9 +16,7 @@ async def test_column_not_null_detects_not_null_column(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     db = Database(db_path)
     await db.connect()
-    await db.connection.execute(
-        "CREATE TABLE sample (id INTEGER NOT NULL, label TEXT)"
-    )
+    await db.connection.execute("CREATE TABLE sample (id INTEGER NOT NULL, label TEXT)")
     await db.connection.commit()
 
     assert await _column_not_null(db, "sample", "id") is True
@@ -34,9 +32,7 @@ async def test_column_not_null_uses_single_fetchall(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     db = Database(db_path)
     await db.connect()
-    await db.connection.execute(
-        "CREATE TABLE sample (required INTEGER NOT NULL)"
-    )
+    await db.connection.execute("CREATE TABLE sample (required INTEGER NOT NULL)")
     await db.connection.commit()
 
     cursor = await db.connection.execute("PRAGMA table_info(sample)")

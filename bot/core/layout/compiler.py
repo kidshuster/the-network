@@ -167,16 +167,17 @@ def compile_hub_slice(
 ) -> list[DesiredResource]:
     resources = compile_hub(context)
     selected_channels = [
-        item for item in resources
+        item
+        for item in resources
         if item.kind is not ResourceKind.CATEGORY
         and (channel_ids is None or item.id in channel_ids)
         and (category_ids is None or item.category_ref in category_ids)
     ]
     needed = {item.category_ref for item in selected_channels}
     return [
-        item for item in resources
-        if (item.kind is ResourceKind.CATEGORY and item.id in needed)
-        or item in selected_channels
+        item
+        for item in resources
+        if (item.kind is ResourceKind.CATEGORY and item.id in needed) or item in selected_channels
     ]
 
 
@@ -199,9 +200,11 @@ def compile_client(
         if resource is not None:
             channels.append(resource)
     include_category = channel_ids is None or "client" in channel_ids or bool(channels)
-    resources = [
-        _category_resource(context, "client", category, managed="client")
-    ] if include_category else []
+    resources = (
+        [_category_resource(context, "client", category, managed="client")]
+        if include_category
+        else []
+    )
     return [*resources, *channels]
 
 

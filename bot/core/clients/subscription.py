@@ -321,22 +321,14 @@ class ClientSubscriptionService:
                 if publish_channel is None:
                     created = batch.resource("publish")
                     if not isinstance(created, discord.TextChannel):
-                        detail = (
-                            batch.failures[0]
-                            if batch.failures
-                            else "publish create failed"
-                        )
+                        detail = batch.failures[0] if batch.failures else "publish create failed"
                         raise RuntimeError(detail)
                     publish_channel = created
                     newly_created.append(publish_channel)
                 if subscribe_channel is None:
                     created = batch.resource("subscribe")
                     if not isinstance(created, discord.TextChannel):
-                        detail = (
-                            batch.failures[0]
-                            if batch.failures
-                            else "subscribe create failed"
-                        )
+                        detail = batch.failures[0] if batch.failures else "subscribe create failed"
                         raise RuntimeError(detail)
                     subscribe_channel = created
                     newly_created.append(subscribe_channel)
@@ -405,10 +397,7 @@ class ClientSubscriptionService:
         network_repo: NetworkStore,
     ) -> UnsubscribeResult:
         profile = await resolve_client_profile_channel(guild, client)
-        if (
-            profile is not None
-            and subscription.moderation_message_id is not None
-        ):
+        if profile is not None and subscription.moderation_message_id is not None:
             try:
                 message = await profile.fetch_message(subscription.moderation_message_id)
                 await message.delete()

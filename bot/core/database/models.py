@@ -48,9 +48,7 @@ class ServerRequestRow:
         return ServerRequest(
             id=int(row["id"]),
             guild_id=int(row["guild_id"]),
-            network_id=(
-                int(row["network_id"]) if row["network_id"] is not None else None
-            ),
+            network_id=(int(row["network_id"]) if row["network_id"] is not None else None),
             requester_user_id=int(row["requester_user_id"]),
             server_name=str(row["server_name"]),
             display_name=str(row["display_name"]),
@@ -67,9 +65,7 @@ class ServerRequestRow:
                 else None
             ),
             resolved_by_user_id=(
-                int(row["resolved_by_user_id"])
-                if row["resolved_by_user_id"] is not None
-                else None
+                int(row["resolved_by_user_id"]) if row["resolved_by_user_id"] is not None else None
             ),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
@@ -93,12 +89,8 @@ class RelayRecordRow:
             source_webhook_id=(
                 int(row["source_webhook_id"]) if row["source_webhook_id"] is not None else None
             ),
-            profile_id=(
-                int(row["profile_id"]) if row["profile_id"] is not None else None
-            ),
-            client_id=(
-                int(row["client_id"]) if row["client_id"] is not None else None
-            ),
+            profile_id=(int(row["profile_id"]) if row["profile_id"] is not None else None),
+            client_id=(int(row["client_id"]) if row["client_id"] is not None else None),
             network_id=int(row["network_id"]),
             destination_channel_id=int(row["destination_channel_id"]),
             destination_message_ids=destination_ids,
@@ -121,9 +113,7 @@ class ClientRow:
             profile_message_id=int(row["profile_message_id"]),
             enabled=bool(row["enabled"]),
             timecode_enabled=(
-                bool(row["timecode_enabled"])
-                if "timecode_enabled" in row.keys()
-                else True
+                bool(row["timecode_enabled"]) if "timecode_enabled" in row.keys() else True
             ),
             emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
             emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,

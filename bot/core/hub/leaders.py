@@ -117,16 +117,12 @@ async def ensure_leaders_channels(
         mode=ApplyMode.ENSURE,
     )
     sync_result.failures = [
-        f"Leaders: {item.resource_id}: {item.detail}"
-        for item in batch.results
-        if not item.success
+        f"Leaders: {item.resource_id}: {item.detail}" for item in batch.results if not item.success
     ]
 
     leaders = batch.resource("leaders_channel")
     changelog = batch.resource("changelog")
-    sync_result.leaders_channel = (
-        leaders if isinstance(leaders, discord.TextChannel) else None
-    )
+    sync_result.leaders_channel = leaders if isinstance(leaders, discord.TextChannel) else None
     sync_result.changelog_channel = (
         changelog if isinstance(changelog, discord.TextChannel) else None
     )

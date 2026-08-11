@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.cogs._checks import ensure_manage_guild
-from bot.cogs._responses import defer_ephemeral
+from bot.adapters.discord.checks import ensure_manage_guild
+from bot.adapters.discord.errors import respond_with_error
+from bot.adapters.discord.responses import defer_ephemeral
 from bot.core.stickies.network_admin_sticky import refresh_network_admin_sticky_from_settings
-from bot.messages import modal_spec, render_embed, render_text
-from bot.messages.modals_builder import add_modal_fields, modal_text_value
+from bot.presentation import modal_spec, render_embed, render_text
+from bot.presentation.modals_builder import add_modal_fields, modal_text_value
 from bot.recipes.network.service import create_network, delete_network
 from bot.ui._auth import validate_hub_modal_context
 from bot.ui._view_helpers import bind_item_callback
@@ -53,13 +54,13 @@ class CreateNetworkModal(discord.ui.Modal):
             view_registry=view_registry,
         )
         if not result.success or result.network is None:
-            await response.send(
-                embed=render_embed(
-                    "command_failure",
-                    title="Network Create Failed",
-                    description=result.error or "Unknown error",
-                ),
-                ephemeral=True,
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Unknown error",
+                operation="network.create",
+                title="Network Create Failed",
             )
             return
 
@@ -112,13 +113,14 @@ class DeleteNetworkModal(discord.ui.Modal):
             view_registry=view_registry,
         )
         if not result.success:
-            if result.error and "not found" in result.error.lower():
-                await response.send(result.error, ephemeral=True)
-            else:
-                await response.send(
-                    render_text("network_delete_failed"),
-                    ephemeral=True,
-                )
+            await respond_with_error(
+                self._bot,
+                interaction,
+                response,
+                result.error or "Network delete failed.",
+                operation="network.delete",
+                title="Network Delete Failed",
+            )
             return
 
         await refresh_network_admin_sticky_from_settings(

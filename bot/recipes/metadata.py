@@ -11,6 +11,8 @@ class CommandSpec:
     default_permissions: tuple[str, ...] = ()
     ephemeral: bool = True
     background: bool = False
+    presenter: str | None = None
+    group_description: str = "The Network commands"
 
 
 @dataclass(frozen=True)

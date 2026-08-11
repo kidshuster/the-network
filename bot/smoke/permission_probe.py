@@ -219,9 +219,7 @@ async def verify_provision_permissions_live(
                         replace(
                             resource,
                             name=profile_name,
-                            topic=(
-                                "The Network client onboarding probe profile channel."
-                            ),
+                            topic=("The Network client onboarding probe profile channel."),
                         )
                     )
                 elif resource.id == "publish":
@@ -229,9 +227,7 @@ async def verify_provision_permissions_live(
                         replace(
                             resource,
                             name=publish_name,
-                            topic=(
-                                "The Network client onboarding probe publish channel."
-                            ),
+                            topic=("The Network client onboarding probe publish channel."),
                         )
                     )
 
@@ -247,9 +243,7 @@ async def verify_provision_permissions_live(
                 raise _provision_probe_failure(
                     step,
                     guard.completed_steps,
-                    RuntimeError(
-                        "; ".join(batch.failures) or "category create failed"
-                    ),
+                    RuntimeError("; ".join(batch.failures) or "category create failed"),
                 )
             guard.track_category(category)
 
@@ -259,9 +253,7 @@ async def verify_provision_permissions_live(
                 raise _provision_probe_failure(
                     step,
                     guard.completed_steps,
-                    RuntimeError(
-                        "; ".join(batch.failures) or "profile create failed"
-                    ),
+                    RuntimeError("; ".join(batch.failures) or "profile create failed"),
                 )
             guard.track_channel(profile_channel)
             guard.completed_steps.append(step)
@@ -272,9 +264,7 @@ async def verify_provision_permissions_live(
                 raise _provision_probe_failure(
                     step,
                     guard.completed_steps,
-                    RuntimeError(
-                        "; ".join(batch.failures) or "publish create failed"
-                    ),
+                    RuntimeError("; ".join(batch.failures) or "publish create failed"),
                 )
             guard.track_channel(publish_channel)
             guard.completed_steps.append(step)
@@ -381,7 +371,7 @@ def _probe_failure_detail(exc: BaseException) -> tuple[str, str]:
             "cat VERSION    # must show 1.2.9 or newer\n"
             "./scripts/update.sh\n"
             "```\n"
-            "Then confirm logs show `\"bot_version\": \"1.2.10\"` (or newer) before running "
+            'Then confirm logs show `"bot_version": "1.2.10"` (or newer) before running '
             "`/server init` again."
         )
         return failure, guidance

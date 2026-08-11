@@ -1,4 +1,4 @@
-from bot.messages.loader import (
+from bot.presentation.loader import (
     MessageTemplateError,
     clear_template_cache,
     load_template,

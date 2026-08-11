@@ -60,6 +60,7 @@ def test_join_network_modal_loads_single_name_field() -> None:
     assert "display_name" not in modal._fields
     assert "server_name" not in modal._fields
 
+
 def test_subscription_moderation_view_subscribe_connected_button() -> None:
     bot = MagicMock()
     view = SubscriptionModerationView(

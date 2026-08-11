@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.messages import render_embed, render_text
+from bot.presentation import render_embed, render_text
 
 
 def test_join_request_submitted_renders_server_name() -> None:
@@ -34,18 +34,25 @@ def test_review_success_accepts_label() -> None:
     assert embed.description == "Done."
 
 
-def test_subscribe_success_and_failed_templates() -> None:
+def test_success_and_central_error_templates() -> None:
     success = render_embed("subscribe_success", description="Subscribed to stingers.")
-    failed = render_embed("subscribe_failed", description="Missing Permissions")
+    failed = render_embed(
+        "error",
+        title="Subscribe Failed",
+        description="Missing Permissions",
+        reference="abc123",
+    )
     assert success.title == "Network Subscription"
     assert failed.title == "Subscribe Failed"
     assert "Missing Permissions" in (failed.description or "")
 
 
-def test_server_init_failed_includes_reason() -> None:
+def test_central_error_supports_dynamic_operation_title() -> None:
     embed = render_embed(
-        "server_init_failed",
+        "error",
+        title="Server Init Failed",
         description="Join-approval provisioning probe failed",
+        reference="abc123",
     )
     assert embed.title == "Server Init Failed"
     assert "provisioning probe" in (embed.description or "")

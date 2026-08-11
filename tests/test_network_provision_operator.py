@@ -30,7 +30,10 @@ def test_validate_operator_setup_requires_role_present() -> None:
     bot, access, _operator = _operator_bot()
     with pytest.raises(NetworkValidationError, match="The Network+"):
         validate_operator_setup(
-            bot, None, access, operator_role_name="The Network+",
+            bot,
+            None,
+            access,
+            operator_role_name="The Network+",
         )
 
 
@@ -39,7 +42,10 @@ def test_validate_operator_setup_requires_bot_has_operator_role() -> None:
     bot.roles = [access]
     with pytest.raises(NetworkValidationError, match="Assign"):
         validate_operator_setup(
-            bot, operator, access, operator_role_name="The Network+",
+            bot,
+            operator,
+            access,
+            operator_role_name="The Network+",
         )
 
 
@@ -48,7 +54,10 @@ def test_validate_operator_setup_requires_operator_as_top_role() -> None:
     bot.top_role = access
     with pytest.raises(NetworkValidationError, match="highest role"):
         validate_operator_setup(
-            bot, operator, access, operator_role_name="The Network+",
+            bot,
+            operator,
+            access,
+            operator_role_name="The Network+",
         )
 
 
@@ -59,7 +68,10 @@ def test_validate_operator_setup_requires_operator_above_access() -> None:
     bot.top_role = operator
     with pytest.raises(NetworkValidationError, match="above"):
         validate_operator_setup(
-            bot, operator, access, operator_role_name="The Network+",
+            bot,
+            operator,
+            access,
+            operator_role_name="The Network+",
         )
 
 
@@ -69,7 +81,10 @@ def test_validate_operator_setup_lists_missing_permissions() -> None:
     operator.permissions.manage_webhooks = False
     with pytest.raises(NetworkValidationError, match="Manage Roles"):
         validate_operator_setup(
-            bot, operator, access, operator_role_name="The Network+",
+            bot,
+            operator,
+            access,
+            operator_role_name="The Network+",
         )
 
 
@@ -78,7 +93,10 @@ def test_validate_operator_setup_accepts_emoji_permission_alias() -> None:
     operator.permissions.manage_emojis_and_stickers = False
     operator.permissions.manage_expressions = True
     validate_operator_setup(
-        bot, operator, access, operator_role_name="The Network+",
+        bot,
+        operator,
+        access,
+        operator_role_name="The Network+",
     )
 
 
@@ -88,12 +106,18 @@ def test_validate_operator_setup_requires_create_expressions() -> None:
     operator.permissions.manage_expressions = True
     with pytest.raises(NetworkValidationError, match="Create Expressions"):
         validate_operator_setup(
-            bot, operator, access, operator_role_name="The Network+",
+            bot,
+            operator,
+            access,
+            operator_role_name="The Network+",
         )
 
 
 def test_validate_operator_setup_passes_when_configured() -> None:
     bot, access, operator = _operator_bot()
     validate_operator_setup(
-        bot, operator, access, operator_role_name="The Network+",
+        bot,
+        operator,
+        access,
+        operator_role_name="The Network+",
     )

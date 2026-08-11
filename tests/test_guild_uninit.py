@@ -77,41 +77,62 @@ def test_is_deletable_hub_role() -> None:
     operator.is_default.return_value = False
     operator.name = "The Network+"
 
-    assert is_deletable_hub_role(
-        everyone,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
-    assert is_deletable_hub_role(
-        bot_role,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
-    assert is_deletable_hub_role(
-        operator,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
-    assert is_deletable_hub_role(
-        moderator,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is True
-    assert is_deletable_hub_role(
-        partner,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
-    assert is_deletable_hub_role(
-        client_role,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
-    assert is_deletable_hub_role(
-        custom,
-        access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
-        operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
-    ) is False
+    assert (
+        is_deletable_hub_role(
+            everyone,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
+    assert (
+        is_deletable_hub_role(
+            bot_role,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
+    assert (
+        is_deletable_hub_role(
+            operator,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
+    assert (
+        is_deletable_hub_role(
+            moderator,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is True
+    )
+    assert (
+        is_deletable_hub_role(
+            partner,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
+    assert (
+        is_deletable_hub_role(
+            client_role,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
+    assert (
+        is_deletable_hub_role(
+            custom,
+            access_role_name=DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+            operator_role_name=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
+        )
+        is False
+    )
 
 
 def test_collect_uninit_targets_preserves_rules_and_moderator_only() -> None:
