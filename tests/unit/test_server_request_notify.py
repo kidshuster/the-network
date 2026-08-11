@@ -54,7 +54,11 @@ async def test_submit_request_defaults_display_name_to_server_name(
     )
     channel.send = AsyncMock(return_value=MagicMock(id=9001))
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_join_requests_channel",
+        "bot.features.recipes.onboarding.service.resolve_hub_category",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.onboarding.service.resolve_hub_channel",
         MagicMock(return_value=channel),
     )
     monkeypatch.setattr(

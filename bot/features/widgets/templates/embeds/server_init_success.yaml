@@ -1,4 +1,4 @@
 kind: embed
 title: "Server Initialized"
 colour: green
-description: "Hub Discord layout is ready. Use **#admin** under Moderation to register networks."
+description: "Hub Discord layout is ready. Use **#{admin_channel}** under Moderation to register networks."

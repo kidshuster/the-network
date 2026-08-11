@@ -52,6 +52,37 @@ async def initialize_server(
 
 
 @recipe(
+    "server.probe",
+    command=CommandSpec(
+        group="server",
+        name="probe",
+        description="Run read-only checks for hub permissions, layout, and community slots",
+        default_permissions=("manage_guild",),
+        background=True,
+        presenter="present.server.probe",
+        group_description="Initialize and maintain the Discord hub server",
+    ),
+)
+async def probe_server(
+    recipe_context: RecipeContext, *, interaction: discord.Interaction
+) -> Any:
+    from bot.features.hub.probe import run_server_probe
+
+    guild = interaction.guild
+    if guild is None or guild.id != recipe_context.bot.settings.guild_id:
+        raise UserFacingError("This command can only be used in the configured hub guild.")
+    bot_member = guild.me
+    if bot_member is None:
+        raise UserFacingError("Bot member is unavailable.")
+    return await run_server_probe(
+        guild,
+        bot_member,
+        settings=recipe_context.bot.settings,
+        context=recipe_context.core,
+    )
+
+
+@recipe(
     "server.uninit",
     command=CommandSpec(
         group="server",

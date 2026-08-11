@@ -4,10 +4,11 @@ from collections.abc import Awaitable, Callable
 
 import discord
 
+from bot.app.layout.managed import hub_channel_name
 from bot.constants import LEGACY_MODERATOR_ROLE_NAME
 from bot.core.discord.step_runner import run_guild_step
 from bot.features.channels.resolve import (
-    CHANNEL_JOIN_REQUESTS,
+    HUB_CHANNEL_JOIN_REQUESTS,
     resolve_human_moderator_role,
 )
 from bot.features.hub.result import GuildInitResult
@@ -66,8 +67,8 @@ async def _ensure_human_moderator_role(
             result.notes.append(
                 f"**{role.name}** is not mentionable and the bot cannot edit that role "
                 "(role is above the bot). Join requests in "
-                f"**#{CHANNEL_JOIN_REQUESTS}** will not ping moderators until "
-                f"**{role.name}** is set to mentionable."
+                f"**#{hub_channel_name(HUB_CHANNEL_JOIN_REQUESTS)}** will not ping "
+                f"moderators until **{role.name}** is set to mentionable."
             )
         return role
 

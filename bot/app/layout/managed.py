@@ -24,14 +24,20 @@ def _hub_channel_by_id() -> dict[str, str]:
     }
 
 
-def hub_category_name(category_id: str, *, fallback: str) -> str:
-    """Return the configured name without failing import when a resource is removed."""
-    return _hub_category_by_id().get(category_id, fallback)
+def hub_category_name(category_id: str) -> str:
+    return _hub_category_by_id()[category_id]
 
 
-def hub_channel_name(channel_id: str, *, fallback: str) -> str:
-    """Return the configured name or a migration-only lookup fallback."""
-    return _hub_channel_by_id().get(channel_id, fallback)
+def hub_channel_name(channel_id: str) -> str:
+    return _hub_channel_by_id()[channel_id]
+
+
+def hub_category_aliases(category_id: str) -> tuple[str, ...]:
+    return (hub_category_name(category_id),)
+
+
+def hub_channel_aliases(channel_id: str) -> tuple[str, ...]:
+    return (hub_channel_name(channel_id),)
 
 
 def hub_category_names() -> frozenset[str]:

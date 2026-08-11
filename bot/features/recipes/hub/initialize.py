@@ -16,9 +16,14 @@ from bot.core.models.client import Client
 from bot.core.models.errors import NetworkValidationError
 from bot.core.views import ViewRegistry
 from bot.features.channels.resolve import (
+    HUB_CATEGORY_LEADERS,
+    HUB_CATEGORY_MODERATION,
+    HUB_CATEGORY_NETWORK,
+    HUB_CHANNEL_ADMIN,
+    HUB_CHANNEL_JOIN_THE_NETWORK,
+    resolve_hub_category,
+    resolve_hub_channel,
     resolve_human_moderator_role,
-    resolve_join_the_network_channel,
-    resolve_leaders_category,
 )
 from bot.features.hub.reconcilers import (
     _ensure_human_moderator_role,
@@ -289,7 +294,7 @@ async def initialize_guild(
         await _reorder_guild_categories(
             moderation,
             network_cat,
-            leaders_category=resolve_leaders_category(guild),
+            leaders_category=resolve_hub_category(guild, HUB_CATEGORY_LEADERS),
             client_categories=client_categories,
             result=result,
         )
@@ -298,7 +303,12 @@ async def initialize_guild(
             from bot.features.channels.stickies.join import sync_hub_join_sticky
             from bot.features.channels.stickies.rules import sync_rules_sticky
 
-            join_channel = resolve_join_the_network_channel(guild)
+            network_hub = resolve_hub_category(guild, HUB_CATEGORY_NETWORK)
+            join_channel = resolve_hub_channel(
+                guild,
+                HUB_CHANNEL_JOIN_THE_NETWORK,
+                category_id=None if network_hub is None else network_hub.id,
+            )
             if join_channel is not None:
                 join_view = view_registry.register_join_network_view()
                 join_result = await sync_hub_join_sticky(
@@ -322,10 +332,14 @@ async def initialize_guild(
             if rules_result.message is not None:
                 result.notes.append("Hub rules sticky synced.")
 
-            from bot.features.channels.resolve import resolve_network_admin_channel
             from bot.features.channels.stickies.admin import sync_network_admin_sticky
 
-            admin_channel = resolve_network_admin_channel(guild)
+            mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+            admin_channel = resolve_hub_channel(
+                guild,
+                HUB_CHANNEL_ADMIN,
+                category_id=None if mod_category is None else mod_category.id,
+            )
             if admin_channel is not None:
                 admin_view = view_registry.register_network_admin_view()
                 admin_result = await sync_network_admin_sticky(
@@ -350,8 +364,11 @@ async def initialize_guild(
             step="refresh server notification defaults",
         )
 
+        from bot.app.layout.managed import hub_channel_name
+
+        admin_channel_name = hub_channel_name(HUB_CHANNEL_ADMIN)
         result.notes.append(
-            "Hub ready. Use **#admin** under Moderation to create networks; "
+            f"Hub ready. Use **#{admin_channel_name}** under Moderation to create networks; "
             "clients subscribe from their **client-profile** channel."
         )
         if result.failed_steps:

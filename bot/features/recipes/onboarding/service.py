@@ -16,6 +16,12 @@ from bot.core.models.errors import ProfileValidationError
 from bot.core.models.profile_image import ProfileImage, ProfileImageAttachment
 from bot.core.models.server_request import ServerRequest, ServerRequestStatus
 from bot.core.views import ViewRegistry
+from bot.features.channels.resolve import (
+    HUB_CATEGORY_MODERATION,
+    HUB_CHANNEL_JOIN_REQUESTS,
+    resolve_hub_category,
+    resolve_hub_channel,
+)
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot
@@ -150,9 +156,12 @@ class ServerRequestService:
             profile_image_data=image.data,
         )
 
-        from bot.features.channels.resolve import resolve_join_requests_channel
-
-        requests_channel = resolve_join_requests_channel(guild)
+        mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+        requests_channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            category_id=None if mod_category is None else mod_category.id,
+        )
         if requests_channel is None:
             return SubmitRequestResult(
                 success=False,
@@ -364,9 +373,13 @@ class ServerRequestService:
     ) -> None:
         if request.moderator_message_id is None:
             return
-        from bot.features.channels.resolve import resolve_join_requests_channel
 
-        channel = resolve_join_requests_channel(guild)
+        mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+        channel = resolve_hub_channel(
+            guild,
+            HUB_CHANNEL_JOIN_REQUESTS,
+            category_id=None if mod_category is None else mod_category.id,
+        )
         if channel is None:
             return
         try:

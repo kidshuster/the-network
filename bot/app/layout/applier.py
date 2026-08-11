@@ -63,7 +63,68 @@ def _permission_context(context: LayoutContext) -> PermissionContext:
         context.bot_member,
         access_role=context.access_role,
         moderator_role=context.moderator_role,
+        # PermissionContext.operator_role backs bot_access_role used by validation.
         operator_role=bot_access[0] if bot_access else None,
+    )
+
+
+def _is_missing_access(detail: str | None) -> bool:
+    if not detail:
+        return False
+    text = detail.casefold()
+    return "50001" in text or "missing access" in text
+
+
+async def _recreate_inaccessible_category(
+    context: LayoutContext,
+    resource: DesiredResource,
+    existing: discord.CategoryChannel,
+) -> ResourceApplyResult:
+    """Delete a locked-out hub category and recreate it with desired overwrites."""
+    try:
+        await existing.delete(reason=f"{context.reason}: recreate inaccessible category")
+    except discord.HTTPException as exc:
+        return ResourceApplyResult(
+            resource_id=resource.id,
+            success=False,
+            detail=f"inaccessible category (could not recreate): {exc}",
+            channel=existing,
+        )
+    return await _ensure_category(context, resource, _allow_recreate=False)
+
+
+async def _recreate_inaccessible_channel(
+    context: LayoutContext,
+    resource: DesiredResource,
+    categories: dict[str, discord.CategoryChannel],
+    existing: discord.TextChannel,
+) -> ResourceApplyResult:
+    """Delete a locked-out hub channel and recreate it (never for community slots)."""
+    if resource.community_slot is not None:
+        return ResourceApplyResult(
+            resource_id=resource.id,
+            success=False,
+            detail=(
+                "inaccessible community channel — grant the operator role "
+                "View Channel on it, then re-run /server init"
+            ),
+            channel=existing,
+        )
+    try:
+        await existing.delete(reason=f"{context.reason}: recreate inaccessible channel")
+    except discord.HTTPException as exc:
+        return ResourceApplyResult(
+            resource_id=resource.id,
+            success=False,
+            detail=f"inaccessible channel (could not recreate): {exc}",
+            channel=existing,
+        )
+    return await _ensure_channel(
+        context,
+        resource,
+        categories,
+        reconcile_only=False,
+        _allow_recreate=False,
     )
 
 
@@ -106,6 +167,8 @@ def _find_text_channel(
 async def _ensure_category(
     context: LayoutContext,
     resource: DesiredResource,
+    *,
+    _allow_recreate: bool = True,
 ) -> ResourceApplyResult:
     perm = _permission_context(context)
     existing = _find_category(context.guild, resource)
@@ -120,10 +183,18 @@ async def _ensure_category(
             reason=context.reason,
         )
     except (discord.HTTPException, ValueError) as exc:
+        detail = str(exc)
+        if (
+            _allow_recreate
+            and existing is not None
+            and resource.managed == "hub"
+            and _is_missing_access(detail)
+        ):
+            return await _recreate_inaccessible_category(context, resource, existing)
         return ResourceApplyResult(
             resource_id=resource.id,
             success=False,
-            detail=str(exc),
+            detail=detail,
         )
     position_changed = False
     if resource.position is not None and result.resource.position != resource.position:
@@ -138,11 +209,20 @@ async def _ensure_category(
                 detail=str(exc),
                 channel=result.resource,
             )
+    sync_detail: str | None = "; ".join(result.sync.failures) or None
+    if (
+        not result.sync.success
+        and _allow_recreate
+        and existing is not None
+        and resource.managed == "hub"
+        and _is_missing_access(sync_detail)
+    ):
+        return await _recreate_inaccessible_category(context, resource, existing)
     return ResourceApplyResult(
         resource_id=resource.id,
         success=result.sync.success,
         changed=result.sync.changed or position_changed,
-        detail="; ".join(result.sync.failures) or None,
+        detail=sync_detail,
         channel=result.resource,
     )
 
@@ -153,6 +233,7 @@ async def _ensure_channel(
     categories: dict[str, discord.CategoryChannel],
     *,
     reconcile_only: bool,
+    _allow_recreate: bool = True,
 ) -> ResourceApplyResult:
     perm = _permission_context(context)
     category = categories.get(resource.category_ref or "")
@@ -188,17 +269,38 @@ async def _ensure_channel(
         )
 
     if existing is not None:
-        try:
-            edits: dict[str, object] = {}
-            if category is not None and existing.category_id != category.id:
-                edits["category"] = category
-            if existing.name != resource.name:
-                edits["name"] = resource.name
-            if resource.topic is not None and getattr(existing, "topic", None) != resource.topic:
-                edits["topic"] = resource.topic
-            if edits:
-                await existing.edit(reason=context.reason, **edits)  # type: ignore[call-overload]
+        # Apply identity edits (name/topic) separately from category moves.
+        # Community rules/updates channels often reject category changes (50013);
+        # bundling those with rename would leave the YAML name unapplied.
+        identity_edits: dict[str, object] = {}
+        if existing.name.casefold() != resource.name.casefold():
+            identity_edits["name"] = resource.name
+        if resource.topic is not None and getattr(existing, "topic", None) != resource.topic:
+            identity_edits["topic"] = resource.topic
 
+        category_edits: dict[str, object] = {}
+        if category is not None and existing.category_id != category.id:
+            category_edits["category"] = category
+
+        meta_detail: str | None = None
+        meta_changed = False
+
+        if identity_edits:
+            try:
+                await existing.edit(reason=context.reason, **identity_edits)  # type: ignore[call-overload]
+                meta_changed = True
+            except discord.HTTPException as exc:
+                meta_detail = f"rename: {exc}"
+
+        if category_edits and meta_detail is None:
+            try:
+                await existing.edit(reason=context.reason, **category_edits)  # type: ignore[call-overload]
+                meta_changed = True
+            except discord.HTTPException as exc:
+                # Keep going so permission sync can still run.
+                meta_detail = f"placement: {exc}"
+
+        try:
             sync = await permission_service.reconcile(
                 existing,
                 perm,
@@ -206,20 +308,44 @@ async def _ensure_channel(
                 managed_targets=resource.managed_targets,
                 reason=context.reason,
             )
-            return ResourceApplyResult(
-                resource_id=resource.id,
-                success=sync.success,
-                changed=sync.changed or bool(edits),
-                detail="; ".join(sync.failures) or None,
-                channel=existing,
-            )
         except discord.HTTPException as exc:
+            failure_detail = "; ".join(item for item in (meta_detail, str(exc)) if item)
+            if (
+                _allow_recreate
+                and not reconcile_only
+                and resource.managed == "hub"
+                and _is_missing_access(failure_detail)
+            ):
+                return await _recreate_inaccessible_channel(
+                    context, resource, categories, existing
+                )
             return ResourceApplyResult(
                 resource_id=resource.id,
                 success=False,
-                detail=str(exc),
+                changed=meta_changed,
+                detail=failure_detail,
                 channel=existing,
             )
+
+        details = [item for item in (meta_detail, *sync.failures) if item]
+        sync_detail = "; ".join(details) if details else None
+        if (
+            not sync.success
+            and _allow_recreate
+            and not reconcile_only
+            and resource.managed == "hub"
+            and _is_missing_access(sync_detail)
+        ):
+            return await _recreate_inaccessible_channel(
+                context, resource, categories, existing
+            )
+        return ResourceApplyResult(
+            resource_id=resource.id,
+            success=sync.success and meta_detail is None,
+            changed=sync.changed or meta_changed,
+            detail=sync_detail,
+            channel=existing,
+        )
 
     # Community slots: never delete/recreate; create only if missing
     try:

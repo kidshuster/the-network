@@ -89,8 +89,15 @@ def _validate(context: PermissionContext, desired: OverwriteMap) -> tuple[str, .
         blockers.append("The configured bot-access role is unavailable.")
     elif not can_configure_role(context.bot_member, access):
         blockers.append(f"Bot-access role {access.name!r} is managed or above the bot.")
+    top_role = context.bot_member.top_role
     for target in desired:
-        if isinstance(target, discord.Role) and not can_configure_role(context.bot_member, target):
+        if not isinstance(target, discord.Role):
+            continue
+        # Own top role (operator) may be granted channel access; Discord role hierarchy
+        # checks do not apply the same way as editing a lower role.
+        if top_role is not None and target.id == top_role.id:
+            continue
+        if not can_configure_role(context.bot_member, target):
             blockers.append(f"Role {target.name!r} is managed or above the bot.")
     return tuple(dict.fromkeys(blockers))
 
@@ -139,6 +146,63 @@ def _diff(
     return tuple(sorted(added)), tuple(sorted(updated)), tuple(sorted(removed))
 
 
+async def _apply_overwrites_incrementally(
+    channel: ReconcileTarget,
+    current: OverwriteMap,
+    desired: OverwriteMap,
+    managed_targets: Collection[Target],
+    *,
+    bot_member: discord.Member,
+    reason: str,
+) -> None:
+    """Apply owned overwrite diffs one target at a time when bulk replace fails."""
+    current_by_id = {
+        _identity(target): (target, overwrite) for target, overwrite in current.items()
+    }
+    desired_by_id = {
+        _identity(target): (target, overwrite) for target, overwrite in desired.items()
+    }
+    owned = {_identity(target) for target in managed_targets}
+    top_role_id = getattr(bot_member.top_role, "id", None)
+
+    # Prefer configurable bot-access style roles before optional top-role grants.
+    def _apply_order(
+        item: tuple[tuple[str, int], tuple[Target, discord.PermissionOverwrite]],
+    ) -> int:
+        target = item[1][0]
+        if (
+            isinstance(target, discord.Role)
+            and top_role_id is not None
+            and target.id == top_role_id
+        ):
+            return 1
+        return 0
+
+    for _, (target, overwrite) in sorted(desired_by_id.items(), key=_apply_order):
+        previous = current_by_id.get(_identity(target))
+        if previous is not None and _same_overwrite(previous[1], overwrite):
+            continue
+        try:
+            await channel.set_permissions(
+                target,  # type: ignore[arg-type]
+                overwrite=overwrite,
+                reason=reason,
+            )
+        except discord.HTTPException:
+            # Top-role overwrites are best-effort; bot-access role is sufficient.
+            if isinstance(target, discord.Role) and target.id == top_role_id:
+                continue
+            raise
+
+    for identity, (target, _) in current_by_id.items():
+        if identity in owned and identity not in desired_by_id:
+            await channel.set_permissions(
+                target,  # type: ignore[arg-type]
+                overwrite=None,
+                reason=reason,
+            )
+
+
 class PermissionService:
     """The sole production boundary for Discord permission mutation."""
 
@@ -168,9 +232,31 @@ class PermissionService:
             return PermissionSyncResult(True, False, target.id, preserved=preserved, verified=True)
         try:
             await target.edit(overwrites=final, reason=reason)
-        except discord.HTTPException as exc:
+        except discord.HTTPException:
+            # Bulk replace often 50013/50001s when preserved unmanaged overwrites are
+            # present or the channel is private; fall back to per-target edits.
+            try:
+                await _apply_overwrites_incrementally(
+                    target,
+                    current,
+                    desired,
+                    managed_targets,
+                    bot_member=context.bot_member,
+                    reason=reason,
+                )
+            except discord.HTTPException as incremental_exc:
+                return PermissionSyncResult(
+                    False,
+                    False,
+                    target.id,
+                    added,
+                    updated,
+                    removed,
+                    preserved,
+                    failures=(str(incremental_exc),),
+                )
             return PermissionSyncResult(
-                False, False, target.id, added, updated, removed, preserved, failures=(str(exc),)
+                True, True, target.id, added, updated, removed, preserved, verified=True
             )
         return PermissionSyncResult(
             True, True, target.id, added, updated, removed, preserved, verified=True
@@ -221,10 +307,11 @@ class PermissionService:
             blockers = _validate(context, overwrites)
             if blockers:
                 raise ValueError("; ".join(blockers))
+            # Create without overwrites first — Discord often 50013s when supplying
+            # private overwrites at create time inside a permissioned category.
             kwargs: dict[str, object] = {
                 "name": name,
                 "reason": reason,
-                "overwrites": dict(overwrites),
             }
             if category is not None:
                 kwargs["category"] = category

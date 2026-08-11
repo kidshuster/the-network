@@ -106,7 +106,7 @@ async def test_reconcile_does_not_mutate_when_role_is_unconfigurable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bulk_failure_keeps_existing_permissions_and_reports_failure() -> None:
+async def test_bulk_failure_falls_back_to_targeted_permission_updates() -> None:
     _, _, _, _, bot_access, context, channel = _setup()
     channel.edit.side_effect = http_50013()
     result = await PermissionService().reconcile(
@@ -116,9 +116,10 @@ async def test_bulk_failure_keeps_existing_permissions_and_reports_failure() -> 
         managed_targets={bot_access},
         reason="test",
     )
-    assert not result.success and not result.changed
-    assert result.failures
+    assert result.success and result.changed
+    assert not result.failures
     assert channel.edit.await_count == 1
+    channel.set_permissions.assert_awaited_once()
 
 
 @pytest.mark.asyncio

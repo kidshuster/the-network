@@ -1,0 +1,4 @@
+kind: embed
+title: "Server Probe"
+colour: green
+description: "Read-only hub health check for permissions, layout, and community slots."

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Stop the source-tree bot started by bin/start.sh (venv). Docker hosts use install/scripts/stop.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

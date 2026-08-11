@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Validate the install/ submodule is a self-contained runtime bundle.
+# CI/helper: validate install/ submodule is a self-contained Docker runtime bundle.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 INSTALL="${THE_NETWORK_INSTALL_DIR:-${ROOT}/install}"
@@ -14,7 +14,12 @@ if [[ ! -d "${INSTALL}" ]]; then
   exit 1
 fi
 
-test -f "${INSTALL}/docker-compose.yml"
+if [[ ! -f "${INSTALL}/docker-compose.yml" ]]; then
+  echo "Install submodule checkout looks empty at ${INSTALL}" >&2
+  echo "Run: git submodule update --init install" >&2
+  exit 1
+fi
+
 test -f "${INSTALL}/.env.example"
 test -f "${INSTALL}/VERSION"
 test -f "${INSTALL}/README.md"

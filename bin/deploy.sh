@@ -1,105 +1,199 @@
 #!/usr/bin/env bash
+# Release deploy: push the Docker image to GHCR and update install/ (the-network-install).
+# For bare-metal source/systemd deploy, use bin/domain/deploy-source.sh instead.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-SERVICE_NAME="${THE_NETWORK_SERVICE:-the-network}"
-INSTALL_DIR="$(cd "${THE_NETWORK_DIR:-$ROOT}" && pwd)"
-PYTHON="${PYTHON:-python3}"
+VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+GITHUB_USER="${GITHUB_USER:-kidshuster}"
+REGISTRY_IMAGE="ghcr.io/${GITHUB_USER}/the-network"
+INSTALL_DIR="${THE_NETWORK_INSTALL_DIR:-${ROOT}/install}"
+VIA_CI=0
+SKIP_INSTALL=0
+SKIP_IMAGE_PUSH=0
 
-if [[ -n "${SUDO_USER:-}" ]]; then
-  RUN_USER="${THE_NETWORK_USER:-$SUDO_USER}"
-else
-  RUN_USER="${THE_NETWORK_USER:-$(whoami)}"
-fi
-RUN_GROUP="$(id -gn "${RUN_USER}")"
+# shellcheck source=domain/lib/docker.sh
+source "${ROOT}/bin/domain/lib/docker.sh"
 
-if [[ "${EUID}" -ne 0 ]]; then
-  SUDO=(sudo)
-else
-  SUDO=()
-fi
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
 
-echo "Deploying The Network"
-echo "  install dir: ${INSTALL_DIR}"
-echo "  service:     ${SERVICE_NAME}"
-echo "  run as:      ${RUN_USER}"
+Build/push the Docker image to GHCR and update the install/ submodule
+(the-network-install). This is the normal production release path.
 
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-  echo "Pulling latest changes..."
-  git -C "${INSTALL_DIR}" pull --ff-only
-fi
+Options:
+  --via-ci         Skip local image push (use after git tag + GitHub Actions)
+  --skip-image     Skip image push (update install submodule only)
+  --skip-install   Skip install submodule commit/push
+  -h, --help       Show this help
 
-chmod +x "${INSTALL_DIR}/bin/start.sh" "${INSTALL_DIR}/bin/stop.sh"
+Environment:
+  GITHUB_USER              GHCR namespace (default: kidshuster)
+  THE_NETWORK_INSTALL_DIR  Install submodule path (default: ./install)
 
-if [[ ! -f "${INSTALL_DIR}/.env" ]]; then
-  cp "${INSTALL_DIR}/.env.example" "${INSTALL_DIR}/.env"
-  echo ""
-  echo "Created ${INSTALL_DIR}/.env from .env.example"
-  echo "Edit it with DISCORD_TOKEN and GUILD_ID before the bot can start."
-  echo ""
-fi
+Examples:
+  ./bin/deploy.sh
+  ./bin/deploy.sh --via-ci
+  GITHUB_USER=you ./bin/deploy.sh --skip-image
 
-mkdir -p "${INSTALL_DIR}/data"
+Bare-metal source/systemd (uncommon):
+  ./bin/domain/deploy-source.sh
+EOF
+}
 
-if [[ ! -d "${INSTALL_DIR}/.venv" ]]; then
-  echo "Creating virtualenv..."
-  "$PYTHON" -m venv "${INSTALL_DIR}/.venv"
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --via-ci)
+      VIA_CI=1
+      SKIP_IMAGE_PUSH=1
+      shift
+      ;;
+    --skip-image)
+      SKIP_IMAGE_PUSH=1
+      shift
+      ;;
+    --skip-install)
+      SKIP_INSTALL=1
+      shift
+      ;;
+    --skip-deploy-repo)
+      SKIP_INSTALL=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
-# shellcheck source=/dev/null
-source "${INSTALL_DIR}/.venv/bin/activate"
-pip install -q -e "${INSTALL_DIR}"
+ensure_install_submodule() {
+  if [[ ! -e "${INSTALL_DIR}" ]]; then
+    echo "Missing install submodule at ${INSTALL_DIR}." >&2
+    echo "Run: git submodule update --init install" >&2
+    exit 1
+  fi
+  if [[ ! -d "${INSTALL_DIR}/.git" && ! -f "${INSTALL_DIR}/.git" ]]; then
+    echo "Missing install submodule metadata at ${INSTALL_DIR}." >&2
+    echo "Run: git submodule update --init install" >&2
+    exit 1
+  fi
+  if [[ ! -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+    echo "Install submodule checkout looks empty." >&2
+    echo "Run: git submodule update --init install" >&2
+    exit 1
+  fi
+}
 
-UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
-TMP_UNIT="$(mktemp)"
+update_install_bundle() {
+  local version="$1"
+  local user="$2"
+  local image="ghcr.io/${user}/the-network:${version}"
 
-cat >"${TMP_UNIT}" <<EOF
-[Unit]
-Description=The Network Discord relay bot
-Documentation=https://github.com/kidshuster/the-network
-After=network-online.target
-Wants=network-online.target
+  echo "${version}" >"${INSTALL_DIR}/VERSION"
 
-[Service]
-Type=forking
-User=${RUN_USER}
-Group=${RUN_GROUP}
-WorkingDirectory=${INSTALL_DIR}
-EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/bin/start.sh
-ExecStop=${INSTALL_DIR}/bin/stop.sh
-PIDFile=${INSTALL_DIR}/data/bot.pid
-Restart=on-failure
-RestartSec=10
-TimeoutStopSec=30
-
-[Install]
-WantedBy=multi-user.target
+  cat >"${INSTALL_DIR}/docker-compose.yml" <<EOF
+# The Network — runtime compose
+services:
+  the-network:
+    image: ${image}
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
 EOF
 
-echo "Installing systemd unit at ${UNIT_PATH}"
-"${SUDO[@]}" cp "${TMP_UNIT}" "${UNIT_PATH}"
-rm -f "${TMP_UNIT}"
+  if [[ -f "${INSTALL_DIR}/README.md" ]]; then
+    sed -i \
+      -e "s|ghcr.io/[^/]*/the-network:[0-9][^[:space:]\`]*|${image}|g" \
+      -e "s|git@github.com:[^/]*/the-network-install.git|git@github.com:${user}/the-network-install.git|g" \
+      -e "s|https://github.com/[^/]*/the-network-install|https://github.com/${user}/the-network-install|g" \
+      -e "s|https://github.com/[^/]*/the-network)|https://github.com/${user}/the-network)|g" \
+      "${INSTALL_DIR}/README.md"
+  fi
 
-"${SUDO[@]}" systemctl daemon-reload
-"${SUDO[@]}" systemctl enable "${SERVICE_NAME}.service"
+  rm -f "${INSTALL_DIR}/docker-compose.local.yml"
+  chmod +x "${INSTALL_DIR}"/scripts/*.sh 2>/dev/null || true
+}
 
-if grep -q '^DISCORD_TOKEN=.\+' "${INSTALL_DIR}/.env" 2>/dev/null \
-  && grep -q '^GUILD_ID=.\+' "${INSTALL_DIR}/.env" 2>/dev/null; then
-  echo "Starting ${SERVICE_NAME}.service..."
-  "${SUDO[@]}" systemctl restart "${SERVICE_NAME}.service"
-  "${SUDO[@]}" systemctl status "${SERVICE_NAME}.service" --no-pager || true
-else
+ensure_install_submodule
+
+if [[ "${SKIP_IMAGE_PUSH}" -eq 0 ]]; then
+  echo "Building local image tag the-network:${VERSION}..."
+  require_docker_cli || exit 1
+  docker build -t "the-network:${VERSION}" -t the-network:latest .
+
   echo ""
-  echo "Service installed but not started — set DISCORD_TOKEN and GUILD_ID in ${INSTALL_DIR}/.env"
-  echo "Then run: sudo systemctl start ${SERVICE_NAME}.service"
+  echo "Pushing multi-arch image to ${REGISTRY_IMAGE}..."
+  require_docker_buildx || exit 1
+
+  BUILDER="${THE_NETWORK_BUILDX_BUILDER:-the-network-builder}"
+  if ! docker buildx inspect "${BUILDER}" >/dev/null 2>&1; then
+    docker buildx create --name "${BUILDER}" --use
+  else
+    docker buildx use "${BUILDER}"
+  fi
+
+  docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    --tag "${REGISTRY_IMAGE}:${VERSION}" \
+    --tag "${REGISTRY_IMAGE}:latest" \
+    --push \
+    .
+  echo "Pushed ${REGISTRY_IMAGE}:${VERSION} and :latest"
+elif [[ "${VIA_CI}" -eq 1 ]]; then
+  echo "Skipping image push (--via-ci). Ensure GitHub Actions published ${REGISTRY_IMAGE}:${VERSION}."
+else
+  echo "Skipping image push (--skip-image)."
+fi
+
+if [[ "${SKIP_INSTALL}" -eq 1 ]]; then
+  echo ""
+  echo "Skipping install submodule update (--skip-install)."
+  exit 0
 fi
 
 echo ""
-echo "Useful commands:"
-echo "  sudo systemctl status ${SERVICE_NAME}.service"
-echo "  sudo systemctl restart ${SERVICE_NAME}.service"
-echo "  sudo journalctl -u ${SERVICE_NAME}.service -f"
-echo "  tail -f ${INSTALL_DIR}/data/bot.log"
+echo "Updating install submodule for ${VERSION}..."
+
+git -C "${INSTALL_DIR}" fetch origin
+if git -C "${INSTALL_DIR}" show-ref --verify --quiet refs/remotes/origin/main; then
+  git -C "${INSTALL_DIR}" checkout -B main origin/main
+elif git -C "${INSTALL_DIR}" show-ref --verify --quiet refs/heads/main; then
+  git -C "${INSTALL_DIR}" checkout main
+  git -C "${INSTALL_DIR}" pull --ff-only origin main || true
+fi
+
+update_install_bundle "${VERSION}" "${GITHUB_USER}"
+
+git -C "${INSTALL_DIR}" add -A
+if git -C "${INSTALL_DIR}" diff --cached --quiet; then
+  echo "Install submodule unchanged; nothing to commit."
+else
+  git -C "${INSTALL_DIR}" commit -m "Release ${VERSION}"
+  git -C "${INSTALL_DIR}" push origin HEAD:main
+  echo "Pushed install submodule (the-network-install) for ${VERSION}."
+fi
+
+git add "${INSTALL_DIR}"
+echo ""
+echo "Done."
+echo "  Image:   ${REGISTRY_IMAGE}:${VERSION}"
+echo "  Install: ${INSTALL_DIR} → the-network-install"
+echo ""
+echo "Submodule gitlink staged in this repo. Commit when ready:"
+echo "  git commit -m \"Bump install submodule to ${VERSION}\""
+echo ""
+echo "On any host:"
+echo "  git clone git@github.com:${GITHUB_USER}/the-network-install.git"
+echo "  cd the-network-install && cp .env.example .env"
+echo "  ./scripts/enable.sh"

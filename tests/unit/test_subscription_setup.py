@@ -321,8 +321,12 @@ async def test_network_member_welcome_posts_to_network_announcements(
     context = MagicMock()
     dispatch = AsyncMock(return_value=MagicMock(success=True, errors=()))
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_network_announcements_channel",
-        lambda guild: channel,
+        "bot.features.channels.stickies.subscription.resolve_hub_category",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "bot.features.channels.stickies.subscription.resolve_hub_channel",
+        lambda *args, **kwargs: channel,
     )
     monkeypatch.setattr("bot.features.hub.announcements.dispatch_system_announcement", dispatch)
 

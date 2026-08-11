@@ -53,13 +53,15 @@ def test_configuration_loads_and_cross_references() -> None:
     assert set(load_layout().layout.categories) == {"moderation", "network", "leaders"}
 
 
-def test_removed_yaml_resource_uses_non_crashing_lookup_fallback(
+def test_removed_yaml_resource_fails_fast(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(managed, "_hub_channel_by_id", lambda: {})
     monkeypatch.setattr(managed, "_hub_category_by_id", lambda: {})
-    assert managed.hub_channel_name("removed", fallback="legacy-name") == "legacy-name"
-    assert managed.hub_category_name("removed", fallback="Legacy") == "Legacy"
+    with pytest.raises(KeyError):
+        managed.hub_channel_name("removed")
+    with pytest.raises(KeyError):
+        managed.hub_category_name("removed")
 
 
 def test_role_defaults_reject_unknown_discord_permission() -> None:
@@ -164,14 +166,13 @@ def test_client_category_defaults_propagate_until_profile_replacement() -> None:
     assert ctx.access_role in publish.managed_targets
 
 
-def test_compiled_recipes_use_bot_access_role_not_bot_member_or_operator() -> None:
+def test_compiled_recipes_use_bot_access_role_not_bot_member() -> None:
     ctx = _context(clients=2)
     bot_access = discord.utils.get(ctx.guild.roles, name="The Network Bot Access")
     assert bot_access is not None
     for resource in [*compile_hub(ctx), *compile_client(ctx, include_subscribed=True)]:
         assert bot_access in resource.overwrites
         assert ctx.bot_member not in resource.overwrites
-        assert ctx.operator_role not in resource.overwrites
         assert ctx.bot_member in resource.managed_targets
         assert ctx.operator_role in resource.managed_targets
         assert set(ctx.client_roles) <= set(resource.managed_targets)
@@ -179,9 +180,8 @@ def test_compiled_recipes_use_bot_access_role_not_bot_member_or_operator() -> No
         assert set(ctx.client_roles) <= set(resource.managed_targets)
 
 
-def test_missing_bot_access_role_is_not_replaced_with_operator_or_member() -> None:
+def test_missing_bot_access_role_is_not_replaced_with_bot_member() -> None:
     ctx = _context()
     ctx.guild.roles = [role for role in ctx.guild.roles if role.name != "The Network Bot Access"]
     for resource in compile_hub(ctx):
-        assert ctx.operator_role not in resource.overwrites
         assert ctx.bot_member not in resource.overwrites

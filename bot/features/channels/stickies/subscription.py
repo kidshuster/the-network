@@ -12,6 +12,12 @@ from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
 from bot.core.views import ViewRegistry
+from bot.features.channels.resolve import (
+    HUB_CATEGORY_MODERATION,
+    HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+    resolve_hub_category,
+    resolve_hub_channel,
+)
 from bot.features.channels.stickies.loader import sticky_spec
 from bot.features.channels.stickies.reconciler import (
     SETUP_STICKY_HISTORY_LIMIT,
@@ -64,10 +70,15 @@ async def _post_network_member_welcome(
     network: Network,
 ) -> None:
     """Post once to #network-announcements and dispatch through the relay recipe."""
-    from bot.features.channels.resolve import resolve_network_announcements_channel
     from bot.features.hub.announcements import dispatch_system_announcement
 
-    channel = resolve_network_announcements_channel(guild)
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=None if mod_category is None else mod_category.id,
+        include_announcement=False,
+    )
     if channel is None:
         return
     embed = render_embed(

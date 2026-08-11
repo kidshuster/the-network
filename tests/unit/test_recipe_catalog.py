@@ -55,6 +55,7 @@ def test_command_metadata_is_owned_by_recipes() -> None:
 
     assert set(commands) == {
         ("server", "init"),
+        ("server", "probe"),
         ("server", "sync-join-guide"),
         ("server", "uninit"),
     }

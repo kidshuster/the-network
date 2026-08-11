@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import discord
 
-from bot.app.layout.managed import hub_category_name, hub_channel_name
+from bot.app.layout.managed import (
+    hub_category_aliases,
+    hub_category_name,
+    hub_channel_aliases,
+    hub_channel_name,
+)
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
@@ -12,32 +17,73 @@ from bot.core.channels.finder import ChannelLookupError, find_channel, require_c
 
 __all__ = ["ChannelLookupError", "find_channel", "require_channel"]
 
-# Canonical hub names derived from bot/layout/hub.yaml
-CATEGORY_NETWORK = hub_category_name("network", fallback="The Network")
-CATEGORY_MODERATION = hub_category_name("moderation", fallback="Moderation")
-CATEGORY_LEADERS = hub_category_name("leaders", fallback="Leaders")
+# Stable feature resource IDs. Display names are resolved from YAML.
+HUB_CATEGORY_NETWORK = "network"
+HUB_CATEGORY_MODERATION = "moderation"
+HUB_CATEGORY_LEADERS = "leaders"
 
-CHANNEL_RULES = hub_channel_name("rules", fallback="rules")
-CHANNEL_JOIN_THE_NETWORK = hub_channel_name("join_the_network", fallback="join-the-network")
-CHANNEL_LEADERS = hub_channel_name("leaders_channel", fallback="leaders-channel")
-CHANNEL_CHANGELOG = hub_channel_name("changelog", fallback="changelog")
-CHANNEL_JOIN_REQUESTS = hub_channel_name("join_requests", fallback="join-requests")
-CHANNEL_ADMIN = hub_channel_name("admin", fallback="admin")
-CHANNEL_NETWORK_ANNOUNCEMENTS = hub_channel_name(
-    "network_announcements",
-    fallback="network-announcements",
-)
+HUB_CHANNEL_RULES = "rules"
+HUB_CHANNEL_JOIN_THE_NETWORK = "join_the_network"
+HUB_CHANNEL_LEADERS = "leaders_channel"
+HUB_CHANNEL_CHANGELOG = "changelog"
+HUB_CHANNEL_JOIN_REQUESTS = "join_requests"
+HUB_CHANNEL_ADMIN = "admin"
+HUB_CHANNEL_NETWORK_ANNOUNCEMENTS = "network_announcements"
+
+# Display-name compatibility exports; feature behavior should use resource IDs.
+CATEGORY_NETWORK = hub_category_name(HUB_CATEGORY_NETWORK)
+CATEGORY_MODERATION = hub_category_name(HUB_CATEGORY_MODERATION)
+CATEGORY_LEADERS = hub_category_name(HUB_CATEGORY_LEADERS)
+CHANNEL_RULES = hub_channel_name(HUB_CHANNEL_RULES)
+CHANNEL_JOIN_THE_NETWORK = hub_channel_name(HUB_CHANNEL_JOIN_THE_NETWORK)
+CHANNEL_LEADERS = hub_channel_name(HUB_CHANNEL_LEADERS)
+CHANNEL_CHANGELOG = hub_channel_name(HUB_CHANNEL_CHANGELOG)
+CHANNEL_JOIN_REQUESTS = hub_channel_name(HUB_CHANNEL_JOIN_REQUESTS)
+CHANNEL_ADMIN = hub_channel_name(HUB_CHANNEL_ADMIN)
+CHANNEL_NETWORK_ANNOUNCEMENTS = hub_channel_name(HUB_CHANNEL_NETWORK_ANNOUNCEMENTS)
+
+
+def resolve_hub_category(
+    guild: discord.Guild,
+    resource_id: str,
+) -> discord.CategoryChannel | None:
+    return find_channel(
+        guild,
+        hub_category_aliases(resource_id),
+        channel_type=discord.CategoryChannel,
+    )
+
+
+def resolve_hub_channel(
+    guild: discord.Guild,
+    resource_id: str,
+    *,
+    category_id: int | None = None,
+    include_announcement: bool = True,
+) -> discord.TextChannel | None:
+    return find_channel(
+        guild,
+        hub_channel_aliases(resource_id),
+        channel_type=discord.TextChannel,
+        category_id=category_id,
+        predicate=(
+            None
+            if include_announcement
+            else lambda channel: isinstance(channel, discord.TextChannel)
+            and not channel.is_news()
+        ),
+    )
 
 def resolve_category(guild: discord.Guild, display_name: str) -> discord.CategoryChannel | None:
     return find_channel(guild, display_name, channel_type=discord.CategoryChannel)
 
 
 def resolve_network_hub_category(guild: discord.Guild) -> discord.CategoryChannel | None:
-    return resolve_category(guild, CATEGORY_NETWORK)
+    return resolve_hub_category(guild, HUB_CATEGORY_NETWORK)
 
 
 def resolve_moderation_category(guild: discord.Guild) -> discord.CategoryChannel | None:
-    return resolve_category(guild, CATEGORY_MODERATION)
+    return resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
 
 
 def resolve_text_channel_in_category(
@@ -159,17 +205,11 @@ def resolve_network_admin_channel(guild: discord.Guild) -> discord.TextChannel |
 def resolve_network_announcements_channel(
     guild: discord.Guild,
 ) -> discord.TextChannel | None:
-    mod_category = resolve_moderation_category(guild)
-    if mod_category is not None:
-        match = find_network_announcements_text_channel(
-            guild,
-            category_id=mod_category.id,
-            include_announcement=False,
-        )
-        if match is not None:
-            return match
-    return find_network_announcements_text_channel(
+    category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    return resolve_hub_channel(
         guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=category.id if category is not None else None,
         include_announcement=False,
     )
 
