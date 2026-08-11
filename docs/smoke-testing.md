@@ -8,7 +8,7 @@ Use `./test` as the single entry point for local and pre-deploy validation.
 | Command | What runs | When |
 |---------|-----------|------|
 | `./test` or `./test --dev` | ruff, mypy, pytest | Every change (~1 min) |
-| `./test --full` | dev gate + `bin/smoke_testwork.sh` | Before deploy (~15–30 min) |
+| `./test --full` | dev gate + consolidated `tests/live` suite | Before deploy (~15–30 min) |
 
 ```bash
 # Daily development
@@ -50,20 +50,18 @@ windows (minutes to hours).
 
 **Prevention (built in):**
 
-- **Pre-flight quota check** before live smoke (`bin/smoke_check_quota.sh`) — probes
-  the same Discord buckets smoke uses (role create, category create, in-category
-  channel create) and reads `X-RateLimit-*` / `retry_after` headers. Fails fast if
-  buckets are exhausted.
-- Pacing between probe phases and role creates (`bot/smoke/pacing.py`)
-- Pauses between smoke steps in `bin/smoke_testwork.sh`
+- Optional quota diagnostic (`./test --full --check-quota`) probes the same Discord
+  buckets. It is off by default because checking consumes six create/delete calls.
+- One shared gateway session for the standard suite (`tests/live/suite.py`)
+- Each destructive permission/provision probe runs once in the standard suite
+- Pacing between destructive phases and role creates (`tests/live/pacing.py`)
 - Fast-fail on 429 via `max_ratelimit_timeout` on smoke Discord clients
 
 **Tune with env vars:**
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SMOKE_STEP_DELAY_SEC` | 8 | Pause between each `bin/smoke_*.sh` step |
-| `SMOKE_DUPLICATE_PROBE_DELAY_SEC` | 15 | Extra pause after probe-only before join E2E |
+| `SMOKE_PHASE_DELAY_SEC` | 2 | Pause between mutation-heavy phases |
 | `SMOKE_PROBE_PHASE_DELAY_SEC` | 2 | Operator probe → provision probe |
 | `SMOKE_ROLE_CREATE_DELAY_SEC` | 1.5 | Before each probe `create_role` |
 | `SMOKE_MAX_RETRY_AFTER_SEC` | 30 | Quota check fails if 429 `retry_after` exceeds this |
@@ -75,8 +73,8 @@ Set any to `0` to disable pacing delays. Increase pacing if you still see
 **Check quota manually:**
 
 ```bash
-bin/smoke_check_quota.sh          # exit 0 = ready, 1 = wait or use staging guild
-./test --full --skip-quota-check  # emergency override (not recommended)
+tests/live/smoke_check_quota.sh  # explicit diagnostic; consumes mutation quota
+./test --full                   # standard lower-call suite
 ```
 
 **If smoke fails with rate limits:** wait for the reported `retry_after`, or use a
@@ -84,25 +82,28 @@ fresh staging guild. `./test --dev` always works offline.
 
 ## What `--full` runs
 
-`bin/smoke_testwork.sh` (see script for details):
+`tests/live/smoke_testwork.sh` opens one gateway session and runs:
 
-1. Discord rate-limit quota check
-2. Artifact cleanup
-3. Button/command parity
-4. Pre-init provision probe (`--probe-only`)
-5. Join-approval E2E
-6. Setup welcome smoke
-7. Hub announcements smoke
-8. Hub rebuild smoke (uninit preserves clients; re-init restores YAML layout overwrites)
-9. Server init stress probes (YAML hub layout, client overwrite reinit, Leaders retention)
-10. Teardown (removes smoke clients and Discord artifacts)
+1. Stale smoke-artifact cleanup
+2. Operator and client-provision permission probe
+3. Join-approval E2E
+4. Setup, sticky, welcome, blacklist, and relay behavior
+5. Hub announcement dispatch
+6. Hub uninit/init and network recreation with client survival checks
+7. Permission and layout drift rectification
+8. Smoke-only teardown
+
+Before and after every destructive phase, the suite verifies that every non-smoke
+client still has its database row, role, category, and profile channel. Repeated
+burn-in is intentionally separate: `tests/live/smoke_server_init.sh --stress`.
 
 ## pytest vs live
 
 | Layer | Tool | Discord |
 |-------|------|---------|
-| Unit / integration | `pytest` | Mocked |
-| Live probes | `bin/smoke_*.sh` | Real API |
+| Unit / integration | `pytest tests/unit` | Mocked |
+| Live probes | `tests/live/smoke_*.sh` | Real API |
 
-pytest covers `bot.layout` compile/apply + PermissionService filters; live smoke
-verifies YAML hub/client layout and permission retention against Discord’s actual behavior.
+Unit tests cover `bot/channels/layout`, the permission API, recipes, adapters, and
+deletion boundaries. Live smoke verifies YAML layout, permission rectification,
+relay behavior, and client retention against Discord's actual behavior.

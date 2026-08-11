@@ -29,7 +29,7 @@ Pre-characterization figures from original inventory (~421 tests). Post-characte
 |------|--------|-------|
 | R1.1 `ensure_manage_guild()` | **Done** | `bot/cogs/_checks.py` |
 | R1.2 `ensure_client_access()` | **Done** | `bot/ui/_auth.py`; popup keys preserved per action |
-| R1.3 `http_50013` test helper | **Done** | `tests/discord_helpers.py` |
+| R1.3 `http_50013` test helper | **Done** | `tests/unit/discord_helpers.py` |
 | R1.4 Repository row helpers | **Partial** | `_insert_row_id`, `_fetch_row_by_id`, `_row_after_insert`; further dedup in Phase 3 |
 | R2.1 Permission overwrite fallback | **Done** | `apply_overwrites_with_fallback()` + `sync_channel_permission_overwrites`; guild_init wired |
 | R2.2 Overwrite builder composition | **Done** | Hub/client/leaders recipe helpers; truth-table tests lock behavior |
@@ -47,7 +47,7 @@ Pre-characterization figures from original inventory (~421 tests). Post-characte
 - `bot/services/guild_channels.py` (merged into `guild_layout.py`)
 - `sync_partner_feed_channel_permissions()` (never called)
 - Legacy join sticky aliases, `JoinServerView`/`JoinRequestModal` aliases
-- `tests/test_profile_repository.py`
+- `tests/unit/test_profile_repository.py`
 
 ### New shared modules (first track)
 
@@ -61,7 +61,7 @@ Pre-characterization figures from original inventory (~421 tests). Post-characte
 - `bot/services/guild_init_reconcilers.py`
 - `bot/services/client_resources.py`
 - `tests/permission_truth_table.py`
-- `tests/test_permission_effective_access.py`
+- `tests/unit/test_permission_effective_access.py`
 - `bot/ui/_view_helpers.py`
 
 ---

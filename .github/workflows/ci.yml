@@ -23,11 +23,14 @@ jobs:
       - name: Ruff
         run: ruff check .
 
+      - name: Mypy
+        run: mypy bot tests/live
+
       - name: Pytest
-        run: pytest -q
+        run: pytest -q tests/unit
 
       - name: Discord API compatibility
-        run: pytest -q tests/test_discord_api_compat.py
+        run: pytest -q tests/unit/test_discord_api_compat.py
 
       - name: Deploy bundle smoke test
         run: ./bin/test_deploy_bundle.sh

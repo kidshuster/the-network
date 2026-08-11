@@ -45,8 +45,8 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 
 | File | Purpose |
 |------|---------|
-| `tests/repository_helpers.py` | Network/client/subscription factories |
-| `tests/interaction_helpers.py` | Interaction/member/channel/message builders |
+| `tests/unit/repository_helpers.py` | Network/client/subscription factories |
+| `tests/unit/interaction_helpers.py` | Interaction/member/channel/message builders |
 
 ---
 
@@ -60,7 +60,7 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 | `bot/services` | 2,903 | 4,266 | 68.0 |
 | `bot/cogs` | 86 | 268 | 32.1 |
 | `bot/ui` | 240 | 592 | 40.5 |
-| `bot/smoke` | 433 | 1,349 | 32.1 |
+| `tests/live` | 433 | 1,349 | 32.1 |
 | `bot` (root) | 125 | 293 | 42.7 |
 | **Total** | **4,677** | **7,906** | **61.0** |
 
@@ -74,8 +74,8 @@ Snapshot taken after Phase 1 inventory and Phase 2 characterization test additio
 | `bot/logging_config.py` | 0% | Logging setup |
 | `bot/client.py` | ~15% | Startup, persistent views, on_ready |
 | `bot/services/hub_announcements.py` | 23% | Complex dispatch logic |
-| `bot/smoke/provision_flow.py` | 23% | Live smoke orchestration |
-| `bot/smoke/server_init_probes.py` | 25% | Live probes |
+| `tests/live/provision_flow.py` | 23% | Live smoke orchestration |
+| `tests/live/server_init_probes.py` | 25% | Live probes |
 | `bot/ui/network_views.py` | 35% | Most interaction handlers |
 | `bot/ui/join_views.py` | 44% | Join/review handlers |
 | `bot/ui/network_admin_views.py` | 40% | Network admin handlers |

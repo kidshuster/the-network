@@ -43,8 +43,8 @@ bot = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-pythonpath = ["tests"]
+testpaths = ["tests/unit"]
+pythonpath = [".", "tests/unit"]
 filterwarnings = [
     # discord.py imports audioop for voice; removed in Python 3.13 stdlib.
     "ignore:'audioop' is deprecated:DeprecationWarning:discord.player",

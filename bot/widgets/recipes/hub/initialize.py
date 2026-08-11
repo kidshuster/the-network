@@ -28,7 +28,6 @@ from bot.core.networks.roles import (
     validate_hub_permissions,
 )
 from bot.core.views import ViewRegistry
-from bot.smoke.provision_flow import run_guild_init_smoke_checks, run_post_init_join_smoke
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
@@ -77,7 +76,6 @@ async def initialize_guild(
     clients: list[Client] | None = None,
     bot: NetworkRelayBot | None = None,
     context: BotContext | None = None,
-    skip_join_smoke: bool = False,
     view_registry: ViewRegistry | None = None,
 ) -> GuildInitResult:
     result = GuildInitResult(success=True)
@@ -110,19 +108,8 @@ async def initialize_guild(
         )
 
         assert operator_role is not None
-        smoke = await run_guild_init_smoke_checks(
-            guild,
-            bot_member,
-            access_role,
-            access_role_name=access_role_name,
-            operator_role_name=operator_role_name,
-        )
         result.updated_roles.append(f"Using access role {access_role.name}")
         result.updated_roles.append(f"Using operator role {operator_role.name}")
-        result.notes.append("Permission smoke passed: " + ", ".join(smoke.operator_steps) + ".")
-        result.notes.append(
-            "Provision smoke passed (Accept path): " + ", ".join(smoke.provision_steps) + "."
-        )
 
         human_moderator_role = await _ensure_human_moderator_role(guild, bot_member, result=result)
 
@@ -349,25 +336,6 @@ async def initialize_guild(
                     result.notes.append(f"Network admin panel synced in {admin_channel.mention}.")
                 elif admin_result.reason:
                     result.failed_steps.append(f"Network admin sticky: {admin_result.reason}")
-
-            try:
-                if not skip_join_smoke:
-                    smoke_note = await run_post_init_join_smoke(guild, bot, context)
-                    from bot.smoke.provision_flow import cleanup_join_requests_smoke_artifacts
-
-                    await cleanup_join_requests_smoke_artifacts(guild, context, bot_member)
-                else:
-                    smoke_note = None
-            except NetworkValidationError:
-                raise
-            except RuntimeError as exc:
-                raise NetworkValidationError(
-                    "Join-approval smoke failed:\n"
-                    f"• {exc}\n\n"
-                    "Fix permissions or probe failures, then run `/server init` again."
-                ) from exc
-            if smoke_note is not None:
-                result.notes.append(smoke_note)
 
         await _sync_hub_notification_defaults(
             guild,

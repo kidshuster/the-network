@@ -2,7 +2,7 @@ releases:
   "1.2.15":
     summary: "Smoke teardown script, hub announcements channel type, and the-network display name."
     changes:
-      - "Add bin/smoke_teardown.sh to remove all smoke clients, channels, categories, roles, and emojis after test batches."
+      - "Add live-test teardown to remove smoke clients, channels, categories, roles, and emojis after test batches."
       - "Create #network-announcements as news=True; migrate legacy plain-text channels on server init."
       - "Rename hub announcements client display name to the-network for aligned welcome copy."
       - "Fix Leaders channel permission sync false warnings via incremental overwrite fallback."

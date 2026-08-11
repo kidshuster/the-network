@@ -71,7 +71,7 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 | Submit request | `test_server_request_service.py` | ✅ |
 | Approve/deny | `test_server_request_service.py` | ✅ |
 | Moderator notification | `test_server_request_notify.py` | ✅ |
-| Smoke cleanup | `test_smoke_join_request_cleanup.py` | ⚠️ |
+| Smoke cleanup | `test_live_join_request_cleanup.py` | ⚠️ |
 
 ## Subscriptions and relay
 
@@ -80,7 +80,7 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 | Subscribe/unsubscribe | `test_client_subscription.py`, `test_client_subscription_subscribe.py` | ✅ |
 | Subscription setup state | `test_subscription_setup.py` | ✅ |
 | Setup sticky sync | `test_subscription_setup.py` | ⚠️ |
-| Activation welcome | `test_setup_welcome_smoke.py` | ⚠️ |
+| Activation welcome | `test_live_setup_welcome.py` | ⚠️ |
 | Routing lookup | `test_routing_service.py` | ✅ |
 | Relay delivery | `test_relay_service.py` | ✅ |
 | Relay dedup | `test_relay_service.py` | ✅ |
@@ -114,7 +114,7 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 |----------|-------|----------|
 | Client/subscription setup | `test_hub_announcements.py` | ⚠️ |
 | Message parsing/dispatch | `test_hub_announcements.py` | ⚠️ |
-| Live smoke | `test_hub_announcements_smoke.py`, `bin/smoke_hub_announcements.sh` | 🔴 local |
+| Live smoke | `test_live_hub_announcements.py`, `tests/live/suite.py` | 🔴 local |
 
 ## Messages and templates
 
@@ -166,13 +166,13 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 
 | Behavior | Local tests | Live script |
 |----------|-------------|-------------|
-| Server init probes | `test_server_init_probes.py` | `bin/smoke_server_init.sh` |
-| Provision/join flow | — | `bin/smoke_provision_flow.sh` |
-| Hub rebuild | `test_hub_rebuild.py` | `bin/smoke_hub_rebuild.sh` |
-| Hub announcements | `test_hub_announcements_smoke.py` | `bin/smoke_hub_announcements.sh` |
-| Setup welcome | `test_setup_welcome_smoke.py` | `bin/smoke_setup_welcome.sh` |
+| Server init probes | `test_server_init_probes.py` | `tests/live/smoke_server_init.sh` |
+| Provision/join flow | — | `tests/live/suite.py` |
+| Hub rebuild | `test_hub_rebuild.py` | `tests/live/suite.py` |
+| Hub announcements | `test_live_hub_announcements.py` | `tests/live/suite.py` |
+| Setup welcome | `test_live_setup_welcome.py` | `tests/live/suite.py` |
 | Resource guard | `test_resource_guard.py` | — |
-| Teardown | `test_smoke_teardown.py` | `bin/smoke_teardown.sh` |
+| Teardown | `test_live_teardown.py` | `tests/live/suite.py` |
 | Join approval + leaders | `test_join_approval_leaders_smoke.py` | — |
 
 ---
@@ -181,13 +181,13 @@ Maps major observable behaviors to protecting tests. See [behavioral-contract.md
 
 | Module | Purpose |
 |--------|---------|
-| `tests/conftest.py` | Real SQLite + migrations (`db` fixture) |
-| `tests/context_helpers.py` | `make_test_context()` with real repos |
-| `tests/discord_helpers.py` | Guild/role/bot mocks, HTTP 50013, channel create simulation |
-| `tests/interaction_helpers.py` | Interaction, member, channel, message builders |
-| `tests/repository_helpers.py` | Network/client/subscription test factories |
-| `tests/subscription_helpers.py` | `make_client_subscription()` |
-| `tests/request_helpers.py` | `make_server_request()` |
+| `tests/unit/conftest.py` | Real SQLite + migrations (`db` fixture) |
+| `tests/unit/context_helpers.py` | `make_test_context()` with real repos |
+| `tests/unit/discord_helpers.py` | Guild/role/bot mocks, HTTP 50013, channel create simulation |
+| `tests/unit/interaction_helpers.py` | Interaction, member, channel, message builders |
+| `tests/unit/repository_helpers.py` | Network/client/subscription test factories |
+| `tests/unit/subscription_helpers.py` | `make_client_subscription()` |
+| `tests/unit/request_helpers.py` | `make_server_request()` |
 | `bot/testing/png_fixtures.py` | Valid probe PNG bytes |
 
 ---

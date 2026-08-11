@@ -75,8 +75,8 @@ Systemd deploy: `./deploy/deploy.sh`.
 
 ```bash
 ruff check .
-mypy bot
-pytest
+mypy bot tests/live
+pytest tests/unit
 ```
 
 ## Docker

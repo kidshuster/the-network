@@ -6,11 +6,11 @@ cd "$ROOT"
 
 MODE=""
 SMOKE_RESTART=0
-SKIP_QUOTA_CHECK=0
+CHECK_QUOTA=0
 
 usage() {
   cat <<'EOF'
-Usage: ./test [--dev | --full] [--smoke-restart] [--skip-quota-check]
+Usage: ./test [--dev | --full] [--smoke-restart] [--check-quota]
 
 Modes:
   --dev           Local only — ruff, mypy, pytest (default; ~1 minute)
@@ -18,7 +18,7 @@ Modes:
 
 Options:
   --smoke-restart     After live smoke, restart the bot (default: leave stopped)
-  --skip-quota-check  Skip Discord rate-limit pre-flight (not recommended)
+  --check-quota       Run the destructive rate-limit diagnostic first
   -h, --help          Show this help
 
 Live smoke uses the guild in .env. Stop the running bot first (one gateway
@@ -42,7 +42,8 @@ for arg in "$@"; do
     --dev) MODE="dev" ;;
     --full) MODE="full" ;;
     --smoke-restart) SMOKE_RESTART=1 ;;
-    --skip-quota-check) SKIP_QUOTA_CHECK=1 ;;
+    --check-quota) CHECK_QUOTA=1 ;;
+    --skip-quota-check) CHECK_QUOTA=0 ;; # Backward-compatible no-op.
     -h|--help)
       usage
       exit 0
@@ -73,7 +74,7 @@ run_dev() {
 
   echo ""
   echo "==> mypy"
-  mypy bot
+  mypy bot tests/live
 
   echo ""
   echo "==> pytest"
@@ -96,16 +97,16 @@ run_full_smoke() {
   fi
 
   echo ""
-  echo "==> live smoke (bin/smoke_testwork.sh)"
+  echo "==> live smoke (tests/live/smoke_testwork.sh)"
   echo "    guild: $(grep '^GUILD_ID=' "$ROOT/.env" | cut -d= -f2-)"
   smoke_args=(--no-restart)
   if [[ "$SMOKE_RESTART" -eq 1 ]]; then
     smoke_args=()
   fi
-  if [[ "$SKIP_QUOTA_CHECK" -eq 1 ]]; then
-    smoke_args+=(--skip-quota-check)
+  if [[ "$CHECK_QUOTA" -eq 1 ]]; then
+    smoke_args+=(--check-quota)
   fi
-  bin/smoke_testwork.sh "${smoke_args[@]}"
+  tests/live/smoke_testwork.sh "${smoke_args[@]}"
 
   echo ""
   echo "OK: full gate passed (dev + live smoke)"

@@ -17,8 +17,9 @@ bot/
   core/          Reusable workhorse APIs, persistence, and domain types
   channels/      Server layout, channel resolution, sticky reconciliation, channel templates
   widgets/       Recipes, views, presenters, modals, and interaction templates
-  smoke/         Live Discord behavioral probes
-tests/           pytest + pytest-asyncio (mock Discord objects)
+tests/
+  unit/          pytest + pytest-asyncio with mocked Discord boundaries
+  live/          real Discord probes and smoke entry points
 deploy/          Production deploy docs and scripts
 doc/             Design spec and planning (reference only)
 ```
@@ -32,8 +33,8 @@ python -m bot.main          # run bot
 ./test --dev                # ruff + mypy + pytest (default)
 ./test --full               # dev gate + live Testwork smoke (pre-deploy)
 ruff check .                # lint only
-mypy bot                    # type check only
-pytest                      # tests only
+mypy bot tests/live         # type check production and live probes
+pytest tests/unit           # local tests only
 ```
 
 See `docs/smoke-testing.md` for staging guild setup and smoke pacing.

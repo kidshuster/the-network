@@ -255,7 +255,7 @@ Success: `join_request_submitted` embed; moderator message in `#join-requests` w
 
 Approve: full client provision, role grant, leaders access, DM requester, edit review embed.
 
-**Tests:** `test_server_request_service.py`, `test_server_request_notify.py`, `test_smoke_join_request_cleanup.py`
+**Tests:** `test_server_request_service.py`, `test_server_request_notify.py`, `test_live_join_request_cleanup.py`
 
 ---
 
@@ -507,7 +507,7 @@ Registered from DB state: pending requests, all clients, unconfirmed subscriptio
 | `resource_guard.py` | RAII tracking for smoke/probe artifacts |
 | `teardown.py` | Remove smoke clients + orphan channels |
 
-**Tests:** `test_discord_cleanup.py`, `test_discord_errors.py`, `test_resource_guard.py`, `test_smoke_teardown.py`
+**Tests:** `test_discord_cleanup.py`, `test_discord_errors.py`, `test_resource_guard.py`, `test_live_teardown.py`
 
 ---
 
@@ -515,17 +515,12 @@ Registered from DB state: pending requests, all clients, unconfirmed subscriptio
 
 | Script | Probes |
 |--------|--------|
-| `smoke_server_init.sh` | `server_init_probes.py` — layout, permissions, idempotent reinit |
-| `smoke_provision_flow.sh` | Join approval, subscribe, webhook relay |
-| `smoke_hub_announcements.sh` | Hub announcement dispatch |
-| `smoke_setup_welcome.sh` | Activation welcome embeds |
-| `smoke_hub_rebuild.sh` | Full rebuild cycle |
-| `smoke_teardown.sh` | Guild cleanup |
-| `smoke_cleanup_artifacts.sh` | Orphan artifact removal |
+| `tests/live/smoke_testwork.sh` | Consolidated functional suite using one gateway session |
+| `tests/live/smoke_server_init.sh` | Optional repeated layout/permission burn-in |
 
 **Resource guarantees:** `GuildTestResourceGuard` tracks and deletes webhooks, emojis, channels, categories, roles created during probes. Prefixes: `Smoke *`, `tnprobe`, `network-perm-probe`.
 
-**Tests:** `test_*_smoke.py` modules validate probe logic locally; full behavior requires live Discord.
+**Tests:** mocked probe tests live in `tests/unit`; real API code lives only in `tests/live`.
 
 ---
 

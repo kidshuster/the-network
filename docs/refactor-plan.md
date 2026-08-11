@@ -12,7 +12,7 @@ Prioritized by confidence and duplication evidence from baseline inspection.
 |------|--------|
 | R1.1 Interaction authorization helper | **Done** — `ensure_manage_guild()` in `bot/cogs/_checks.py` |
 | R1.2 Client role authorization helper | **Done** — `ensure_client_access()` in `bot/ui/_auth.py` |
-| R1.3 Discord HTTP 50013 helper | **Done** — `tests/discord_helpers.py` |
+| R1.3 Discord HTTP 50013 helper | **Done** — `tests/unit/discord_helpers.py` |
 | R1.4 Repository row-fetch boilerplate | **Partial** — helpers added; further dedup in deeper Phase 3 |
 | R2.1 Permission overwrite sync fallback | **Partial** — `sync_channel_permission_overwrites` + guild_init wiring |
 | R2.2 Overwrite builder composition | **Deferred** — deeper Phase 4 (truth-table tests first) |
@@ -39,7 +39,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 | Proposed abstraction | Shared `async def ensure_manage_guild(interaction) -> bool` returning False after sending `manage_guild_required` |
 | Expected reduction | ~40 lines |
 | Behavioral risks | Message must remain `manage_guild_required` popup text; timing of send vs raise |
-| Verification | `pytest tests/test_require_manage_guild.py tests/test_network_admin.py tests/test_button_command_parity.py -q` |
+| Verification | `pytest tests/unit/test_require_manage_guild.py tests/unit/test_network_admin.py tests/unit/test_button_command_parity.py -q` |
 | Rollback boundary | Single commit; revert if any admin UI auth test fails |
 | User-facing messages | No change expected |
 
@@ -53,7 +53,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 | Proposed abstraction | `ensure_client_access(interaction, client, *, popup_key)` — policy explicit at call site |
 | Expected reduction | ~60 lines |
 | Behavioral risks | Different popup keys per action (`client_role_required_subscribe` vs `_edit` vs `_delete`) must remain |
-| Verification | `pytest tests/test_network_views_handlers.py tests/test_client_deletion.py -q` |
+| Verification | `pytest tests/unit/test_network_views_handlers.py tests/unit/test_client_deletion.py -q` |
 | Rollback boundary | UI layer only |
 | User-facing messages | Must preserve exact popup keys |
 
@@ -61,7 +61,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 
 | Field | Value |
 |-------|-------|
-| Files | Multiple services; `tests/discord_helpers.py` has `http_50013` |
+| Files | Multiple services; `tests/unit/discord_helpers.py` has `http_50013` |
 | Duplication | Inline `_http_50013()` copies in individual test files |
 | Protecting tests | All permission-related tests |
 | Proposed abstraction | Consolidate tests to import `discord_helpers.http_50013` |
@@ -80,7 +80,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 | Proposed abstraction | Private `_fetch_required_client(id)` / shared insert helper — **not** a generic ORM |
 | Expected reduction | ~80 lines |
 | Behavioral risks | Error types and messages on not-found must remain identical |
-| Verification | `pytest tests/test_*_repository.py -q` |
+| Verification | `pytest tests/unit/test_*_repository.py -q` |
 | Rollback boundary | Single db/repositories commit |
 | User-facing messages | Repository errors only (domain exceptions unchanged)
 
@@ -98,7 +98,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 | Proposed abstraction | `async def apply_overwrites_with_fallback(channel, overwrites, *, label)` callback for logging context |
 | Expected reduction | ~50 lines |
 | Behavioral risks | **High** — effective access must remain identical |
-| Verification | Permission tests + compare overwrite dicts before/after; `pytest tests/test_guild_permissions*.py tests/test_permission_probe.py -q` |
+| Verification | Permission tests + compare overwrite dicts before/after; `pytest tests/unit/test_guild_permissions*.py tests/unit/test_permission_probe.py -q` |
 | Rollback boundary | guild_permissions.py only |
 | User-facing messages | Discord step errors via `discord_errors.py` unchanged |
 
@@ -147,7 +147,7 @@ See [refactor-results.md](refactor-results.md) for measurement deltas and deeper
 | Proposed abstraction | Use existing `DeferredEphemeralResponse` class |
 | Expected reduction | ~25 lines |
 | Behavioral risks | `ensure_sent` fallback only when nothing sent — must not double-send |
-| Verification | `pytest tests/test_guild_init.py tests/test_guild_uninit.py tests/test_deferred_ephemeral_response.py -q` |
+| Verification | `pytest tests/unit/test_guild_init.py tests/unit/test_guild_uninit.py tests/unit/test_deferred_ephemeral_response.py -q` |
 | Rollback boundary | servers.py cog only |
 
 ### R4.2 UI defer-then-followup helper
@@ -253,8 +253,8 @@ ruff check .
 mypy bot
 pytest
 # Live (when Discord env available):
-# bin/smoke_server_init.sh
-# bin/smoke_provision_flow.sh
+# tests/live/smoke_server_init.sh
+# tests/live/smoke_testwork.sh
 ```
 
 ---
