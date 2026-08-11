@@ -1,10 +1,4 @@
 name: audit
-description: Read-only hub configuration and access checks
+description: Compatibility alias for the server-init audit recipe
 steps:
-  - hub.operator
-  - hub.manage_server
-  - hub.moderator_channel
-  - hub.layout
-  - hub.announcement_channel
-  - hub.leaders_access
-
+  - recipe: server-init-audit

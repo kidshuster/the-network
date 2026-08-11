@@ -1,25 +1,4 @@
 name: stress
-description: Destructive server-init rectification burn-in
+description: Compatibility alias for the server-init stress recipe
 steps:
-  - permissions.provision
-  - hub.operator
-  - hub.manage_server
-  - hub.moderator_channel
-  - hub.layout
-  - hub.announcement_channel
-  - probe: hub.leaders_drift
-    pause: true
-  - probe: hub.reinit
-    pause: true
-  - probe: hub.client_layout_reinit
-    pause: true
-  - probe: hub.leaders_delete_reinit
-    pause: true
-  - probe: hub.leaders_idempotent_reinit
-    pause: true
-  - hub.leaders_access
-  - clients.protected
-finally:
-  - probe: artifacts.teardown
-    protect_clients: false
-  - clients.protected
+  - recipe: server-init-stress

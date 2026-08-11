@@ -25,6 +25,7 @@ Run a recipe:
 python -m tests.live.runner recipe audit
 python -m tests.live.runner recipe full
 python -m tests.live.runner recipe stress
+python -m tests.live.runner recipe server-init-stress
 ```
 
 Run the same probes and recipes without connecting to Discord:
@@ -45,6 +46,20 @@ Recipe steps may request `pause: true`. The live backend owns that behavior and
 waits for `SMOKE_PHASE_DELAY_SEC` after the probe; the mock backend implements
 the same interface without sleeping. Backend-specific rate-limit behavior must
 not be added to the recipe runner.
+
+The server-init launcher contains no embedded test logic; it delegates to YAML:
+
+```bash
+tests/live/smoke_server_init.sh --audit
+tests/live/smoke_server_init.sh --stress
+tests/live/smoke_server_init.sh --stress --mock --scenario=malformed_channels
+```
+
+`server-init-stress` first rectifies state accumulated by an always-on server,
+audits the normalized layout, then exercises Leaders permission drift,
+client-layout drift, channel deletion/recreation, and repeated initialization.
+The `hard_blocker` scenario verifies that community resources hidden from the
+bot are reported rather than silently treated as repaired.
 
 `full` is the normal smoke gate. `audit` avoids intentional permission drift.
 `stress` is destructive burn-in and should use a staging guild. Recipes verify

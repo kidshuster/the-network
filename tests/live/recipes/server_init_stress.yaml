@@ -1,0 +1,13 @@
+name: server-init-stress
+description: Main-compatible server-init permission, drift, rebuild, and idempotency stress
+steps:
+  - artifacts.cleanup
+  - permissions.provision
+  - probe: hub.reinit
+    pause: true
+  - recipe: server-init-audit
+  - recipe: server-init-rectification
+finally:
+  - probe: artifacts.teardown
+    protect_clients: false
+  - clients.protected

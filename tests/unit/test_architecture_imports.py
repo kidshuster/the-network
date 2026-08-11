@@ -130,6 +130,8 @@ def test_test_tree_separates_unit_and_live_code() -> None:
 def test_live_orchestration_is_recipe_driven() -> None:
     live_root = Path(__file__).resolve().parents[1] / "live"
     assert not (live_root / "suite.py").exists()
-    assert not (live_root / "smoke_server_init.sh").exists()
     assert list((live_root / "recipes").glob("*.yaml"))
     assert (live_root / "runner.py").exists()
+    launcher = (live_root / "smoke_server_init.sh").read_text(encoding="utf-8")
+    assert "tests.live.runner recipe" in launcher
+    assert "discord" not in launcher.casefold()

@@ -12,7 +12,15 @@ from tests.live.recipes import Recipe, RecipeRunner, RecipeStep, load_recipes
 
 def test_shipped_recipes_only_reference_registered_probes_and_recipes() -> None:
     recipes = load_recipes()
-    assert {"audit", "functional", "full", "stress"} <= recipes.keys()
+    assert {
+        "audit",
+        "functional",
+        "full",
+        "server-init-audit",
+        "server-init-rectification",
+        "server-init-stress",
+        "stress",
+    } <= recipes.keys()
     for recipe in recipes.values():
         for step in (*recipe.steps, *recipe.finally_steps):
             if step.probe is not None:
@@ -112,3 +120,31 @@ async def test_mock_audit_exposes_missing_layout() -> None:
     context = load_mock_context("missing_layout")
     with pytest.raises(RuntimeError, match="moderator-only channel is missing"):
         await RecipeRunner(context, load_recipes(), backend="mock").run("audit")
+
+
+@pytest.mark.asyncio
+async def test_server_init_stress_rectifies_malformed_live_server() -> None:
+    context = load_mock_context("malformed_channels")
+    await RecipeRunner(context, load_recipes(), backend="mock").run(
+        "server-init-stress"
+    )
+    state = context.state
+    assert state.layout_present
+    assert state.leaders_access
+    assert not state.missing_channels
+    assert not state.misplaced_channels
+    assert not state.wrong_channel_types
+    assert not state.stale_permission_targets
+    assert not state.stale_roles
+    assert not state.duplicate_channels
+    state.assert_protected()
+
+
+@pytest.mark.asyncio
+async def test_server_init_stress_reports_unrecoverable_visibility_blocker() -> None:
+    context = load_mock_context("hard_blocker")
+    with pytest.raises(RuntimeError, match="community channels hidden from bot"):
+        await RecipeRunner(context, load_recipes(), backend="mock").run(
+            "server-init-stress"
+        )
+    context.state.assert_protected()

@@ -1,0 +1,15 @@
+layout_present: true
+permissions_valid: true
+leaders_access: false
+announcement_channel_regular: true
+missing_channels: [changelog]
+misplaced_channels: [moderator-only, leaders-channel]
+wrong_channel_types: [network-announcements]
+duplicate_channels: [leaders-channel]
+stale_permission_targets: [leaders-channel, changelog]
+stale_roles: [deleted-client-role]
+artifacts: [orphan-smoke-role, orphan-smoke-channel]
+clients:
+  - name: Existing Client
+    subscriptions: [general, raids]
+

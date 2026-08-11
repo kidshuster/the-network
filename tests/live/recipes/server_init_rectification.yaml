@@ -1,0 +1,16 @@
+name: server-init-rectification
+description: Inject drift and verify server init converges without harming clients
+steps:
+  - probe: hub.leaders_drift
+    pause: true
+  - probe: hub.reinit
+    pause: true
+  - probe: hub.client_layout_reinit
+    pause: true
+  - probe: hub.leaders_delete_reinit
+    pause: true
+  - probe: hub.leaders_idempotent_reinit
+    pause: true
+  - hub.leaders_access
+  - clients.protected
+
