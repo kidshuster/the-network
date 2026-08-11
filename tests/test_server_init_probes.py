@@ -37,7 +37,7 @@ def _client_context(*, roles: list[MagicMock]) -> MagicMock:
             server_name=f"Client{index}",
         )
         clients.append(client)
-    context.client_repo.list_all = AsyncMock(return_value=clients)
+    context.store.clients.list_all = AsyncMock(return_value=clients)
     return context
 
 
@@ -112,6 +112,6 @@ async def test_collect_leaders_access_gaps_reports_missing_leaders_view(
 async def test_collect_leaders_access_gaps_when_no_clients() -> None:
     guild = MagicMock(spec=discord.Guild, id=100)
     context = MagicMock()
-    context.client_repo.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_all = AsyncMock(return_value=[])
     gaps = await _collect_leaders_access_gaps(guild, context)
     assert gaps == []

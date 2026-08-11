@@ -9,13 +9,7 @@ if TYPE_CHECKING:
     from bot.clients.cache import ClientCache
     from bot.config import Settings
     from bot.db.connection import Database
-    from bot.db.repositories import (
-        ClientRepository,
-        NetworkRepository,
-        RelayRecordRepository,
-        ServerRequestRepository,
-        SettingsRepository,
-    )
+    from bot.db.store import Store
     from bot.networks.routing import RoutingService
     from bot.relay.service import RelayService
 
@@ -24,15 +18,11 @@ if TYPE_CHECKING:
 class BotContext:
     settings: Settings
     db: Database
-    network_repo: NetworkRepository
-    client_repo: ClientRepository
-    relay_record_repo: RelayRecordRepository
+    store: Store
     routing_service: RoutingService
     client_cache: ClientCache
     relay_service: RelayService
     bot_settings: BotSettingsService
-    settings_repo: SettingsRepository
-    server_request_repo: ServerRequestRepository
     started_at: datetime
     network_count: int = 0
     client_count: int = 0
@@ -43,28 +33,20 @@ class BotContext:
         cls,
         settings: Settings,
         db: Database,
-        network_repo: NetworkRepository,
-        client_repo: ClientRepository,
-        relay_record_repo: RelayRecordRepository,
+        store: Store,
         routing_service: RoutingService,
         client_cache: ClientCache,
         relay_service: RelayService,
         bot_settings: BotSettingsService,
-        settings_repo: SettingsRepository,
-        server_request_repo: ServerRequestRepository,
     ) -> BotContext:
         return cls(
             settings=settings,
             db=db,
-            network_repo=network_repo,
-            client_repo=client_repo,
-            relay_record_repo=relay_record_repo,
+            store=store,
             routing_service=routing_service,
             client_cache=client_cache,
             relay_service=relay_service,
             bot_settings=bot_settings,
-            settings_repo=settings_repo,
-            server_request_repo=server_request_repo,
             started_at=datetime.now(tz=UTC),
         )
 
@@ -76,7 +58,7 @@ class BotContext:
         await self.client_cache.load_cache()
         from bot.hub.announcements import is_hub_announcements_client
 
-        clients = await self.client_repo.list_all()
+        clients = await self.store.clients.list_all()
         visible = [
             client
             for client in clients

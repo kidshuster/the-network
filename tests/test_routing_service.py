@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 
 from bot.clients.cache import ClientCache
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.errors import RoutingError
 from bot.networks.routing import RoutingService
 
 
 @pytest.mark.asyncio
 async def test_load_cache_indexes_networks(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(guild_id=100, key="net-a", display_name="Net A")
     await repo.create(guild_id=100, key="net-b", display_name="Net B")
 
@@ -24,8 +24,8 @@ async def test_load_cache_indexes_networks(db) -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_publish_subscription(db) -> None:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(guild_id=100, key="route-me", display_name="Route Me")
     client = await client_repo.create(
         guild_id=100,
@@ -58,7 +58,7 @@ async def test_resolve_publish_subscription(db) -> None:
 
 @pytest.mark.asyncio
 async def test_require_by_key_raises_when_missing(db) -> None:
-    routing = RoutingService(NetworkRepository(db))
+    routing = RoutingService(NetworkStore(db))
     await routing.load_cache()
     with pytest.raises(RoutingError):
         routing.require_by_key("nope")

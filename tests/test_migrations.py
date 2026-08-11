@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from bot.constants import SCHEMA_VERSION
 from bot.db.connection import Database
 from bot.db.migrations import count_networks, count_profiles, run_migrations
 
@@ -16,7 +17,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
 
     version = await run_migrations(db)
 
-    assert version == 13
+    assert version == SCHEMA_VERSION
     assert db_path.exists()
 
     cursor = await db.connection.execute(
@@ -35,6 +36,7 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
         "clients",
         "client_subscriptions",
         "client_blacklists",
+        "managed_resources",
     }.issubset(tables)
 
     cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
@@ -64,12 +66,12 @@ async def test_run_migrations_is_idempotent(tmp_path: Path) -> None:
     first = await run_migrations(db)
     second = await run_migrations(db)
 
-    assert first == 13
-    assert second == 13
+    assert first == SCHEMA_VERSION
+    assert second == SCHEMA_VERSION
 
     cursor = await db.connection.execute("SELECT version FROM schema_migrations")
     migration_rows = await cursor.fetchall()
     await cursor.close()
-    assert len(migration_rows) == 13
+    assert len(migration_rows) == SCHEMA_VERSION
 
     await db.close()

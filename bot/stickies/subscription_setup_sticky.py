@@ -81,7 +81,7 @@ async def _broadcast_network_member_welcome(
             or not dest_sub.enabled
         ):
             continue
-        if await context.client_repo.is_blacklisted(dest_sub.id, client.id):
+        if await context.store.clients.is_blacklisted(dest_sub.id, client.id):
             continue
         dest_client = context.client_cache.get_client(dest_sub.client_id)
         if dest_client is None or not dest_client.enabled:
@@ -156,7 +156,7 @@ async def _sync_publish_setup_sticky(
     )
     if result.removed:
         if subscription.publish_setup_message_id is not None:
-            return await context.client_repo.update_publish_setup_message_id(
+            return await context.store.clients.update_publish_setup_message_id(
                 subscription.id,
                 None,
             )
@@ -164,7 +164,7 @@ async def _sync_publish_setup_sticky(
     if result.message is None:
         return subscription
     if subscription.publish_setup_message_id != result.message.id:
-        return await context.client_repo.update_publish_setup_message_id(
+        return await context.store.clients.update_publish_setup_message_id(
             subscription.id,
             result.message.id,
         )
@@ -194,7 +194,7 @@ async def _sync_subscribe_setup_sticky(
             remove=True,
         )
         if result.removed and subscription.subscribe_setup_message_id is not None:
-            return await context.client_repo.update_subscribe_setup_message_id(
+            return await context.store.clients.update_subscribe_setup_message_id(
                 subscription.id,
                 None,
             )
@@ -222,7 +222,7 @@ async def _sync_subscribe_setup_sticky(
     if result.message is None:
         return subscription
     if subscription.subscribe_setup_message_id != result.message.id:
-        return await context.client_repo.update_subscribe_setup_message_id(
+        return await context.store.clients.update_subscribe_setup_message_id(
             subscription.id,
             result.message.id,
         )
@@ -250,7 +250,7 @@ async def _maybe_post_activation_welcome(
     if not hasattr(subscribe_channel, "send"):
         return subscription
 
-    fresh = await context.client_repo.get_subscription_by_id(subscription.id)
+    fresh = await context.store.clients.get_subscription_by_id(subscription.id)
     if fresh is None:
         return subscription
     subscription = fresh
@@ -278,7 +278,7 @@ async def _maybe_post_activation_welcome(
 
     await _publish_announcement(message)
 
-    updated = await context.client_repo.update_activation_welcome_message_id(
+    updated = await context.store.clients.update_activation_welcome_message_id(
         subscription.id,
         message.id,
     )
@@ -401,16 +401,16 @@ async def sync_all_subscription_setups(
 ) -> int:
     """Ensure setup stickies and moderation cards exist for every subscription."""
     synced = 0
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
-        subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+        subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
         for subscription in subscriptions:
             network = None
             if subscription.network_id is not None:
-                network = await context.network_repo.get_by_id(subscription.network_id)
+                network = await context.store.networks.get_by_id(subscription.network_id)
             if network is None and subscription.network_key:
-                network = await context.network_repo.get_by_key(subscription.network_key)
+                network = await context.store.networks.get_by_key(subscription.network_key)
             await sync_subscription_setup(
                 bot,
                 context,
@@ -433,16 +433,16 @@ async def sync_subscription_setup_by_publish_channel(
     *,
     view_registry: ViewRegistry,
 ) -> None:
-    subscription = await context.client_repo.get_subscription_by_publish_channel(
+    subscription = await context.store.clients.get_subscription_by_publish_channel(
         publish_channel_id,
     )
     if subscription is None:
         return
-    client = await context.client_repo.get_by_id(subscription.client_id)
+    client = await context.store.clients.get_by_id(subscription.client_id)
     if client is None:
         return
     network = (
-        await context.network_repo.get_by_id(subscription.network_id)
+        await context.store.networks.get_by_id(subscription.network_id)
         if subscription.network_id is not None
         else None
     )

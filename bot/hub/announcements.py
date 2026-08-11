@@ -224,7 +224,7 @@ async def _sync_hub_client_emoji(
     )
     if emoji_result.emoji_id is None:
         return client
-    return await context.client_repo.update_emoji_fields(
+    return await context.store.clients.update_emoji_fields(
         client.id,
         emoji_id=emoji_result.emoji_id,
         emoji_name=emoji_result.emoji_name,
@@ -251,7 +251,7 @@ async def _create_hub_client_record(
         operator_role_name=settings.network_operator_role_name,
     )
 
-    networks = await context.network_repo.list_all()
+    networks = await context.store.networks.list_all()
     network_keys = [n.key for n in networks]
     view = view_registry.register_client_profile_view(0, network_keys)
     embed = build_client_profile_embed(
@@ -261,7 +261,7 @@ async def _create_hub_client_record(
     )
     starter = await provision.profile_channel.send(embed=embed, view=view, silent=True)
 
-    client = await context.client_repo.create(
+    client = await context.store.clients.create(
         guild_id=guild.id,
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -292,7 +292,7 @@ async def _finalize_hub_subscription(
     guild: discord.Guild,
     subscription_id: int,
 ) -> None:
-    subscription = await context.client_repo.set_subscribe_confirmed(subscription_id, True)
+    subscription = await context.store.clients.set_subscribe_confirmed(subscription_id, True)
     if subscription.publish_setup_message_id is not None:
         publish = guild.get_channel(subscription.publish_channel_id)
         if isinstance(publish, discord.TextChannel):
@@ -301,7 +301,7 @@ async def _finalize_hub_subscription(
                 await message.delete()
             except discord.HTTPException:
                 pass
-        subscription = await context.client_repo.update_publish_setup_message_id(
+        subscription = await context.store.clients.update_publish_setup_message_id(
             subscription.id,
             None,
         )
@@ -313,7 +313,7 @@ async def _finalize_hub_subscription(
                 await message.delete()
             except discord.HTTPException:
                 pass
-        await context.client_repo.update_subscribe_setup_message_id(subscription.id, None)
+        await context.store.clients.update_subscribe_setup_message_id(subscription.id, None)
 
 
 async def ensure_hub_announcements_subscription(
@@ -324,14 +324,14 @@ async def ensure_hub_announcements_subscription(
 ) -> bool:
     """Subscribe the hub announcements client to one network if missing."""
     settings = bot.settings
-    client = await context.client_repo.get_by_server_name(
+    client = await context.store.clients.get_by_server_name(
         guild.id,
         settings.hub_announcements_server_name,
     )
     if client is None:
         return False
 
-    existing = await context.client_repo.get_subscription(client.id, network.id)
+    existing = await context.store.clients.get_subscription(client.id, network.id)
     if existing is not None:
         await _finalize_hub_subscription(bot, context, guild, existing.id)
         return False
@@ -349,8 +349,8 @@ async def ensure_hub_announcements_subscription(
         client=client,
         network_id=network.id,
         network_key=network.key,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         access_role_name=settings.network_access_role_name,
     )
     if not result.success or result.subscription is None:
@@ -394,7 +394,7 @@ async def ensure_hub_announcements_client(
         result=result,
     )
 
-    client = await context.client_repo.get_by_server_name(
+    client = await context.store.clients.get_by_server_name(
         guild.id,
         settings.hub_announcements_server_name,
     )
@@ -429,12 +429,12 @@ async def ensure_hub_announcements_client(
             image_data=avatar,
         )
         if client.display_name != settings.hub_announcements_display_name:
-            client = await context.client_repo.update_display_name(
+            client = await context.store.clients.update_display_name(
                 client.id,
                 settings.hub_announcements_display_name,
             )
 
-    networks = await context.network_repo.list_all()
+    networks = await context.store.networks.list_all()
     subscribed = 0
     for network in networks:
         if not network.enabled:
@@ -442,7 +442,7 @@ async def ensure_hub_announcements_client(
         if await ensure_hub_announcements_subscription(guild, bot, context, network):
             subscribed += 1
         else:
-            existing = await context.client_repo.get_subscription(client.id, network.id)
+            existing = await context.store.clients.get_subscription(client.id, network.id)
             if existing is not None:
                 await _finalize_hub_subscription(bot, context, guild, existing.id)
 
@@ -528,19 +528,19 @@ async def dispatch_hub_announcement(
     message: discord.Message,
 ) -> DispatchResult:
     settings = bot.settings
-    client = await context.client_repo.get_by_server_name(
+    client = await context.store.clients.get_by_server_name(
         guild.id,
         settings.hub_announcements_server_name,
     )
     if client is None:
         return DispatchResult(False, (), (), ("Hub announcements client is not configured.",))
 
-    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     key_to_sub: dict[str, ClientSubscription] = {}
     for sub in subscriptions:
         if not sub.enabled or sub.network_id is None:
             continue
-        network = await context.network_repo.get_by_id(sub.network_id)
+        network = await context.store.networks.get_by_id(sub.network_id)
         if network is None or not network.enabled:
             continue
         key_to_sub[network.key] = sub

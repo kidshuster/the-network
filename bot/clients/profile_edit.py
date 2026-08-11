@@ -37,7 +37,7 @@ async def apply_client_profile_edit(
     profile_image: discord.Attachment | None = None,
     view_registry: ViewRegistry,
 ) -> ClientProfileUpdateResult:
-    client = await context.client_repo.get_by_id(client_id)
+    client = await context.store.clients.get_by_id(client_id)
     if client is None:
         return ClientProfileUpdateResult(success=False, error="Client profile was not found.")
 
@@ -46,7 +46,7 @@ async def apply_client_profile_edit(
         return ClientProfileUpdateResult(success=False, error="Display name cannot be empty.")
 
     warnings: list[str] = []
-    updated = await context.client_repo.update_display_name(client_id, label)
+    updated = await context.store.clients.update_display_name(client_id, label)
 
     if profile_image is not None:
         try:
@@ -68,7 +68,7 @@ async def apply_client_profile_edit(
         )
         if emoji_result.warning:
             warnings.append(emoji_result.warning)
-        updated = await context.client_repo.update_emoji_fields(
+        updated = await context.store.clients.update_emoji_fields(
             client_id,
             emoji_id=emoji_result.emoji_id,
             emoji_name=emoji_result.emoji_name,

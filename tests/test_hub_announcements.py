@@ -111,13 +111,13 @@ async def test_relay_skips_hub_announcements_subscribe_destination(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from bot.clients.cache import ClientCache
-    from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
+    from bot.db.store import ClientStore, NetworkStore, RelayStore
     from bot.networks.routing import RoutingService
     from bot.relay.service import RelayService
 
     settings = _settings(monkeypatch)
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
 
     publisher = await client_repo.create(
@@ -182,7 +182,7 @@ async def test_relay_skips_hub_announcements_subscribe_destination(
     routing = RoutingService(network_repo, client_repo)
     routing.attach_client_cache(client_cache)
     await routing.load_cache()
-    relay_records = RelayRecordRepository(db)
+    relay_records = RelayStore(db)
     relay_service = RelayService(
         settings,
         routing,
@@ -259,8 +259,8 @@ async def test_dispatch_hub_announcement_propagates_parse_error(
 ) -> None:
     settings = _settings(monkeypatch)
     context = make_test_context(db)
-    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
-    hub = await context.client_repo.create(
+    network = await context.store.networks.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.store.clients.create(
         guild_id=100,
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -269,7 +269,7 @@ async def test_dispatch_hub_announcement_propagates_parse_error(
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=hub.id,
         network_id=network.id,
         network_key=network.key,
@@ -300,8 +300,8 @@ async def test_dispatch_hub_announcement_rejects_empty_message(
 ) -> None:
     settings = _settings(monkeypatch)
     context = make_test_context(db)
-    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
-    hub = await context.client_repo.create(
+    network = await context.store.networks.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.store.clients.create(
         guild_id=100,
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -310,7 +310,7 @@ async def test_dispatch_hub_announcement_rejects_empty_message(
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=hub.id,
         network_id=network.id,
         network_key=network.key,
@@ -340,10 +340,10 @@ async def test_dispatch_hub_announcement_relays_to_target_network(
 ) -> None:
     settings = _settings(monkeypatch)
     context = make_test_context(db)
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=100, key="stingers", display_name="Stingers"
     )
-    hub = await context.client_repo.create(
+    hub = await context.store.clients.create(
         guild_id=100,
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -352,7 +352,7 @@ async def test_dispatch_hub_announcement_relays_to_target_network(
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=hub.id,
         network_id=network.id,
         network_key=network.key,
@@ -397,8 +397,8 @@ async def test_dispatch_hub_announcement_reports_missing_publish_channel(
 ) -> None:
     settings = _settings(monkeypatch)
     context = make_test_context(db)
-    network = await context.network_repo.create(guild_id=100, key="smoke", display_name="Smoke")
-    hub = await context.client_repo.create(
+    network = await context.store.networks.create(guild_id=100, key="smoke", display_name="Smoke")
+    hub = await context.store.clients.create(
         guild_id=100,
         server_name=settings.hub_announcements_server_name,
         display_name=settings.hub_announcements_display_name,
@@ -407,7 +407,7 @@ async def test_dispatch_hub_announcement_reports_missing_publish_channel(
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=hub.id,
         network_id=network.id,
         network_key=network.key,

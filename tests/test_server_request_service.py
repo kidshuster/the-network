@@ -15,11 +15,12 @@ from bot.onboarding.server_requests import ServerRequestService
 
 def _service_context(**repo_methods: object) -> SimpleNamespace:
     repo = SimpleNamespace(**repo_methods)
+    store = SimpleNamespace(
+        requests=repo,
+        clients=SimpleNamespace(get_by_server_name=AsyncMock(return_value=None)),
+    )
     return SimpleNamespace(
-        server_request_repo=repo,
-        client_repo=SimpleNamespace(
-            get_by_server_name=AsyncMock(return_value=None),
-        ),
+        store=store,
         client_cache=SimpleNamespace(load_cache=AsyncMock()),
     )
 
@@ -53,7 +54,7 @@ async def test_submit_request_rejects_existing_client_name() -> None:
     context = _service_context(
         get_pending_for_requester=AsyncMock(return_value=None),
     )
-    context.client_repo.get_by_server_name = AsyncMock(return_value=MagicMock())
+    context.store.clients.get_by_server_name = AsyncMock(return_value=MagicMock())
     bot = MagicMock()
     service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
 
@@ -147,7 +148,7 @@ async def test_approve_request_provisions_client_on_success(
     result = await service.approve_request(guild, request_id=7, moderator=moderator)
 
     assert result.success is True
-    context.server_request_repo.resolve.assert_awaited_once()
+    context.store.requests.resolve.assert_awaited_once()
     requester.add_roles.assert_awaited_once()
 
 
@@ -352,6 +353,6 @@ async def test_deny_request_resolves_and_notifies(
     result = await service.deny_request(request_id=7, moderator=moderator)
 
     assert result.success is True
-    context.server_request_repo.resolve.assert_awaited_once()
-    resolve_kwargs = context.server_request_repo.resolve.await_args.kwargs
+    context.store.requests.resolve.assert_awaited_once()
+    resolve_kwargs = context.store.requests.resolve.await_args.kwargs
     assert resolve_kwargs["status"] == ServerRequestStatus.DENIED

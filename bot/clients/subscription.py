@@ -26,7 +26,7 @@ from bot.clients.resources import (
     resolve_client_profile_channel,
     resolve_client_resources,
 )
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
@@ -247,8 +247,8 @@ class ClientSubscriptionService:
         client: Client,
         network_id: int,
         network_key: str,
-        client_repo: ClientRepository,
-        network_repo: NetworkRepository,
+        client_repo: ClientStore,
+        network_repo: NetworkStore,
         access_role_name: str,
     ) -> SubscribeResult:
         existing = await client_repo.get_subscription(client.id, network_id)
@@ -401,8 +401,8 @@ class ClientSubscriptionService:
         client: Client,
         subscription: ClientSubscription,
         network_key: str,
-        client_repo: ClientRepository,
-        network_repo: NetworkRepository,
+        client_repo: ClientStore,
+        network_repo: NetworkStore,
     ) -> UnsubscribeResult:
         profile = await resolve_client_profile_channel(guild, client)
         if (
@@ -443,8 +443,7 @@ class ClientSubscriptionService:
                     extra={"channel_id": subscribe.id},
                 )
 
-        await client_repo.delete_blacklists_for_subscription(subscription.id)
-        deleted = await client_repo.delete_subscription(subscription.id)
+        deleted = await client_repo.delete_subscription_with_relations(subscription.id)
         if deleted is None:
             return UnsubscribeResult(success=False, error="Subscription was not found.")
 
@@ -473,8 +472,8 @@ async def sync_client_channel_names(
     bot_member: discord.Member,
     *,
     client: Client,
-    client_repo: ClientRepository,
-    network_repo: NetworkRepository,
+    client_repo: ClientStore,
+    network_repo: NetworkStore,
 ) -> None:
     profile = await resolve_client_profile_channel(guild, client)
     if profile is not None:
@@ -539,8 +538,8 @@ async def reorder_client_category_channels(
     category: discord.CategoryChannel,
     *,
     client: Client,
-    client_repo: ClientRepository,
-    network_repo: NetworkRepository,
+    client_repo: ClientStore,
+    network_repo: NetworkStore,
 ) -> None:
     subscriptions = await client_repo.list_subscriptions_by_client(client.id)
     order: list[int] = [client.profile_channel_id]
@@ -594,14 +593,14 @@ async def resync_subscriptions_for_network(
         return 0
 
     relinked = 0
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         category = await resolve_client_category(guild, client)
         if category is None:
             continue
 
-        existing = await context.client_repo.get_subscription(client.id, network.id)
+        existing = await context.store.clients.get_subscription(client.id, network.id)
         if existing is not None:
             await sync_subscription_channel_permissions(
                 guild,
@@ -622,17 +621,17 @@ async def resync_subscriptions_for_network(
             await reorder_client_category_channels(
                 category,
                 client=client,
-                client_repo=context.client_repo,
-                network_repo=context.network_repo,
+                client_repo=context.store.clients,
+                network_repo=context.store.networks,
             )
             continue
 
-        orphan = await context.client_repo.get_subscription_by_client_and_key(
+        orphan = await context.store.clients.get_subscription_by_client_and_key(
             client.id,
             network.key,
         )
         if orphan is not None and orphan.network_id is None:
-            subscription = await context.client_repo.relink_subscription(
+            subscription = await context.store.clients.relink_subscription(
                 orphan.id,
                 network.id,
             )
@@ -646,8 +645,8 @@ async def resync_subscriptions_for_network(
             await reorder_client_category_channels(
                 category,
                 client=client,
-                client_repo=context.client_repo,
-                network_repo=context.network_repo,
+                client_repo=context.store.clients,
+                network_repo=context.store.networks,
             )
             await sync_subscription_setup(
                 bot,
@@ -669,7 +668,7 @@ async def resync_subscriptions_for_network(
         if publish_channel is None or subscribe_channel is None:
             continue
 
-        subscription = await context.client_repo.create_subscription(
+        subscription = await context.store.clients.create_subscription(
             client_id=client.id,
             network_id=network.id,
             network_key=network.key,
@@ -686,8 +685,8 @@ async def resync_subscriptions_for_network(
         await reorder_client_category_channels(
             category,
             client=client,
-            client_repo=context.client_repo,
-            network_repo=context.network_repo,
+            client_repo=context.store.clients,
+            network_repo=context.store.networks,
         )
         await sync_subscription_setup(
             bot,

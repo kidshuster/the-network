@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -9,6 +12,8 @@ class Database:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._conn: aiosqlite.Connection | None = None
+        self._transaction_lock = asyncio.Lock()
+        self._in_transaction = False
 
     @property
     def connection(self) -> aiosqlite.Connection:
@@ -29,7 +34,30 @@ class Database:
 
     async def execute(self, sql: str, params: tuple[object, ...] = ()) -> None:
         await self.connection.execute(sql, params)
-        await self.connection.commit()
+        if not self._in_transaction:
+            await self.connection.commit()
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Run a Store recipe atomically on this connection.
+
+        Transactions are deliberately non-nestable: a named Store recipe owns its
+        whole commit boundary, which prevents partial commits hidden in callers.
+        """
+        async with self._transaction_lock:
+            if self._in_transaction:
+                raise RuntimeError("Nested database transactions are not supported")
+            self._in_transaction = True
+            try:
+                await self.connection.execute("BEGIN IMMEDIATE")
+                yield self.connection
+            except BaseException:
+                await self.connection.rollback()
+                raise
+            else:
+                await self.connection.commit()
+            finally:
+                self._in_transaction = False
 
     async def fetchone(self, sql: str, params: tuple[object, ...] = ()) -> aiosqlite.Row | None:
         cursor = await self.connection.execute(sql, params)

@@ -32,8 +32,8 @@ async def test_sync_network_admin_sticky_wipes_before_post(
     bot_member = MagicMock(spec=discord.Member)
     bot_member.id = 1
     context = MagicMock()
-    context.network_repo.list_all = AsyncMock(return_value=[])
-    context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[])
+    context.store.networks.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[])
     get_setting = AsyncMock(return_value=None)
     set_setting = AsyncMock()
     view = MagicMock(spec=discord.ui.View)

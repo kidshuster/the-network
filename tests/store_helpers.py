@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.network import Network
 
 
 async def create_test_network(
-    repo: NetworkRepository,
+    repo: NetworkStore,
     *,
     key: str = "stingers",
     display_name: str = "Stingers",
@@ -24,7 +24,7 @@ async def create_test_network(
 
 
 async def create_test_client(
-    repo: ClientRepository,
+    repo: ClientStore,
     *,
     guild_id: int = 100,
     server_name: str = "Acme",
@@ -46,7 +46,7 @@ async def create_test_client(
 
 
 async def create_test_subscription(
-    client_repo: ClientRepository,
+    client_repo: ClientStore,
     *,
     client: Client,
     network: Network,

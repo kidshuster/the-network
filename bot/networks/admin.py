@@ -40,14 +40,14 @@ async def create_network(
     from bot.clients.subscription import resync_subscriptions_for_network
 
     try:
-        existing = await context.network_repo.get_by_key(key)
+        existing = await context.store.networks.get_by_key(key)
         if existing is not None:
             return CreateNetworkResult(
                 success=False,
                 error=f"Network `{existing.key}` already exists.",
             )
 
-        network = await context.network_repo.create(
+        network = await context.store.networks.create(
             guild_id=guild.id,
             key=key,
             display_name=display_name,
@@ -97,14 +97,14 @@ async def delete_network(
     from bot.clients.profile_sync import refresh_all_client_profiles
 
     try:
-        network = await context.network_repo.get_by_key(key)
+        network = await context.store.networks.get_by_key(key)
         if network is None:
             raise NetworkValidationError(f"Network `{key.strip().lower()}` was not found.")
 
-        await context.client_repo.detach_subscriptions_from_network(network.id, network.key)
-        await context.relay_record_repo.delete_by_network_id(network.id)
-        await context.server_request_repo.delete_by_network_id(network.id)
-        await context.network_repo.delete(key)
+        await context.store.clients.detach_subscriptions_from_network(network.id, network.key)
+        await context.store.relay.delete_by_network_id(network.id)
+        await context.store.requests.delete_by_network_id(network.id)
+        await context.store.networks.delete(key)
         await context.routing_service.load_cache()
         await context.client_cache.load_cache()
         await context.refresh_network_counts()

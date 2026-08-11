@@ -66,7 +66,7 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
         timecode_enabled=False,
     )
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
 
     monkeypatch.setattr(
         "bot.clients.rectification.resolve_operator_role_by_name",
@@ -166,7 +166,7 @@ async def test_rectify_client_permissions_records_category_http_failure(
     )
 
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
 
     client = Client(
         id=1,
@@ -266,8 +266,8 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
         subscribe_channel_id=41,
     )
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[subscription])
-    context.network_repo.get_by_id = AsyncMock(
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[subscription])
+    context.store.networks.get_by_id = AsyncMock(
         return_value=Network(
             id=2,
             key="stingers",

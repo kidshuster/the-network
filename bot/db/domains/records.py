@@ -87,7 +87,7 @@ def _require_present[T](value: T | None, *, not_found: str) -> T:
     return value
 
 
-class NetworkRepository:
+class NetworkStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
@@ -211,7 +211,7 @@ class NetworkRepository:
 
 
 
-class RelayRecordRepository:
+class RelayStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
@@ -335,7 +335,7 @@ class RelayRecordRepository:
         )
 
 
-class ServerRequestRepository:
+class RequestStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
@@ -492,7 +492,7 @@ class ServerRequestRepository:
         return [ServerRequestRow.from_row(row) for row in rows]
 
 
-class SettingsRepository:
+class SettingsStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
@@ -514,7 +514,7 @@ class SettingsRepository:
         )
 
 
-class ClientRepository:
+class ClientStore:
     def __init__(self, db: Database) -> None:
         self._db = db
 
@@ -695,6 +695,32 @@ class ClientRepository:
         if existing is None:
             return None
         await self._db.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+        return existing
+
+    async def delete_with_relations(self, client_id: int) -> Client | None:
+        """Atomically remove a client and every relation that can block deletion."""
+        existing = await self.get_by_id(client_id)
+        if existing is None:
+            return None
+        async with self._db.transaction() as connection:
+            await connection.execute(
+                "DELETE FROM client_blacklists WHERE blocked_client_id = ?",
+                (client_id,),
+            )
+            await connection.execute(
+                """
+                DELETE FROM client_blacklists
+                WHERE subscription_id IN (
+                    SELECT id FROM client_subscriptions WHERE client_id = ?
+                )
+                """,
+                (client_id,),
+            )
+            await connection.execute(
+                "DELETE FROM client_subscriptions WHERE client_id = ?",
+                (client_id,),
+            )
+            await connection.execute("DELETE FROM clients WHERE id = ?", (client_id,))
         return existing
 
     async def create_subscription(
@@ -982,6 +1008,25 @@ class ClientRepository:
             "DELETE FROM client_subscriptions WHERE id = ?",
             (subscription_id,),
         )
+        return existing
+
+    async def delete_subscription_with_relations(
+        self,
+        subscription_id: int,
+    ) -> ClientSubscription | None:
+        """Atomically remove a subscription and its dependent blacklist rows."""
+        existing = await self.get_subscription_by_id(subscription_id)
+        if existing is None:
+            return None
+        async with self._db.transaction() as connection:
+            await connection.execute(
+                "DELETE FROM client_blacklists WHERE subscription_id = ?",
+                (subscription_id,),
+            )
+            await connection.execute(
+                "DELETE FROM client_subscriptions WHERE id = ?",
+                (subscription_id,),
+            )
         return existing
 
     async def delete_subscriptions_by_network(self, network_id: int) -> None:

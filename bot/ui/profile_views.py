@@ -43,7 +43,7 @@ class EditClientProfileModal(discord.ui.Modal):
 
         context = validated.context
 
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await response.send_text("client_not_found")
             return
@@ -121,7 +121,7 @@ class EditProfileView(discord.ui.View):
         if context is None:
             await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await interaction.response.send_message(
                 render_text("client_not_found"),
@@ -163,7 +163,7 @@ class DeleteClientConfirmView(discord.ui.View):
             await response.send_text("bot_not_ready")
             return
 
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await response.send_text("client_not_found")
             return
@@ -190,8 +190,8 @@ class DeleteClientConfirmView(discord.ui.View):
             guild,
             bot_member,
             client=client,
-            client_repo=context.client_repo,
-            network_repo=context.network_repo,
+            client_repo=context.store.clients,
+            network_repo=context.store.networks,
             context=context,
         )
         if not result.success:

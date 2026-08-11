@@ -197,7 +197,7 @@ class ServerCog(
                 await response.send(render_text("server_init_started"), ephemeral=True)
                 clients = None
                 if self.bot.bot_context is not None:
-                    clients = await self.bot.bot_context.client_repo.list_all()
+                    clients = await self.bot.bot_context.store.clients.list_all()
                 result = await initialize_guild(
                     guild,
                     bot_member,
@@ -325,8 +325,8 @@ class ServerCog(
             bot_member,
             channel,
             join_view,
-            get_setting=context.settings_repo.get,
-            set_setting=context.settings_repo.set,
+            get_setting=context.store.settings.get,
+            set_setting=context.store.settings.set,
             wipe_channel=True,
         )
         if not result.success:

@@ -89,7 +89,7 @@ async def test_moderation_embed_posts_to_profile_channel() -> None:
     bot = MagicMock()
     bot.add_view = MagicMock()
     context = MagicMock()
-    context.client_repo.update_moderation_message_id = AsyncMock()
+    context.store.clients.update_moderation_message_id = AsyncMock()
 
     await post_subscription_moderation_embed(
         bot,
@@ -103,7 +103,7 @@ async def test_moderation_embed_posts_to_profile_channel() -> None:
 
     profile_channel.send.assert_awaited_once()
     subscribe_channel.send.assert_not_called()
-    context.client_repo.update_moderation_message_id.assert_awaited_once_with(5, 999)
+    context.store.clients.update_moderation_message_id.assert_awaited_once_with(5, 999)
 
 
 @pytest.mark.asyncio
@@ -121,7 +121,7 @@ async def test_moderation_embed_edits_prior_message_in_profile() -> None:
     bot = MagicMock()
     bot.add_view = MagicMock()
     context = MagicMock()
-    context.client_repo.update_moderation_message_id = AsyncMock()
+    context.store.clients.update_moderation_message_id = AsyncMock()
 
     await post_subscription_moderation_embed(
         bot,
@@ -137,7 +137,7 @@ async def test_moderation_embed_edits_prior_message_in_profile() -> None:
     prior.edit.assert_awaited_once()
     prior.delete.assert_not_called()
     profile_channel.send.assert_not_called()
-    context.client_repo.update_moderation_message_id.assert_not_called()
+    context.store.clients.update_moderation_message_id.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -286,10 +286,10 @@ async def test_deleted_network_shows_disabled_without_join_button(
     )
 
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[detached])
-    context.network_repo.get_by_id = AsyncMock(return_value=None)
-    context.network_repo.list_all = AsyncMock(return_value=[])
-    context.client_repo.get_by_id = AsyncMock(return_value=_client())
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[detached])
+    context.store.networks.get_by_id = AsyncMock(return_value=None)
+    context.store.networks.list_all = AsyncMock(return_value=[])
+    context.store.clients.get_by_id = AsyncMock(return_value=_client())
 
     bot = MagicMock()
     bot.add_view = MagicMock()

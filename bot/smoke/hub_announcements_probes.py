@@ -48,7 +48,7 @@ async def _provision_smoke_subscriber(
     *,
     network_key: str,
 ) -> tuple[str, int]:
-    network = await context.network_repo.get_by_key(network_key)
+    network = await context.store.networks.get_by_key(network_key)
     if network is None:
         raise RuntimeError(f"Smoke network {network_key!r} not found")
 
@@ -62,7 +62,7 @@ async def _provision_smoke_subscriber(
     if not hasattr(bot, "get_guild"):
         bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
-    stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    stale = await context.store.requests.get_pending_for_requester(bot_member.id)
     if stale is not None:
         await service.deny_request(request_id=stale.id, moderator=bot_member)
 
@@ -77,7 +77,7 @@ async def _provision_smoke_subscriber(
     if not submit.success:
         raise RuntimeError(f"Smoke subscriber submit failed: {submit.error}")
 
-    pending = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    pending = await context.store.requests.get_pending_for_requester(bot_member.id)
     if pending is None:
         raise RuntimeError("Smoke subscriber submit did not create a pending request.")
 
@@ -91,7 +91,7 @@ async def _provision_smoke_subscriber(
 
     from bot.clients.subscription import ClientSubscriptionService
 
-    client = await context.client_repo.get_by_server_name(guild.id, server_name)
+    client = await context.store.clients.get_by_server_name(guild.id, server_name)
     if client is None:
         raise RuntimeError("Smoke subscriber client missing after accept")
 
@@ -102,8 +102,8 @@ async def _provision_smoke_subscriber(
         client=client,
         network_id=network.id,
         network_key=network.key,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         access_role_name=bot.settings.network_access_role_name,
     )
     if not subscribe.success or subscribe.subscription is None:
@@ -111,7 +111,7 @@ async def _provision_smoke_subscriber(
             f"Smoke subscriber network join failed: {subscribe.error or 'unknown'}"
         )
 
-    await context.server_request_repo.delete_by_id(pending.id)
+    await context.store.requests.delete_by_id(pending.id)
     return server_name, subscribe.subscription.subscribe_channel_id
 
 
@@ -238,11 +238,11 @@ async def run_hub_announcements_smoke_flow(
         await context.client_cache.load_cache()
         await context.routing_service.load_cache()
 
-        network = await context.network_repo.get_by_key(network_key)
+        network = await context.store.networks.get_by_key(network_key)
         if network is None:
             raise RuntimeError(f"Smoke network {network_key!r} not found after ensure")
 
-        hub_sub = await context.client_repo.get_subscription(hub_client.id, network.id)
+        hub_sub = await context.store.clients.get_subscription(hub_client.id, network.id)
         if hub_sub is None:
             raise RuntimeError("Hub announcements subscription missing for smoke network")
 
@@ -282,10 +282,13 @@ async def run_hub_announcements_smoke_flow(
         if len(hub_after_inject) > hub_before:
             raise RuntimeError("Hub subscribe channel received inbound relay (write-only violated)")
 
-        publisher = await context.client_repo.get_by_server_name(guild.id, subscriber_name)
+        publisher = await context.store.clients.get_by_server_name(guild.id, subscriber_name)
         if publisher is None:
             raise RuntimeError("Smoke publisher client missing")
-        pub_sub = await context.client_repo.get_subscription(publisher.id, hub_sub.network_id or 0)
+        pub_sub = await context.store.clients.get_subscription(
+            publisher.id,
+            hub_sub.network_id or 0,
+        )
         if pub_sub is None:
             raise RuntimeError("Smoke publisher subscription missing")
 

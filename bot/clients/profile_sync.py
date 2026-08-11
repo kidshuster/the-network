@@ -58,13 +58,13 @@ async def refresh_client_profile_message(
     if channel is None:
         return
 
-    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     network_entries: list[tuple[str, str]] = []
     subscribed_keys: set[str] = set()
     for sub in subscriptions:
         key = sub.network_key
         network = (
-            await context.network_repo.get_by_id(sub.network_id)
+            await context.store.networks.get_by_id(sub.network_id)
             if sub.network_id is not None
             else None
         )
@@ -80,7 +80,7 @@ async def refresh_client_profile_message(
         )
         network_entries.append((key, status))
 
-    all_networks = await context.network_repo.list_all()
+    all_networks = await context.store.networks.list_all()
     network_keys = [n.key for n in all_networks]
     view = view_registry.register_client_profile_view(
         client.id,
@@ -103,7 +103,7 @@ async def refresh_client_profile_message(
         await message.edit(embed=embed, view=view)
     except discord.HTTPException:
         message = await channel.send(embed=embed, view=view, silent=True)
-        await context.client_repo.update_profile_message_id(client.id, message.id)
+        await context.store.clients.update_profile_message_id(client.id, message.id)
 
 
 async def refresh_all_client_profiles(
@@ -114,7 +114,7 @@ async def refresh_all_client_profiles(
     view_registry: ViewRegistry,
 ) -> int:
     updated = 0
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         await refresh_client_profile_message(
@@ -251,7 +251,7 @@ async def post_subscription_moderation_embed(
 
     try:
         message = await channel.send(embed=embed, view=view, silent=True)
-        await context.client_repo.update_moderation_message_id(
+        await context.store.clients.update_moderation_message_id(
             subscription.id,
             message.id,
         )

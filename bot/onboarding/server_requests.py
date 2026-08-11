@@ -116,7 +116,7 @@ class ServerRequestService:
         if not label:
             return SubmitRequestResult(success=False, error="Name cannot be empty.")
 
-        existing_pending = await self._context.server_request_repo.get_pending_for_requester(
+        existing_pending = await self._context.store.requests.get_pending_for_requester(
             requester.id,
         )
         if existing_pending is not None:
@@ -125,7 +125,7 @@ class ServerRequestService:
                 error="You already have a pending join request.",
             )
 
-        existing_client = await self._context.client_repo.get_by_server_name(
+        existing_client = await self._context.store.clients.get_by_server_name(
             guild.id,
             name,
         )
@@ -140,7 +140,7 @@ class ServerRequestService:
         except ProfileValidationError as exc:
             return SubmitRequestResult(success=False, error=str(exc))
 
-        request = await self._context.server_request_repo.create(
+        request = await self._context.store.requests.create(
             guild_id=guild.id,
             network_id=None,
             requester_user_id=requester.id,
@@ -192,7 +192,7 @@ class ServerRequestService:
         except discord.HTTPException as exc:
             return SubmitRequestResult(success=False, error=f"Discord API error: {exc}")
 
-        await self._context.server_request_repo.set_moderator_message_id(request.id, message.id)
+        await self._context.store.requests.set_moderator_message_id(request.id, message.id)
         return SubmitRequestResult(
             success=True,
             server_name=request.server_name,
@@ -209,7 +209,7 @@ class ServerRequestService:
         if guild is None or guild.id != self._bot.settings.guild_id:
             return ReviewRequestResult(success=False, error="Invalid guild for approval.")
 
-        request = await self._context.server_request_repo.get_by_id(request_id)
+        request = await self._context.store.requests.get_by_id(request_id)
         if request is None:
             return ReviewRequestResult(success=False, error="Join request was not found.")
         if request.status != ServerRequestStatus.PENDING:
@@ -257,7 +257,7 @@ class ServerRequestService:
                     extra={"request_id": request.id, "error": str(exc)},
                 )
 
-        await self._context.server_request_repo.resolve(
+        await self._context.store.requests.resolve(
             request_id,
             status=ServerRequestStatus.APPROVED,
             resolved_by_user_id=moderator.id,
@@ -321,7 +321,7 @@ class ServerRequestService:
         except discord.HTTPException as exc:
             return _ProvisionOutcome(success=False, error=f"Discord API error: {exc}")
 
-        networks = await self._context.network_repo.list_all()
+        networks = await self._context.store.networks.list_all()
         network_keys = [n.key for n in networks]
         view = self._view_registry.register_client_profile_view(0, network_keys)
         embed = build_client_profile_embed(
@@ -335,7 +335,7 @@ class ServerRequestService:
             silent=True,
         )
 
-        client = await self._context.client_repo.create(
+        client = await self._context.store.clients.create(
             guild_id=guild.id,
             server_name=request.server_name,
             display_name=request.display_name,
@@ -361,14 +361,14 @@ class ServerRequestService:
             force=True,
         )
         if emoji_result.emoji_id is not None:
-            await self._context.client_repo.update_emoji_fields(
+            await self._context.store.clients.update_emoji_fields(
                 client.id,
                 emoji_id=emoji_result.emoji_id,
                 emoji_name=emoji_result.emoji_name,
                 image_hash=emoji_result.image_hash,
                 degraded_reason=emoji_result.degraded_reason,
             )
-            client = await self._context.client_repo.get_by_id(client.id) or client
+            client = await self._context.store.clients.get_by_id(client.id) or client
 
         await refresh_client_profile_message(
             self._bot,
@@ -389,13 +389,13 @@ class ServerRequestService:
         request_id: int,
         moderator: discord.Member,
     ) -> ReviewRequestResult:
-        request = await self._context.server_request_repo.get_by_id(request_id)
+        request = await self._context.store.requests.get_by_id(request_id)
         if request is None:
             return ReviewRequestResult(success=False, error="Join request was not found.")
         if request.status != ServerRequestStatus.PENDING:
             return ReviewRequestResult(success=False, error="This request was already reviewed.")
 
-        await self._context.server_request_repo.resolve(
+        await self._context.store.requests.resolve(
             request_id,
             status=ServerRequestStatus.DENIED,
             resolved_by_user_id=moderator.id,

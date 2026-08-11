@@ -12,13 +12,7 @@ from bot.clients.cache import ClientCache
 from bot.context import BotContext
 from bot.db import migrations
 from bot.db.connection import Database
-from bot.db.repositories import (
-    ClientRepository,
-    NetworkRepository,
-    RelayRecordRepository,
-    ServerRequestRepository,
-    SettingsRepository,
-)
+from bot.db.store import Store
 from bot.integrations.topgg import TopggService
 from bot.networks.routing import RoutingService
 from bot.relay.service import RelayService
@@ -50,40 +44,32 @@ class NetworkRelayBot(commands.Bot):
         await self.db.connect()
         self.schema_version = await migrations.run_migrations(self.db)
 
-        network_repo = NetworkRepository(self.db)
-        client_repo = ClientRepository(self.db)
-        relay_record_repo = RelayRecordRepository(self.db)
-        routing_service = RoutingService(network_repo, client_repo)
-        client_cache = ClientCache(client_repo)
+        store = Store.create(self.db)
+        routing_service = RoutingService(store.networks, store.clients)
+        client_cache = ClientCache(store.clients)
         await client_cache.load_cache()
         routing_service.attach_client_cache(client_cache)
         await routing_service.load_cache()
 
-        settings_repo = SettingsRepository(self.db)
-        server_request_repo = ServerRequestRepository(self.db)
-        bot_settings = BotSettingsService(settings_repo, self.settings)
+        bot_settings = BotSettingsService(store.settings, self.settings)
         await bot_settings.load()
 
         relay_service = RelayService(
             self.settings,
             routing_service,
             client_cache,
-            client_repo,
-            relay_record_repo,
+            store.clients,
+            store.relay,
         )
 
         self.bot_context = BotContext.create(
             self.settings,
             self.db,
-            network_repo,
-            client_repo,
-            relay_record_repo,
+            store,
             routing_service,
             client_cache,
             relay_service,
             bot_settings,
-            settings_repo,
-            server_request_repo,
         )
         self.bot_context.network_count = routing_service.network_count
         self.bot_context.client_count = client_cache.client_count
@@ -200,12 +186,12 @@ class NetworkRelayBot(commands.Bot):
         self.add_view(JoinNetworkView(self))
         self.add_view(NetworkAdminView(self))
 
-        for request in await context.server_request_repo.list_pending():
+        for request in await context.store.requests.list_pending():
             self.add_view(ModeratorReviewView(self, request.id))
 
-        networks = await context.network_repo.list_all()
+        networks = await context.store.networks.list_all()
         network_keys = [n.key for n in networks]
-        for client in await context.client_repo.list_all():
+        for client in await context.store.clients.list_all():
             self.add_view(
                 NetworkProfileView(
                     self,
@@ -215,10 +201,10 @@ class NetworkRelayBot(commands.Bot):
                 ),
             )
 
-        for sub in await context.client_repo.list_all_subscriptions():
+        for sub in await context.store.clients.list_all_subscriptions():
             network_key = sub.network_key
             if not network_key and sub.network_id is not None:
-                network = await context.network_repo.get_by_id(sub.network_id)
+                network = await context.store.networks.get_by_id(sub.network_id)
                 if network is not None:
                     network_key = network.key
             if not network_key:

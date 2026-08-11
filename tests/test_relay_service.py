@@ -7,7 +7,7 @@ import pytest
 
 from bot.clients.cache import ClientCache
 from bot.config import Settings
-from bot.db.repositories import ClientRepository, NetworkRepository, RelayRecordRepository
+from bot.db.store import ClientStore, NetworkStore, RelayStore
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 from bot.networks.routing import RoutingService
@@ -28,8 +28,8 @@ async def _seed_client_subscription(
     client_enabled: bool = True,
     subscription_enabled: bool = True,
 ) -> tuple[Client, ClientSubscription, Client, ClientSubscription]:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",
@@ -122,9 +122,9 @@ async def _build_service(
     settings: Settings | None = None,
 ) -> RelayService:
     settings = settings or _settings(monkeypatch)
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
-    relay_record_repo = RelayRecordRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
+    relay_record_repo = RelayStore(db)
     routing = RoutingService(network_repo, client_repo)
     client_cache = ClientCache(client_repo)
     await client_cache.load_cache()
@@ -174,8 +174,8 @@ async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> 
 async def test_self_relay_to_own_subscribe_channel(
     db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",
@@ -296,7 +296,7 @@ async def test_blacklist_blocks_incoming_from_blocked_client(
 ) -> None:
     """When a subscriber blacklists the publisher, they do not receive relays."""
     publisher, _pub_sub, _subscriber, sub_sub = await _seed_client_subscription(db)
-    client_repo = ClientRepository(db)
+    client_repo = ClientStore(db)
     await client_repo.add_blacklist(sub_sub.id, publisher.id)
 
     service = await _build_service(db, monkeypatch)
@@ -317,7 +317,7 @@ async def test_blacklist_blocks_outgoing_to_blocked_client(
 ) -> None:
     """When a publisher blacklists a subscriber, that subscriber is skipped."""
     publisher, pub_sub, subscriber, _sub_sub = await _seed_client_subscription(db)
-    client_repo = ClientRepository(db)
+    client_repo = ClientStore(db)
     await client_repo.add_blacklist(pub_sub.id, subscriber.id)
 
     service = await _build_service(db, monkeypatch)

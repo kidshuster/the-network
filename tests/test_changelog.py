@@ -63,7 +63,7 @@ async def test_sync_changelog_releases_posts_in_order(monkeypatch: pytest.Monkey
     settings_repo.get = AsyncMock(return_value=None)
     settings_repo.set = AsyncMock()
     context = MagicMock()
-    context.settings_repo = settings_repo
+    context.store.settings = settings_repo
 
     posted = await sync_changelog_releases(context, channel)
 
@@ -92,7 +92,7 @@ async def test_sync_changelog_releases_stops_on_send_failure(
     settings_repo.get = AsyncMock(return_value=None)
     settings_repo.set = AsyncMock()
     context = MagicMock()
-    context.settings_repo = settings_repo
+    context.store.settings = settings_repo
 
     posted = await sync_changelog_releases(context, channel)
 

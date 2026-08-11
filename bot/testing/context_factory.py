@@ -6,13 +6,7 @@ from bot.config import Settings
 from bot.context import BotContext
 from bot.db import migrations
 from bot.db.connection import Database
-from bot.db.repositories import (
-    ClientRepository,
-    NetworkRepository,
-    RelayRecordRepository,
-    ServerRequestRepository,
-    SettingsRepository,
-)
+from bot.db.store import Store
 from bot.networks.routing import RoutingService
 from bot.relay.service import RelayService
 
@@ -22,40 +16,32 @@ async def create_bot_context(settings: Settings) -> tuple[Database, BotContext]:
     await db.connect()
     await migrations.run_migrations(db)
 
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
-    relay_record_repo = RelayRecordRepository(db)
-    routing_service = RoutingService(network_repo, client_repo)
-    client_cache = ClientCache(client_repo)
+    store = Store.create(db)
+    routing_service = RoutingService(store.networks, store.clients)
+    client_cache = ClientCache(store.clients)
     await client_cache.load_cache()
     routing_service.attach_client_cache(client_cache)
     await routing_service.load_cache()
 
-    settings_repo = SettingsRepository(db)
-    server_request_repo = ServerRequestRepository(db)
-    bot_settings = BotSettingsService(settings_repo, settings)
+    bot_settings = BotSettingsService(store.settings, settings)
     await bot_settings.load()
 
     relay_service = RelayService(
         settings,
         routing_service,
         client_cache,
-        client_repo,
-        relay_record_repo,
+        store.clients,
+        store.relay,
     )
 
     context = BotContext.create(
         settings,
         db,
-        network_repo,
-        client_repo,
-        relay_record_repo,
+        store,
         routing_service,
         client_cache,
         relay_service,
         bot_settings,
-        settings_repo,
-        server_request_repo,
     )
     context.network_count = routing_service.network_count
     context.client_count = client_cache.client_count

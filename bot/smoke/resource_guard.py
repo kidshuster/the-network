@@ -318,9 +318,9 @@ async def cleanup_orphan_smoke_subscription_channels(
     Returns channel names the bot could not delete (requires manual removal in Discord).
     """
     referenced: set[int] = set()
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         referenced.add(client.profile_channel_id)
-        for subscription in await context.client_repo.list_subscriptions_by_client(client.id):
+        for subscription in await context.store.clients.list_subscriptions_by_client(client.id):
             referenced.add(subscription.publish_channel_id)
             referenced.add(subscription.subscribe_channel_id)
 

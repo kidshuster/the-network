@@ -64,7 +64,7 @@ async def _list_client_roles(
 ) -> tuple[list[discord.Role], list[str]]:
     client_roles: list[discord.Role] = []
     missing_clients: list[str] = []
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         role = guild.get_role(client.client_role_id)
@@ -139,12 +139,12 @@ async def ensure_leaders_channels(
     _ = resolve_leaders_category(guild)
 
     if sync_result.leaders_channel is not None:
-        await context.settings_repo.set(
+        await context.store.settings.set(
             LEADERS_CHANNEL_SETTINGS_KEY,
             str(sync_result.leaders_channel.id),
         )
     if sync_result.changelog_channel is not None:
-        await context.settings_repo.set(
+        await context.store.settings.set(
             CHANGELOG_CHANNEL_SETTINGS_KEY,
             str(sync_result.changelog_channel.id),
         )

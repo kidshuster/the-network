@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import pytest
-from repository_helpers import create_test_client, create_test_network, create_test_subscription
+from store_helpers import create_test_client, create_test_network, create_test_subscription
 
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.errors import ProfileValidationError
 
 
 @pytest.mark.asyncio
 async def test_create_and_get_by_id(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo)
     fetched = await repo.get_by_id(client.id)
     assert fetched == client
@@ -20,7 +20,7 @@ async def test_create_and_get_by_id(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_rejects_duplicate_server_name(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     await create_test_client(repo, server_name="Acme")
     with pytest.raises(ProfileValidationError, match="already exists"):
         await create_test_client(
@@ -42,7 +42,7 @@ async def test_create_rejects_duplicate_server_name(db) -> None:
     ],
 )
 async def test_get_by_server_name_case_insensitive(db, lookup: str, expected_name: str) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     await create_test_client(repo, server_name="Acme")
     fetched = await repo.get_by_server_name(100, lookup)
     assert fetched is not None
@@ -51,13 +51,13 @@ async def test_get_by_server_name_case_insensitive(db, lookup: str, expected_nam
 
 @pytest.mark.asyncio
 async def test_get_by_server_name_empty_returns_none(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     assert await repo.get_by_server_name(100, "  ") is None
 
 
 @pytest.mark.asyncio
 async def test_get_by_profile_channel(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo, profile_channel_id=777)
     fetched = await repo.get_by_profile_channel(777)
     assert fetched == client
@@ -65,7 +65,7 @@ async def test_get_by_profile_channel(db) -> None:
 
 @pytest.mark.asyncio
 async def test_list_all_orders_by_server_name(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     await create_test_client(
         repo, server_name="Zebra", category_id=11, client_role_id=21, profile_channel_id=31
     )
@@ -78,7 +78,7 @@ async def test_list_all_orders_by_server_name(db) -> None:
 
 @pytest.mark.asyncio
 async def test_update_display_name_rejects_empty(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo)
     with pytest.raises(ProfileValidationError, match="Display name cannot be empty"):
         await repo.update_display_name(client.id, "  ")
@@ -86,7 +86,7 @@ async def test_update_display_name_rejects_empty(db) -> None:
 
 @pytest.mark.asyncio
 async def test_update_display_name_and_emoji_fields(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo)
     renamed = await repo.update_display_name(client.id, "New Name")
     assert renamed.display_name == "New Name"
@@ -104,7 +104,7 @@ async def test_update_display_name_and_emoji_fields(db) -> None:
 
 @pytest.mark.asyncio
 async def test_set_enabled_and_timecode_enabled(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo)
     disabled = await repo.set_enabled(client.id, False)
     assert disabled.enabled is False
@@ -114,7 +114,7 @@ async def test_set_enabled_and_timecode_enabled(db) -> None:
 
 @pytest.mark.asyncio
 async def test_delete_returns_deleted_or_none(db) -> None:
-    repo = ClientRepository(db)
+    repo = ClientStore(db)
     client = await create_test_client(repo)
     deleted = await repo.delete(client.id)
     assert deleted == client
@@ -124,8 +124,8 @@ async def test_delete_returns_deleted_or_none(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_subscription_and_lookups(db) -> None:
-    client_repo = ClientRepository(db)
-    network_repo = NetworkRepository(db)
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
     client = await create_test_client(client_repo)
     sub = await create_test_subscription(client_repo, client=client, network=network)
@@ -142,8 +142,8 @@ async def test_create_subscription_and_lookups(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_subscription_rejects_duplicate(db) -> None:
-    client_repo = ClientRepository(db)
-    network_repo = NetworkRepository(db)
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
     client = await create_test_client(client_repo)
     await create_test_subscription(client_repo, client=client, network=network)
@@ -159,8 +159,8 @@ async def test_create_subscription_rejects_duplicate(db) -> None:
 
 @pytest.mark.asyncio
 async def test_detach_and_relink_subscription(db) -> None:
-    client_repo = ClientRepository(db)
-    network_repo = NetworkRepository(db)
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
     client = await create_test_client(client_repo)
     sub = await create_test_subscription(client_repo, client=client, network=network)
@@ -177,8 +177,8 @@ async def test_detach_and_relink_subscription(db) -> None:
 
 @pytest.mark.asyncio
 async def test_subscription_message_id_updates(db) -> None:
-    client_repo = ClientRepository(db)
-    network_repo = NetworkRepository(db)
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
     client = await create_test_client(client_repo)
     sub = await create_test_subscription(client_repo, client=client, network=network)
@@ -201,8 +201,8 @@ async def test_subscription_message_id_updates(db) -> None:
 
 @pytest.mark.asyncio
 async def test_blacklist_idempotent_and_symmetric_relay_block(db) -> None:
-    client_repo = ClientRepository(db)
-    network_repo = NetworkRepository(db)
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
     client_a = await create_test_client(
         client_repo,

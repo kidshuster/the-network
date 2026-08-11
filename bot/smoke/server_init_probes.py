@@ -77,7 +77,7 @@ async def _list_guild_clients(
     context: BotContext,
 ) -> list[tuple[str, discord.Role]]:
     clients: list[tuple[str, discord.Role]] = []
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         role = guild.get_role(client.client_role_id)
@@ -378,7 +378,7 @@ async def probe_hub_announcements(
             "#network-announcements must be an announcement channel — run `/server init`",
         )
 
-    hub = await context.client_repo.get_by_server_name(
+    hub = await context.store.clients.get_by_server_name(
         guild.id,
         settings.hub_announcements_server_name,
     )
@@ -395,7 +395,7 @@ async def probe_hub_announcements(
             "Reserved hub announcements client row has unexpected server_name",
         )
 
-    networks = await context.network_repo.list_all()
+    networks = await context.store.networks.list_all()
     if not networks:
         return ProbeResult(
             "hub announcements wiring",
@@ -407,7 +407,7 @@ async def probe_hub_announcements(
     for network in networks:
         if not network.enabled:
             continue
-        sub = await context.client_repo.get_subscription(hub.id, network.id)
+        sub = await context.store.clients.get_subscription(hub.id, network.id)
         if sub is None:
             missing.append(network.key)
     if missing:
@@ -548,7 +548,7 @@ async def probe_client_layout_reinit(
     """Strip client category/profile overwrites, reinit, assert compile_client match."""
     clients = [
         client
-        for client in await context.client_repo.list_all()
+        for client in await context.store.clients.list_all()
         if client.guild_id == guild.id
     ]
     if not clients:
@@ -607,7 +607,7 @@ async def probe_client_layout_reinit(
             bot_member,
             access_role_name=settings.network_access_role_name,
             operator_role_name=settings.network_operator_role_name,
-            clients=await context.client_repo.list_all(),
+            clients=await context.store.clients.list_all(),
             bot=bot,
             context=context,
             skip_join_smoke=True,
@@ -655,7 +655,7 @@ async def probe_reinit_rectifies_clients(
     settings: Settings,
 ) -> ProbeResult:
     """Run initialize_guild against live layout and verify client/Leaders rectification."""
-    clients = await context.client_repo.list_all()
+    clients = await context.store.clients.list_all()
     guild_clients = [client for client in clients if client.guild_id == guild.id]
     if not guild_clients:
         return ProbeResult(
@@ -729,7 +729,7 @@ async def probe_leaders_delete_double_reinit(
     settings: Settings,
 ) -> ProbeResult:
     """Delete #leaders-channel, reinit twice — permissions restored, no false warnings."""
-    clients = await context.client_repo.list_all()
+    clients = await context.store.clients.list_all()
     guild_clients = [client for client in clients if client.guild_id == guild.id]
     if not guild_clients:
         return ProbeResult(
@@ -831,7 +831,7 @@ async def probe_leaders_idempotent_reinit(
     settings: Settings,
 ) -> ProbeResult:
     """Run initialize_guild twice on unchanged layout — no spurious rectification failures."""
-    clients = await context.client_repo.list_all()
+    clients = await context.store.clients.list_all()
     if not [client for client in clients if client.guild_id == guild.id]:
         return ProbeResult(
             "leaders idempotent reinit",

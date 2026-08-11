@@ -560,6 +560,53 @@ async def _migration_v13(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v14(db: Database) -> None:
+    await db.connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS managed_resources (
+            guild_id INTEGER NOT NULL,
+            resource_key TEXT NOT NULL,
+            owner_type TEXT,
+            owner_id INTEGER,
+            discord_type TEXT NOT NULL,
+            discord_id INTEGER NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, resource_key),
+            UNIQUE (guild_id, discord_type, discord_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_managed_resources_owner
+            ON managed_resources(guild_id, owner_type, owner_id);
+
+        INSERT OR IGNORE INTO managed_resources
+            (guild_id, resource_key, owner_type, owner_id, discord_type, discord_id, updated_at)
+        SELECT guild_id, 'client.' || id || '.category', 'client', id,
+               'category', category_id, datetime('now')
+        FROM clients;
+        INSERT OR IGNORE INTO managed_resources
+            (guild_id, resource_key, owner_type, owner_id, discord_type, discord_id, updated_at)
+        SELECT guild_id, 'client.' || id || '.profile', 'client', id,
+               'channel', profile_channel_id, datetime('now')
+        FROM clients;
+        INSERT OR IGNORE INTO managed_resources
+            (guild_id, resource_key, owner_type, owner_id, discord_type, discord_id, updated_at)
+        SELECT guild_id, 'client.' || id || '.role', 'client', id,
+               'role', client_role_id, datetime('now')
+        FROM clients;
+        INSERT OR IGNORE INTO managed_resources
+            (guild_id, resource_key, owner_type, owner_id, discord_type, discord_id, updated_at)
+        SELECT c.guild_id, 'subscription.' || s.id || '.publish', 'subscription', s.id,
+               'channel', s.publish_channel_id, datetime('now')
+        FROM client_subscriptions s JOIN clients c ON c.id = s.client_id;
+        INSERT OR IGNORE INTO managed_resources
+            (guild_id, resource_key, owner_type, owner_id, discord_type, discord_id, updated_at)
+        SELECT c.guild_id, 'subscription.' || s.id || '.subscribe', 'subscription', s.id,
+               'channel', s.subscribe_channel_id, datetime('now')
+        FROM client_subscriptions s JOIN clients c ON c.id = s.client_id;
+        """
+    )
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -574,6 +621,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     11: _migration_v11,
     12: _migration_v12,
     13: _migration_v13,
+    14: _migration_v14,
 }
 
 

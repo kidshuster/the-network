@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from bot.db.repositories import ClientRepository
+from bot.db.store import ClientStore
 from bot.domain.client import Client
 from bot.domain.client_subscription import ClientSubscription
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class ClientCache:
     """In-memory cache for clients and subscriptions."""
 
-    def __init__(self, client_repo: ClientRepository) -> None:
+    def __init__(self, client_repo: ClientStore) -> None:
         self._client_repo = client_repo
         self._by_id: dict[int, Client] = {}
         self._by_publish_channel: dict[int, ClientSubscription] = {}

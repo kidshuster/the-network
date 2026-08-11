@@ -15,9 +15,9 @@ from bot.stickies.network_admin_sticky import build_network_admin_embed
 def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
     context = MagicMock()
     networks = networks or []
-    context.network_repo.list_all = AsyncMock(return_value=networks)
-    context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[])
-    context.network_repo.create = AsyncMock(
+    context.store.networks.list_all = AsyncMock(return_value=networks)
+    context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[])
+    context.store.networks.create = AsyncMock(
         return_value=Network(
             id=1,
             key="stingers",
@@ -30,8 +30,8 @@ def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
             enabled=True,
         )
     )
-    context.network_repo.get_by_key = AsyncMock(return_value=None)
-    context.network_repo.delete = AsyncMock(
+    context.store.networks.get_by_key = AsyncMock(return_value=None)
+    context.store.networks.delete = AsyncMock(
         return_value=Network(
             id=1,
             key="stingers",
@@ -44,9 +44,9 @@ def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
             enabled=True,
         )
     )
-    context.client_repo.detach_subscriptions_from_network = AsyncMock()
-    context.relay_record_repo.delete_by_network_id = AsyncMock()
-    context.server_request_repo.delete_by_network_id = AsyncMock()
+    context.store.clients.detach_subscriptions_from_network = AsyncMock()
+    context.store.relay.delete_by_network_id = AsyncMock()
+    context.store.requests.delete_by_network_id = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
     context.client_cache.load_cache = AsyncMock()
     context.refresh_network_counts = AsyncMock()
@@ -58,7 +58,7 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
     import bot.clients.subscription as client_subscription
 
     context = _mock_context()
-    context.client_repo.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_all = AsyncMock(return_value=[])
     bot = MagicMock()
     bot.settings.network_access_role_name = "The Network"
     guild = MagicMock(spec=discord.Guild)
@@ -107,7 +107,7 @@ async def test_create_network_rejects_duplicate_key() -> None:
         enabled=True,
     )
     context = _mock_context()
-    context.network_repo.get_by_key = AsyncMock(return_value=existing)
+    context.store.networks.get_by_key = AsyncMock(return_value=existing)
     bot = MagicMock()
     guild = MagicMock(spec=discord.Guild)
     guild.id = 100
@@ -123,7 +123,7 @@ async def test_create_network_rejects_duplicate_key() -> None:
 
     assert result.success is False
     assert "already exists" in (result.error or "")
-    context.network_repo.create.assert_not_called()
+    context.store.networks.create.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -142,7 +142,7 @@ async def test_delete_network_hard_deletes_and_detaches(
         enabled=True,
     )
     context = _mock_context(networks=[network])
-    context.network_repo.get_by_key = AsyncMock(return_value=network)
+    context.store.networks.get_by_key = AsyncMock(return_value=network)
     bot = MagicMock()
     guild = MagicMock(spec=discord.Guild)
     monkeypatch.setattr(
@@ -155,19 +155,19 @@ async def test_delete_network_hard_deletes_and_detaches(
     )
 
     assert result.success is True
-    context.client_repo.detach_subscriptions_from_network.assert_awaited_once_with(
+    context.store.clients.detach_subscriptions_from_network.assert_awaited_once_with(
         1,
         "stingers",
     )
-    context.relay_record_repo.delete_by_network_id.assert_awaited_once_with(1)
-    context.server_request_repo.delete_by_network_id.assert_awaited_once_with(1)
-    context.network_repo.delete.assert_awaited_once_with("stingers")
+    context.store.relay.delete_by_network_id.assert_awaited_once_with(1)
+    context.store.requests.delete_by_network_id.assert_awaited_once_with(1)
+    context.store.networks.delete.assert_awaited_once_with("stingers")
 
 
 @pytest.mark.asyncio
 async def test_create_network_validation_error() -> None:
     context = _mock_context()
-    context.network_repo.create = AsyncMock(
+    context.store.networks.create = AsyncMock(
         side_effect=NetworkValidationError("duplicate key")
     )
     bot = MagicMock()

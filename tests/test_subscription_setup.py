@@ -139,7 +139,7 @@ async def test_reconcile_publish_sticky_creates_only_when_missing() -> None:
 
     guild = MagicMock(spec=discord.Guild)
     context = MagicMock()
-    context.client_repo.update_publish_setup_message_id = AsyncMock(
+    context.store.clients.update_publish_setup_message_id = AsyncMock(
         side_effect=lambda _sub_id, msg_id: _subscription(publish_setup_message_id=msg_id)
     )
 
@@ -181,7 +181,7 @@ async def test_reconcile_publish_sticky_refreshes_existing_message() -> None:
 
     guild = MagicMock(spec=discord.Guild)
     context = MagicMock()
-    context.client_repo.update_publish_setup_message_id = AsyncMock()
+    context.store.clients.update_publish_setup_message_id = AsyncMock()
 
     await _sync_publish_setup_sticky(
         guild,
@@ -261,10 +261,10 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
     bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(
+    context.store.clients.get_subscription_by_id = AsyncMock(
         return_value=_subscription(),
     )
-    context.client_repo.update_activation_welcome_message_id = AsyncMock(
+    context.store.clients.update_activation_welcome_message_id = AsyncMock(
         side_effect=lambda _sub_id, msg_id: _subscription(activation_welcome_message_id=msg_id)
     )
     context.routing_service.list_network_subscriptions = MagicMock(return_value=[])
@@ -334,7 +334,7 @@ async def test_network_member_welcome_broadcasts_to_other_subscribe_channels() -
         return_value=[joining_sub, other_sub],
     )
     context.client_cache.get_client = MagicMock(return_value=other_client)
-    context.client_repo.is_blacklisted = AsyncMock(return_value=False)
+    context.store.clients.is_blacklisted = AsyncMock(return_value=False)
 
     await _broadcast_network_member_welcome(
         bot,
@@ -388,7 +388,7 @@ async def test_network_member_welcome_skips_blacklisted_destination() -> None:
         return_value=[joining_sub, other_sub],
     )
     context.client_cache.get_client = MagicMock(return_value=other_client)
-    context.client_repo.is_blacklisted = AsyncMock(return_value=True)
+    context.store.clients.is_blacklisted = AsyncMock(return_value=True)
 
     await _broadcast_network_member_welcome(
         bot,
@@ -400,7 +400,7 @@ async def test_network_member_welcome_skips_blacklisted_destination() -> None:
     )
 
     other_channel.send.assert_not_called()
-    context.client_repo.is_blacklisted.assert_awaited_once_with(other_sub.id, 1)
+    context.store.clients.is_blacklisted.assert_awaited_once_with(other_sub.id, 1)
 
 
 @pytest.mark.asyncio
@@ -444,7 +444,7 @@ async def test_network_member_welcome_skips_joining_subscribe_channel() -> None:
         return_value=[joining_sub, other_sub_same_channel],
     )
     context.client_cache.get_client = MagicMock(return_value=other_client)
-    context.client_repo.is_blacklisted = AsyncMock(return_value=False)
+    context.store.clients.is_blacklisted = AsyncMock(return_value=False)
 
     await _broadcast_network_member_welcome(
         bot,
@@ -495,7 +495,7 @@ async def test_activation_welcome_skips_when_already_sent() -> None:
     )
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(
+    context.store.clients.get_subscription_by_id = AsyncMock(
         return_value=_subscription(activation_welcome_message_id=999),
     )
 

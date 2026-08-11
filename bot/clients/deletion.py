@@ -10,7 +10,7 @@ from bot.clients.resources import fetch_client_role, resolve_client_category
 
 if TYPE_CHECKING:
     from bot.context import BotContext
-    from bot.db.repositories import ClientRepository, NetworkRepository
+    from bot.db.store import ClientStore, NetworkStore
     from bot.domain.client import Client
 
 logger = logging.getLogger(__name__)
@@ -79,8 +79,8 @@ class ClientDeletionService:
         bot_member: discord.Member,
         *,
         client: Client,
-        client_repo: ClientRepository,
-        network_repo: NetworkRepository,
+        client_repo: ClientStore,
+        network_repo: NetworkStore,
         context: BotContext,
     ) -> DeleteClientResult:
         from bot.clients.subscription import ClientSubscriptionService
@@ -103,8 +103,6 @@ class ClientDeletionService:
                     success=False,
                     error=result.error or "Could not remove a network subscription.",
                 )
-
-        await client_repo.delete_blacklists_blocking_client(client.id)
 
         if client.emoji_id is not None:
             emoji = guild.get_emoji(client.emoji_id)
@@ -170,7 +168,7 @@ class ClientDeletionService:
                     extra={"role_id": client_role.id},
                 )
 
-        deleted = await client_repo.delete(client.id)
+        deleted = await client_repo.delete_with_relations(client.id)
         if deleted is None:
             return DeleteClientResult(success=False, error="Client was not found.")
 

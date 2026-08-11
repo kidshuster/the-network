@@ -140,7 +140,7 @@ async def sync_changelog_releases(
     """Post missing release notes in version order up to the installed package version."""
     installed = installed_version()
     catalog = _load_releases_catalog()
-    last_posted = await context.settings_repo.get(LAST_CHANGELOG_VERSION_KEY)
+    last_posted = await context.store.settings.get(LAST_CHANGELOG_VERSION_KEY)
     versions = pending_release_versions(
         catalog,
         last_posted=last_posted,
@@ -160,14 +160,14 @@ async def sync_changelog_releases(
             )
             break
 
-        await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, release_version)
+        await context.store.settings.set(LAST_CHANGELOG_VERSION_KEY, release_version)
         posted_count += 1
         logger.info(
             "Posted changelog release",
             extra={"version": release_version, "channel_id": channel.id},
         )
 
-    current_last = await context.settings_repo.get(LAST_CHANGELOG_VERSION_KEY)
+    current_last = await context.store.settings.get(LAST_CHANGELOG_VERSION_KEY)
     if version_key(installed) > version_key(current_last or "0"):
         remaining = pending_release_versions(
             catalog,
@@ -180,7 +180,7 @@ async def sync_changelog_releases(
                     "No changelog entry for installed version",
                     extra={"version": installed},
                 )
-            await context.settings_repo.set(LAST_CHANGELOG_VERSION_KEY, installed)
+            await context.store.settings.set(LAST_CHANGELOG_VERSION_KEY, installed)
 
     return posted_count
 

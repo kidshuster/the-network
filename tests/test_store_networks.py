@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import pytest
 
-from bot.db.repositories import NetworkRepository
+from bot.db.store import NetworkStore
 from bot.domain.errors import NetworkValidationError
 
 
 @pytest.mark.asyncio
 async def test_validate_key_normalizes_and_accepts(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     assert repo.validate_key("Stingers") == "stingers"
     assert repo.validate_key("my-network_2") == "my-network_2"
 
 
 @pytest.mark.asyncio
 async def test_validate_key_rejects_invalid(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     with pytest.raises(NetworkValidationError):
         repo.validate_key("2bad")
     with pytest.raises(NetworkValidationError):
@@ -24,7 +24,7 @@ async def test_validate_key_rejects_invalid(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_and_get_by_key(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     network = await repo.create(
         guild_id=100,
         key="stingers",
@@ -44,7 +44,7 @@ async def test_create_and_get_by_key(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_rejects_duplicate_key(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(
         guild_id=100,
         key="alpha",
@@ -66,7 +66,7 @@ async def test_create_rejects_duplicate_key(db) -> None:
 
 @pytest.mark.asyncio
 async def test_list_all_orders_by_key(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(
         guild_id=100,
         key="zebra",
@@ -89,7 +89,7 @@ async def test_list_all_orders_by_key(db) -> None:
 
 @pytest.mark.asyncio
 async def test_set_enabled(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(
         guild_id=100,
         key="beta",
@@ -107,14 +107,14 @@ async def test_set_enabled(db) -> None:
 
 @pytest.mark.asyncio
 async def test_set_enabled_missing_key(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     with pytest.raises(NetworkValidationError, match="not found"):
         await repo.set_enabled("missing", True)
 
 
 @pytest.mark.asyncio
 async def test_network_delete(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(
         guild_id=100,
         key="gamma",
@@ -130,14 +130,14 @@ async def test_network_delete(db) -> None:
 
 @pytest.mark.asyncio
 async def test_network_delete_missing(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     with pytest.raises(NetworkValidationError, match="not found"):
         await repo.delete("missing")
 
 
 @pytest.mark.asyncio
 async def test_get_by_feed_category(db) -> None:
-    repo = NetworkRepository(db)
+    repo = NetworkStore(db)
     await repo.create(
         guild_id=100,
         key="gamma",

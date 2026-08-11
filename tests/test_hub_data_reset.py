@@ -14,17 +14,17 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
     other_guild_id = 200
     context = make_test_context(db)
 
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=guild_id,
         key="stingers",
         display_name="Stingers",
     )
-    await context.network_repo.create(
+    await context.store.networks.create(
         guild_id=other_guild_id,
         key="other-net",
         display_name="Other",
     )
-    client = await context.client_repo.create(
+    client = await context.store.clients.create(
         guild_id=guild_id,
         server_name="acme",
         display_name="Acme",
@@ -33,15 +33,15 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
         profile_channel_id=12,
         profile_message_id=13,
     )
-    subscription = await context.client_repo.create_subscription(
+    subscription = await context.store.clients.create_subscription(
         client_id=client.id,
         network_id=network.id,
         network_key=network.key,
         publish_channel_id=201,
         subscribe_channel_id=301,
     )
-    await context.client_repo.add_blacklist(subscription.id, client.id)
-    await context.relay_record_repo.create_pending(
+    await context.store.clients.add_blacklist(subscription.id, client.id)
+    await context.store.relay.create_pending(
         source_message_id=9001,
         source_channel_id=201,
         source_webhook_id=None,
@@ -49,7 +49,7 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
         network_id=network.id,
         destination_channel_id=401,
     )
-    await context.server_request_repo.create(
+    await context.store.requests.create(
         guild_id=guild_id,
         network_id=network.id,
         requester_user_id=555,
@@ -57,8 +57,8 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
         display_name="Pending",
         profile_image_url="https://example.com/a.png",
     )
-    await context.settings_repo.set(NETWORK_ADMIN_SETTINGS_KEY, "1:99")
-    await context.settings_repo.set(HOW_TO_JOIN_SETTINGS_KEY, "2:88")
+    await context.store.settings.set(NETWORK_ADMIN_SETTINGS_KEY, "1:99")
+    await context.store.settings.set(HOW_TO_JOIN_SETTINGS_KEY, "2:88")
 
     await context.routing_service.load_cache()
     await context.client_cache.load_cache()
@@ -75,15 +75,15 @@ async def test_reset_hub_layout_data_clears_networks_but_preserves_clients(db) -
     assert result.blacklists_deleted == 1
     assert "clients preserved" in (result.summary_note() or "")
 
-    remaining_clients = await context.client_repo.list_all()
+    remaining_clients = await context.store.clients.list_all()
     assert len(remaining_clients) == 1
     assert remaining_clients[0].id == client.id
-    assert await context.client_repo.list_subscriptions_by_client(client.id) == []
+    assert await context.store.clients.list_subscriptions_by_client(client.id) == []
 
-    remaining_networks = await context.network_repo.list_all()
+    remaining_networks = await context.store.networks.list_all()
     assert len(remaining_networks) == 1
     assert remaining_networks[0].key == "other-net"
-    assert await context.settings_repo.get(NETWORK_ADMIN_SETTINGS_KEY) is None
+    assert await context.store.settings.get(NETWORK_ADMIN_SETTINGS_KEY) is None
 
     assert context.routing_service.network_count == 1
     assert context.client_cache.client_count == 1

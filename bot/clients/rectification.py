@@ -115,13 +115,13 @@ async def rectify_client_permissions(
     if profile is None and "profile channel missing in Discord" not in outcome.skipped:
         outcome.skipped.append("profile channel missing in Discord")
 
-    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     for subscription in subscriptions:
         network_id = subscription.network_id
         if network_id is None:
             outcome.skipped.append("subscription network id missing from database")
             continue
-        network = await context.network_repo.get_by_id(network_id)
+        network = await context.store.networks.get_by_id(network_id)
         if network is None:
             outcome.skipped.append(
                 f"subscription network id {network_id} missing from database"

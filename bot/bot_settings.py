@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from bot.constants import SETTING_PROFILE_FORUM_CHANNEL_ID
-from bot.db.repositories import SettingsRepository
+from bot.db.store import SettingsStore
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class BotSettingsService:
     """Runtime bot settings persisted in SQLite with env fallbacks."""
 
-    def __init__(self, repo: SettingsRepository, env_settings: Settings) -> None:
+    def __init__(self, repo: SettingsStore, env_settings: Settings) -> None:
         self._repo = repo
         self._env_settings = env_settings
         self._profile_forum_channel_id: int | None = None

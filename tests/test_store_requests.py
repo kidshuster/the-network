@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import pytest
-from repository_helpers import create_test_network
+from store_helpers import create_test_network
 
-from bot.db.repositories import NetworkRepository, ServerRequestRepository
+from bot.db.store import NetworkStore, RequestStore
 from bot.domain.server_request import ServerRequestStatus
 
 
 @pytest.mark.asyncio
 async def test_create_and_get_by_id(db) -> None:
-    repo = ServerRequestRepository(db)
+    repo = RequestStore(db)
     request = await repo.create(
         guild_id=100,
         network_id=None,
@@ -30,7 +30,7 @@ async def test_create_and_get_by_id(db) -> None:
 
 @pytest.mark.asyncio
 async def test_list_pending_and_get_pending_for_requester(db) -> None:
-    repo = ServerRequestRepository(db)
+    repo = RequestStore(db)
     await repo.create(
         guild_id=100,
         network_id=None,
@@ -57,9 +57,9 @@ async def test_list_pending_and_get_pending_for_requester(db) -> None:
 
 @pytest.mark.asyncio
 async def test_get_pending_for_requester_with_network_id(db) -> None:
-    network_repo = NetworkRepository(db)
+    network_repo = NetworkStore(db)
     network = await create_test_network(network_repo)
-    repo = ServerRequestRepository(db)
+    repo = RequestStore(db)
     request = await repo.create(
         guild_id=100,
         network_id=network.id,
@@ -74,7 +74,7 @@ async def test_get_pending_for_requester_with_network_id(db) -> None:
 
 @pytest.mark.asyncio
 async def test_set_moderator_message_id_and_resolve(db) -> None:
-    repo = ServerRequestRepository(db)
+    repo = RequestStore(db)
     request = await repo.create(
         guild_id=100,
         network_id=None,
@@ -97,7 +97,7 @@ async def test_set_moderator_message_id_and_resolve(db) -> None:
 
 @pytest.mark.asyncio
 async def test_list_by_server_name_prefix_and_delete(db) -> None:
-    repo = ServerRequestRepository(db)
+    repo = RequestStore(db)
     await repo.create(
         guild_id=100,
         network_id=None,

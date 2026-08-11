@@ -205,12 +205,12 @@ async def initialize_guild(
                 )
 
                 if isinstance(leaders_channel, discord.TextChannel):
-                    await context.settings_repo.set(
+                    await context.store.settings.set(
                         LEADERS_CHANNEL_SETTINGS_KEY,
                         str(leaders_channel.id),
                     )
                 if isinstance(changelog_channel, discord.TextChannel):
-                    await context.settings_repo.set(
+                    await context.store.settings.set(
                         CHANGELOG_CHANNEL_SETTINGS_KEY,
                         str(changelog_channel.id),
                     )
@@ -268,7 +268,7 @@ async def initialize_guild(
                 )
                 subs = []
                 if context is not None:
-                    subs = await context.client_repo.list_subscriptions_by_client(client.id)
+                    subs = await context.store.clients.list_subscriptions_by_client(client.id)
                 # reconcile category+profile; subscription channels when keys known
                 batch = await apply_layout(
                     client_ctx,
@@ -290,7 +290,7 @@ async def initialize_guild(
                     network_id = subscription.network_id
                     if network_id is None:
                         continue
-                    network = await context.network_repo.get_by_id(network_id)
+                    network = await context.store.networks.get_by_id(network_id)
                     if network is None:
                         continue
                     sub_ctx = LayoutContext(
@@ -342,8 +342,8 @@ async def initialize_guild(
                     bot_member,
                     join_channel,
                     join_view,
-                    get_setting=context.settings_repo.get,
-                    set_setting=context.settings_repo.set,
+                    get_setting=context.store.settings.get,
+                    set_setting=context.store.settings.set,
                     wipe_channel=True,
                 )
                 if join_result.message is not None:
@@ -354,8 +354,8 @@ async def initialize_guild(
             rules_result = await sync_rules_sticky(
                 guild,
                 bot_member,
-                get_setting=context.settings_repo.get,
-                set_setting=context.settings_repo.set,
+                get_setting=context.store.settings.get,
+                set_setting=context.store.settings.set,
             )
             if rules_result.message is not None:
                 result.notes.append("Hub rules sticky synced.")
@@ -372,8 +372,8 @@ async def initialize_guild(
                     admin_channel,
                     context,
                     admin_view,
-                    get_setting=context.settings_repo.get,
-                    set_setting=context.settings_repo.set,
+                    get_setting=context.store.settings.get,
+                    set_setting=context.store.settings.set,
                     wipe_channel=True,
                 )
                 if admin_result.message is not None:

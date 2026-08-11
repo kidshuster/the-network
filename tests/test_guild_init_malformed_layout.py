@@ -213,9 +213,9 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
     context = MagicMock()
     context.client_cache.load_cache = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
-    context.client_repo.list_all = AsyncMock(return_value=[])
-    context.settings_repo.get = AsyncMock(return_value=None)
-    context.settings_repo.set = AsyncMock()
+    context.store.clients.list_all = AsyncMock(return_value=[])
+    context.store.settings.get = AsyncMock(return_value=None)
+    context.store.settings.set = AsyncMock()
     network_bot = MagicMock()
 
     result = await initialize_guild(

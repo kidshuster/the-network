@@ -78,8 +78,8 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
     bot.settings.network_access_role_name = "The Network"
     bot.add_view = MagicMock()
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
-    context.network_repo.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
+    context.store.networks.list_all = AsyncMock(return_value=[])
 
     view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)
@@ -137,7 +137,7 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
     bot.settings.network_access_role_name = "The Network"
     bot.add_view = MagicMock()
     context = MagicMock()
-    context.network_repo.list_all = AsyncMock(return_value=[])
+    context.store.networks.list_all = AsyncMock(return_value=[])
 
     view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)
@@ -190,8 +190,8 @@ async def test_reconnect_records_failure_when_post_rectify_http_error(
     bot = MagicMock()
     bot.settings.network_access_role_name = "The Network"
     context = MagicMock()
-    context.client_repo.list_subscriptions_by_client = AsyncMock(return_value=[])
-    context.network_repo.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
+    context.store.networks.list_all = AsyncMock(return_value=[])
 
     view_registry = make_test_view_registry()
     result = GuildInitResult(success=True)

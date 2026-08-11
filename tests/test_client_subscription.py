@@ -20,7 +20,7 @@ from bot.clients.subscription import (
     reorder_client_category_channels,
     resync_subscriptions_for_network,
 )
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.client import Client
 
 
@@ -120,8 +120,8 @@ def test_find_network_subscription_channels_falls_back_to_legacy_names() -> None
 
 @pytest.mark.asyncio
 async def test_resync_subscriptions_for_network_links_existing_channels(db) -> None:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",
@@ -182,13 +182,13 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
     routing.attach_client_cache(client_cache)
     context = MagicMock()
     context.db = db
-    context.network_repo = network_repo
-    context.client_repo = client_repo
+    context.store.networks = network_repo
+    context.store.clients = client_repo
     context.routing_service = routing
     context.client_cache = client_cache
-    context.settings_repo = MagicMock()
-    context.settings_repo.get = AsyncMock(return_value=None)
-    context.settings_repo.set = AsyncMock()
+    context.store.settings = MagicMock()
+    context.store.settings.get = AsyncMock(return_value=None)
+    context.store.settings.set = AsyncMock()
 
     bot = MagicMock()
     bot.settings.network_access_role_name = "The Network"
@@ -222,8 +222,8 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
 
 @pytest.mark.asyncio
 async def test_reorder_client_category_channels_sets_positions(db) -> None:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",
@@ -288,8 +288,8 @@ async def test_reorder_client_category_channels_sets_positions(db) -> None:
 
 @pytest.mark.asyncio
 async def test_unsubscribe_client_removes_subscription_and_channels(db) -> None:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
     network = await network_repo.create(
         guild_id=100,
         key="stingers",

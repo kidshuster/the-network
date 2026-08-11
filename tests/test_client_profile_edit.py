@@ -29,11 +29,11 @@ async def test_apply_edit_not_found(db) -> None:
 
 @pytest.mark.asyncio
 async def test_apply_edit_rejects_empty_display_name(db) -> None:
-    from repository_helpers import create_test_client
+    from store_helpers import create_test_client
 
     guild, _, _, _, _ = make_guild_with_roles()
     context = make_test_context(db)
-    client = await create_test_client(context.client_repo)
+    client = await create_test_client(context.store.clients)
     bot = MagicMock()
 
     view_registry = make_test_view_registry()
@@ -49,11 +49,11 @@ async def test_apply_edit_rejects_empty_display_name(db) -> None:
 async def test_apply_edit_updates_display_name_and_refreshes_profile(
     db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from repository_helpers import create_test_client
+    from store_helpers import create_test_client
 
     guild, _, _, _, _ = make_guild_with_roles()
     context = make_test_context(db)
-    client = await create_test_client(context.client_repo)
+    client = await create_test_client(context.store.clients)
     bot = MagicMock()
 
     refresh = AsyncMock()
@@ -79,11 +79,11 @@ async def test_apply_edit_updates_display_name_and_refreshes_profile(
 async def test_apply_edit_invalid_image_returns_validation_error(
     db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from repository_helpers import create_test_client
+    from store_helpers import create_test_client
 
     guild, _, _, _, _ = make_guild_with_roles()
     context = make_test_context(db)
-    client = await create_test_client(context.client_repo)
+    client = await create_test_client(context.store.clients)
     bot = MagicMock()
 
     attachment = MagicMock(spec=discord.Attachment)
@@ -116,11 +116,11 @@ async def test_apply_edit_invalid_image_returns_validation_error(
 async def test_apply_edit_with_valid_image_syncs_emoji(
     db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from repository_helpers import create_test_client
+    from store_helpers import create_test_client
 
     guild, _, _, _, _ = make_guild_with_roles()
     context = make_test_context(db)
-    client = await create_test_client(context.client_repo)
+    client = await create_test_client(context.store.clients)
     bot = MagicMock()
 
     attachment = MagicMock(spec=discord.Attachment)
@@ -163,7 +163,7 @@ async def test_apply_edit_with_valid_image_syncs_emoji(
     )
 
     assert result.success is True
-    updated = await context.client_repo.get_by_id(client.id)
+    updated = await context.store.clients.get_by_id(client.id)
     assert updated is not None
     assert updated.emoji_id == 42
     assert updated.emoji_name == "acme_emoji"

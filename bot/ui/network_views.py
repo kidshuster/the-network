@@ -104,7 +104,7 @@ class NetworkProfileView(discord.ui.View):
             await response.send_text("bot_not_ready")
             return
 
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await response.send_text("client_not_found")
             return
@@ -119,7 +119,7 @@ class NetworkProfileView(discord.ui.View):
         ):
             return
 
-        network = await context.network_repo.get_by_key(network_key)
+        network = await context.store.networks.get_by_key(network_key)
         if network is None:
             await response.send_text("network_not_found", network_key=network_key)
             return
@@ -139,8 +139,8 @@ class NetworkProfileView(discord.ui.View):
             client=client,
             network_id=network.id,
             network_key=network_key,
-            client_repo=context.client_repo,
-            network_repo=context.network_repo,
+            client_repo=context.store.clients,
+            network_repo=context.store.networks,
             access_role_name=self._bot.settings.network_access_role_name,
         )
         if not result.success or result.subscription is None:
@@ -200,7 +200,7 @@ class NetworkProfileView(discord.ui.View):
             await response.send_text("bot_not_ready")
             return
 
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await response.send_text("client_not_found")
             return
@@ -216,7 +216,7 @@ class NetworkProfileView(discord.ui.View):
         ):
             return
 
-        updated = await context.client_repo.set_timecode_enabled(
+        updated = await context.store.clients.set_timecode_enabled(
             client.id,
             not client.timecode_enabled,
         )
@@ -245,7 +245,7 @@ class NetworkProfileView(discord.ui.View):
         if context is None:
             await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await interaction.response.send_message(
                 render_text("client_not_found"),
@@ -262,7 +262,7 @@ class NetworkProfileView(discord.ui.View):
             await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
 
-        client = await context.client_repo.get_by_id(self._client_id)
+        client = await context.store.clients.get_by_id(self._client_id)
         if client is None:
             await interaction.response.send_message(
                 render_text("client_not_found"),
@@ -316,17 +316,17 @@ async def handle_subscribe_connected(
         await response.send_text("bot_not_ready")
         return
 
-    subscription = await context.client_repo.get_subscription_by_id(subscription_id)
+    subscription = await context.store.clients.get_subscription_by_id(subscription_id)
     if subscription is None:
         await response.send_text("subscription_not_found")
         return
 
-    client = await context.client_repo.get_by_id(subscription.client_id)
+    client = await context.store.clients.get_by_id(subscription.client_id)
     if client is None:
         await response.send_text("client_was_not_found")
         return
 
-    network = await context.network_repo.get_by_id(subscription.network_id or 0)
+    network = await context.store.networks.get_by_id(subscription.network_id or 0)
     if network is None:
         await response.send_text("network_not_found", network_key=network_key)
         return
@@ -334,7 +334,7 @@ async def handle_subscribe_connected(
     from bot.stickies.subscription_setup_sticky import sync_subscription_setup
 
     view_registry = PersistentViewRegistry(bot)
-    subscription = await context.client_repo.set_subscribe_confirmed(
+    subscription = await context.store.clients.set_subscribe_confirmed(
         subscription.id,
         True,
     )
@@ -446,7 +446,7 @@ class SubscriptionModerationView(discord.ui.View):
             await response.send_text("bot_not_ready")
             return
 
-        subscription = await context.client_repo.get_subscription_by_id(
+        subscription = await context.store.clients.get_subscription_by_id(
             self._subscription_id,
         )
         if subscription is None:
@@ -458,7 +458,7 @@ class SubscriptionModerationView(discord.ui.View):
             await response.send_text("invalid_member")
             return
 
-        client = await context.client_repo.get_by_id(subscription.client_id)
+        client = await context.store.clients.get_by_id(subscription.client_id)
         if client is None:
             await response.send_text("client_was_not_found")
             return
@@ -479,7 +479,7 @@ class SubscriptionModerationView(discord.ui.View):
             return
 
         network = (
-            await context.network_repo.get_by_id(subscription.network_id)
+            await context.store.networks.get_by_id(subscription.network_id)
             if subscription.network_id is not None
             else None
         )
@@ -502,8 +502,8 @@ class SubscriptionModerationView(discord.ui.View):
             client=client,
             subscription=subscription,
             network_key=network_key,
-            client_repo=context.client_repo,
-            network_repo=context.network_repo,
+            client_repo=context.store.clients,
+            network_repo=context.store.networks,
         )
         if not result.success:
             await response.send(
@@ -539,7 +539,7 @@ class SubscriptionModerationView(discord.ui.View):
             await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
 
-        subscription = await context.client_repo.get_subscription_by_id(
+        subscription = await context.store.clients.get_subscription_by_id(
             self._subscription_id,
         )
         if subscription is None:
@@ -554,7 +554,7 @@ class SubscriptionModerationView(discord.ui.View):
             await interaction.response.send_message(render_text("invalid_member"), ephemeral=True)
             return
 
-        client = await context.client_repo.get_by_id(subscription.client_id)
+        client = await context.store.clients.get_by_id(subscription.client_id)
         if client is None:
             await interaction.response.send_message(
                 render_text("client_was_not_found"),
@@ -584,7 +584,7 @@ class SubscriptionModerationView(discord.ui.View):
             )
             return
 
-        network_subs = await context.client_repo.list_subscriptions_by_network(
+        network_subs = await context.store.clients.list_subscriptions_by_network(
             subscription.network_id,
         )
         other_client_ids = [
@@ -601,10 +601,10 @@ class SubscriptionModerationView(discord.ui.View):
 
         options: list[discord.SelectOption] = []
         blocked = set(
-            await context.client_repo.list_blacklisted_client_ids(subscription.id)
+            await context.store.clients.list_blacklisted_client_ids(subscription.id)
         )
         for other_id in other_client_ids[:25]:
-            other = await context.client_repo.get_by_id(other_id)
+            other = await context.store.clients.get_by_id(other_id)
             if other is None:
                 continue
             options.append(
@@ -657,7 +657,7 @@ class BlacklistSelectView(discord.ui.View):
         assert isinstance(select, discord.ui.Select)
         selected = {int(value) for value in select.values}
 
-        subscription = await context.client_repo.get_subscription_by_id(self._subscription_id)
+        subscription = await context.store.clients.get_subscription_by_id(self._subscription_id)
         if subscription is None:
             await interaction.response.send_message(
                 render_text("subscription_not_found"),
@@ -675,7 +675,7 @@ class BlacklistSelectView(discord.ui.View):
 
         other_ids = {
             sub.client_id
-            for sub in await context.client_repo.list_subscriptions_by_network(
+            for sub in await context.store.clients.list_subscriptions_by_network(
                 network_id,
             )
             if sub.client_id != subscription.client_id
@@ -683,9 +683,9 @@ class BlacklistSelectView(discord.ui.View):
 
         for other_id in other_ids:
             if other_id in selected:
-                await context.client_repo.add_blacklist(subscription.id, other_id)
+                await context.store.clients.add_blacklist(subscription.id, other_id)
             else:
-                await context.client_repo.remove_blacklist(subscription.id, other_id)
+                await context.store.clients.remove_blacklist(subscription.id, other_id)
 
         await interaction.response.send_message(
             render_text("blacklist_updated", count=len(selected)),

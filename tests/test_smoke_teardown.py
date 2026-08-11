@@ -48,7 +48,7 @@ async def test_teardown_smoke_guild_removes_registered_clients() -> None:
     real_client.server_name = "acme"
 
     context = MagicMock()
-    context.client_repo.list_all = AsyncMock(
+    context.store.clients.list_all = AsyncMock(
         return_value=[smoke_client, real_client],
     )
     context.client_cache.load_cache = AsyncMock()

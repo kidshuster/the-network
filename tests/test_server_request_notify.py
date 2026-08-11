@@ -6,7 +6,7 @@ import discord
 import pytest
 from view_registry_helpers import make_test_view_registry
 
-from bot.db.repositories import ServerRequestRepository
+from bot.db.store import RequestStore
 from bot.onboarding.server_requests import ServerRequestService
 
 
@@ -23,9 +23,9 @@ async def test_submit_request_defaults_display_name_to_server_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = MagicMock()
-    context.server_request_repo = ServerRequestRepository(db)
-    context.client_repo = MagicMock()
-    context.client_repo.get_by_server_name = AsyncMock(return_value=None)
+    context.store.requests = RequestStore(db)
+    context.store.clients = MagicMock()
+    context.store.clients.get_by_server_name = AsyncMock(return_value=None)
 
     bot = MagicMock()
     bot.settings.guild_id = 100
@@ -78,7 +78,7 @@ async def test_submit_request_defaults_display_name_to_server_name(
     assert result.server_name == "Acme Community"
     assert result.display_name == "Acme Community"
 
-    stored = await context.server_request_repo.list_pending()
+    stored = await context.store.requests.list_pending()
     assert len(stored) == 1
     assert stored[0].server_name == "Acme Community"
     assert stored[0].display_name == "Acme Community"

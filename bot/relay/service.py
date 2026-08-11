@@ -9,7 +9,7 @@ from discord.abc import Messageable
 
 from bot.clients.cache import ClientCache
 from bot.constants import RelayStatus
-from bot.db.repositories import RelayRecordRepository
+from bot.db.store import RelayStore
 from bot.domain.errors import RelayError
 from bot.domain.relay_record import RelayResult
 from bot.networks.routing import RoutingService
@@ -17,7 +17,7 @@ from bot.relay.formatter import build_relay_payload_from_client
 
 if TYPE_CHECKING:
     from bot.config import Settings
-    from bot.db.repositories import ClientRepository
+    from bot.db.store import ClientStore
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class RelayService:
         settings: Settings,
         routing_service: RoutingService,
         client_cache: ClientCache,
-        client_repo: ClientRepository,
-        relay_record_repo: RelayRecordRepository,
+        client_repo: ClientStore,
+        relay_record_repo: RelayStore,
     ) -> None:
         self._settings = settings
         self._routing = routing_service

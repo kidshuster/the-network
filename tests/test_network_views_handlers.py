@@ -64,8 +64,8 @@ async def test_subscribe_button_success_renders_subscribe_success_embed(
     subscribe = MagicMock(spec=discord.TextChannel, id=101, mention="#subscribe")
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.network_repo.get_by_key = AsyncMock(return_value=network)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_key = AsyncMock(return_value=network)
     context.client_cache.load_cache = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
 
@@ -114,7 +114,7 @@ async def test_subscribe_button_blocks_without_client_role() -> None:
     member.guild_permissions.manage_guild = False
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -161,8 +161,8 @@ async def test_subscribe_button_renders_failure_embed(
     )
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.network_repo.get_by_key = AsyncMock(return_value=network)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_key = AsyncMock(return_value=network)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -204,8 +204,8 @@ async def test_subscribe_button_reports_network_not_found() -> None:
     member = make_member(guild=guild, roles=[client_role])
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.network_repo.get_by_key = AsyncMock(return_value=None)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_key = AsyncMock(return_value=None)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -230,7 +230,7 @@ async def test_subscribe_button_reports_client_not_found() -> None:
     member = make_member(guild=guild, manage_guild=True)
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=None)
+    context.store.clients.get_by_id = AsyncMock(return_value=None)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -267,8 +267,8 @@ async def test_subscribe_button_allows_manage_guild_without_client_role(
     subscription = make_client_subscription(id=5)
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.network_repo.get_by_key = AsyncMock(return_value=network)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_key = AsyncMock(return_value=network)
     context.client_cache.load_cache = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
 
@@ -310,7 +310,7 @@ async def test_timecode_toggle_blocks_without_client_role() -> None:
     member = make_member(guild=guild, roles=[], manage_guild=False)
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -334,7 +334,7 @@ async def test_delete_button_blocks_without_client_role() -> None:
     member = make_member(guild=guild, roles=[], manage_guild=False)
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -359,7 +359,7 @@ async def test_delete_button_shows_confirm_prompt_for_client_role_holder() -> No
     member = make_member(guild=guild, roles=[client_role])
 
     context = MagicMock()
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -384,8 +384,8 @@ async def test_leave_network_blocks_without_client_role() -> None:
     subscription = make_client_subscription()
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
 
     bot = MagicMock()
     bot.bot_context = context
@@ -412,9 +412,9 @@ async def test_leave_network_renders_failure_embed(
     subscription = make_client_subscription()
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.network_repo.get_by_id = AsyncMock(
+    context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.networks.get_by_id = AsyncMock(
         return_value=Network(
             id=2,
             key="stingers",
@@ -457,9 +457,9 @@ async def test_blacklist_button_reports_no_targets() -> None:
     subscription = make_client_subscription()
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(return_value=subscription)
-    context.client_repo.get_by_id = AsyncMock(return_value=client)
-    context.client_repo.list_subscriptions_by_network = AsyncMock(return_value=[subscription])
+    context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.store.clients.get_by_id = AsyncMock(return_value=client)
+    context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[subscription])
 
     bot = MagicMock()
     bot.bot_context = context
@@ -486,7 +486,7 @@ async def test_subscribe_connected_reports_missing_subscription() -> None:
     member = make_member(guild=guild)
 
     context = MagicMock()
-    context.client_repo.get_subscription_by_id = AsyncMock(return_value=None)
+    context.store.clients.get_subscription_by_id = AsyncMock(return_value=None)
 
     bot = MagicMock()
     bot.bot_context = context

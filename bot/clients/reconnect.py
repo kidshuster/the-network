@@ -47,17 +47,17 @@ async def _finish_client_reconnect(
             guild,
             bot_member,
             client=client,
-            client_repo=context.client_repo,
-            network_repo=context.network_repo,
+            client_repo=context.store.clients,
+            network_repo=context.store.networks,
         ),
     )
 
-    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     for subscription in subscriptions:
         network_id = subscription.network_id
         if network_id is None:
             continue
-        network = await context.network_repo.get_by_id(network_id)
+        network = await context.store.networks.get_by_id(network_id)
         if network is None:
             continue
 
@@ -88,12 +88,12 @@ async def _finish_client_reconnect(
             lambda: reorder_client_category_channels(
                 category,
                 client=client,
-                client_repo=context.client_repo,
-                network_repo=context.network_repo,
+                client_repo=context.store.clients,
+                network_repo=context.store.networks,
             ),
         )
 
-    all_networks = await context.network_repo.list_all()
+    all_networks = await context.store.networks.list_all()
     view_registry.register_client_profile_for_client(
         client,
         [network.key for network in all_networks],
@@ -172,7 +172,7 @@ async def reconnect_clients_on_init(
                 extra={"client_id": client.id, "error": str(exc)},
             )
 
-    for network in await context.network_repo.list_all():
+    for network in await context.store.networks.list_all():
         relinked = await resync_subscriptions_for_network(
             guild,
             bot,

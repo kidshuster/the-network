@@ -207,8 +207,8 @@ async def test_cleanup_orphan_smoke_subscription_channels() -> None:
     context = MagicMock()
     client = MagicMock()
     client.profile_channel_id = 3001
-    context.client_repo.list_all = AsyncMock(return_value=[client])
-    context.client_repo.list_subscriptions_by_client = AsyncMock(
+    context.store.clients.list_all = AsyncMock(return_value=[client])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(
         return_value=[MagicMock(publish_channel_id=2001, subscribe_channel_id=2002)],
     )
 

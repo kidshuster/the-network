@@ -101,7 +101,7 @@ async def _provision_smoke_welcome_client(
     if not hasattr(bot, "get_guild"):
         bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
-    stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    stale = await context.store.requests.get_pending_for_requester(bot_member.id)
     if stale is not None:
         await service.deny_request(request_id=stale.id, moderator=bot_member)
 
@@ -116,7 +116,7 @@ async def _provision_smoke_welcome_client(
     if not submit.success:
         raise RuntimeError(f"Smoke welcome submit failed: {submit.error}")
 
-    pending = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    pending = await context.store.requests.get_pending_for_requester(bot_member.id)
     if pending is None:
         raise RuntimeError("Smoke welcome submit did not create a pending request.")
 
@@ -128,7 +128,7 @@ async def _provision_smoke_welcome_client(
     if not approve.success:
         raise RuntimeError(f"Smoke welcome accept failed: {approve.error}")
 
-    client = await context.client_repo.get_by_server_name(guild.id, server_name)
+    client = await context.store.clients.get_by_server_name(guild.id, server_name)
     if client is None:
         raise RuntimeError("Smoke welcome accept did not register a client.")
 
@@ -141,8 +141,8 @@ async def _provision_smoke_welcome_client(
         client=client,
         network_id=network.id,
         network_key=network.key,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         access_role_name=bot.settings.network_access_role_name,
     )
     if not subscribe.success or subscribe.subscription is None:
@@ -150,7 +150,7 @@ async def _provision_smoke_welcome_client(
             f"Smoke welcome subscribe failed: {subscribe.error or 'unknown error'}"
         )
 
-    await context.server_request_repo.delete_by_id(pending.id)
+    await context.store.requests.delete_by_id(pending.id)
     return client, subscribe.subscription
 
 
@@ -180,7 +180,7 @@ async def verify_setup_sticky_copy(
         view_registry=view_registry,
     )
 
-    refreshed = await context.client_repo.get_subscription_by_id(subscription.id)
+    refreshed = await context.store.clients.get_subscription_by_id(subscription.id)
     if refreshed is not None:
         subscription = refreshed
 
@@ -302,7 +302,7 @@ async def cleanup_smoke_welcome_clients(
     context: BotContext,
     bot_member: discord.Member,
 ) -> None:
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         if not client.server_name.startswith(_SMOKE_WELCOME_PREFIX):
@@ -326,7 +326,7 @@ async def run_setup_welcome_smoke_flow(
         raise RuntimeError("Bot member is unavailable in the configured guild.")
 
     network_key = await ensure_smoke_network_key(context, bot, guild)
-    network = await context.network_repo.get_by_key(network_key)
+    network = await context.store.networks.get_by_key(network_key)
     if network is None:
         raise RuntimeError(f"Smoke network {network_key!r} was not found.")
 
@@ -363,7 +363,7 @@ async def run_setup_welcome_smoke_flow(
                 network=network,
             )
 
-            await context.client_repo.add_blacklist(
+            await context.store.clients.add_blacklist(
                 incumbent_sub.id,
                 joiner_client.id,
             )
@@ -383,7 +383,7 @@ async def run_setup_welcome_smoke_flow(
                 expected_incumbent_member_welcomes=0,
             )
 
-            await context.client_repo.remove_blacklist(
+            await context.store.clients.remove_blacklist(
                 incumbent_sub.id,
                 joiner_client.id,
             )
@@ -399,7 +399,7 @@ async def run_setup_welcome_smoke_flow(
                     except discord.HTTPException:
                         pass
 
-            joiner_sub = await context.client_repo.update_activation_welcome_message_id(
+            joiner_sub = await context.store.clients.update_activation_welcome_message_id(
                 joiner_sub.id,
                 None,
             )

@@ -18,12 +18,12 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
     context = make_test_context(db)
 
     guild_id = 100
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=guild_id,
         key="stingers",
         display_name="Stingers",
     )
-    client = await context.client_repo.create(
+    client = await context.store.clients.create(
         guild_id=guild_id,
         server_name="acme",
         display_name="Acme",
@@ -32,7 +32,7 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=client.id,
         network_id=network.id,
         network_key=network.key,
@@ -42,13 +42,13 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
 
     await reset_hub_layout_data(context, guild_id)
 
-    clients = await context.client_repo.list_all()
+    clients = await context.store.clients.list_all()
     assert len(clients) == 1
     assert clients[0].id == client.id
-    assert await context.client_repo.list_subscriptions_by_client(client.id) == []
-    assert await context.network_repo.list_all() == []
+    assert await context.store.clients.list_subscriptions_by_client(client.id) == []
+    assert await context.store.networks.list_all() == []
 
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=guild_id,
         key="stingers",
         display_name="Stingers",
@@ -114,7 +114,7 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
     assert relinked == 1
     await context.routing_service.load_cache()
     await context.client_cache.load_cache()
-    subs = await context.client_repo.list_subscriptions_by_client(client.id)
+    subs = await context.store.clients.list_subscriptions_by_client(client.id)
     assert len(subs) == 1
     assert subs[0].publish_channel_id == 201
     assert subs[0].subscribe_channel_id == 301

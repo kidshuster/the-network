@@ -8,29 +8,24 @@ import pytest
 from bot.clients.cache import ClientCache
 from bot.clients.deletion import ClientDeletionService
 from bot.context import BotContext
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import Store
 from bot.networks.routing import RoutingService
 from bot.ui.network_views import NetworkProfileView
 
 
 def _make_context(db) -> BotContext:
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
-    routing = RoutingService(network_repo, client_repo)
-    client_cache = ClientCache(client_repo)
+    store = Store.create(db)
+    routing = RoutingService(store.networks, store.clients)
+    client_cache = ClientCache(store.clients)
     routing.attach_client_cache(client_cache)
     return BotContext.create(
         settings=MagicMock(),
         db=db,
-        network_repo=network_repo,
-        client_repo=client_repo,
-        relay_record_repo=MagicMock(),
+        store=store,
         routing_service=routing,
         client_cache=client_cache,
         relay_service=MagicMock(),
         bot_settings=MagicMock(),
-        settings_repo=MagicMock(),
-        server_request_repo=MagicMock(),
     )
 
 
@@ -57,12 +52,12 @@ def test_network_profile_view_stays_within_discord_component_limit() -> None:
 @pytest.mark.asyncio
 async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> None:
     context = _make_context(db)
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=100,
         key="stingers",
         display_name="Stingers",
     )
-    client = await context.client_repo.create(
+    client = await context.store.clients.create(
         guild_id=100,
         server_name="acme",
         display_name="Acme",
@@ -71,7 +66,7 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
         profile_channel_id=30,
         profile_message_id=40,
     )
-    other_client = await context.client_repo.create(
+    other_client = await context.store.clients.create(
         guild_id=100,
         server_name="beta",
         display_name="Beta",
@@ -80,22 +75,22 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
         profile_channel_id=31,
         profile_message_id=41,
     )
-    subscription = await context.client_repo.create_subscription(
+    subscription = await context.store.clients.create_subscription(
         client_id=client.id,
         network_id=network.id,
         network_key=network.key,
         publish_channel_id=203,
         subscribe_channel_id=202,
     )
-    other_subscription = await context.client_repo.create_subscription(
+    other_subscription = await context.store.clients.create_subscription(
         client_id=other_client.id,
         network_id=network.id,
         network_key=network.key,
         publish_channel_id=303,
         subscribe_channel_id=302,
     )
-    await context.client_repo.add_blacklist(subscription.id, other_client.id)
-    await context.client_repo.add_blacklist(other_subscription.id, client.id)
+    await context.store.clients.add_blacklist(subscription.id, other_client.id)
+    await context.store.clients.add_blacklist(other_subscription.id, client.id)
 
     profile = MagicMock(spec=discord.TextChannel)
     profile.id = 30
@@ -155,16 +150,16 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
         guild,
         guild.me,
         client=client,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         context=context,
     )
 
     assert result.success is True
-    assert await context.client_repo.get_by_id(client.id) is None
-    assert await context.client_repo.get_subscription(client.id, network.id) is None
-    assert await context.client_repo.is_blacklisted(subscription.id, other_client.id) is False
-    assert await context.client_repo.is_blacklisted(other_subscription.id, client.id) is False
+    assert await context.store.clients.get_by_id(client.id) is None
+    assert await context.store.clients.get_subscription(client.id, network.id) is None
+    assert await context.store.clients.is_blacklisted(subscription.id, other_client.id) is False
+    assert await context.store.clients.is_blacklisted(other_subscription.id, client.id) is False
     assert publish.delete.await_count >= 1
     assert subscribe.delete.await_count >= 1
     assert profile.delete.await_count >= 1
@@ -180,12 +175,12 @@ async def test_delete_client_stops_when_unsubscribe_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _make_context(db)
-    network = await context.network_repo.create(
+    network = await context.store.networks.create(
         guild_id=100,
         key="stingers",
         display_name="Stingers",
     )
-    client = await context.client_repo.create(
+    client = await context.store.clients.create(
         guild_id=100,
         server_name="acme",
         display_name="Acme",
@@ -194,7 +189,7 @@ async def test_delete_client_stops_when_unsubscribe_fails(
         profile_channel_id=30,
         profile_message_id=40,
     )
-    await context.client_repo.create_subscription(
+    await context.store.clients.create_subscription(
         client_id=client.id,
         network_id=network.id,
         network_key=network.key,
@@ -216,12 +211,12 @@ async def test_delete_client_stops_when_unsubscribe_fails(
         guild,
         guild.me,
         client=client,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         context=context,
     )
 
     assert result.success is False
     assert result.error == "Missing Permissions"
-    assert await context.client_repo.get_by_id(client.id) is not None
-    assert await context.client_repo.get_subscription(client.id, network.id) is not None
+    assert await context.store.clients.get_by_id(client.id) is not None
+    assert await context.store.clients.get_subscription(client.id, network.id) is not None

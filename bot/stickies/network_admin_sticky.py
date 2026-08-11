@@ -38,7 +38,7 @@ def build_network_admin_footer() -> str:
 
 
 async def build_network_admin_embed(context: BotContext) -> discord.Embed:
-    networks = await context.network_repo.list_all()
+    networks = await context.store.networks.list_all()
     embed = render_embed("network_admin", version=NETWORK_ADMIN_VERSION)
     if not networks:
         embed.add_field(
@@ -49,7 +49,7 @@ async def build_network_admin_embed(context: BotContext) -> discord.Embed:
         return embed
 
     for network in networks[:25]:
-        subs = await context.client_repo.list_subscriptions_by_network(network.id)
+        subs = await context.store.clients.list_subscriptions_by_network(network.id)
         embed.add_field(
             name=f"{network.display_name} (`{network.key}`)",
             value=f"Subscriptions: **{len(subs)}**",
@@ -92,7 +92,7 @@ async def refresh_network_admin_sticky_from_settings(
     if channel is None:
         return
 
-    raw = await context.settings_repo.get(NETWORK_ADMIN_SETTINGS_KEY)
+    raw = await context.store.settings.get(NETWORK_ADMIN_SETTINGS_KEY)
     message_id: int | None = None
     if raw and ":" in raw:
         try:
@@ -108,7 +108,7 @@ async def refresh_network_admin_sticky_from_settings(
         message_id=message_id,
     )
     if message is not None:
-        await context.settings_repo.set(
+        await context.store.settings.set(
             NETWORK_ADMIN_SETTINGS_KEY,
             f"{channel.id}:{message.id}",
         )

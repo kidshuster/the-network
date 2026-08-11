@@ -255,11 +255,11 @@ async def cleanup_smoke_client(
     bot_member: discord.Member,
 ) -> None:
     """Remove Discord resources and DB row for a smoke-provisioned client."""
-    client = await context.client_repo.get_by_server_name(guild.id, server_name)
+    client = await context.store.clients.get_by_server_name(guild.id, server_name)
     if client is None:
         return
 
-    subscriptions = await context.client_repo.list_subscriptions_by_client(client.id)
+    subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     channel_ids: set[int] = {client.profile_channel_id}
     for subscription in subscriptions:
         channel_ids.add(subscription.publish_channel_id)
@@ -328,11 +328,7 @@ async def cleanup_smoke_client(
         except discord.HTTPException:
             logger.warning("Smoke cleanup: could not delete client role")
 
-    for subscription in subscriptions:
-        await context.client_repo.delete_blacklists_for_subscription(subscription.id)
-        await context.client_repo.delete_subscription(subscription.id)
-
-    await context.client_repo.delete(client.id)
+    await context.store.clients.delete_with_relations(client.id)
     await context.refresh_client_counts()
     await context.routing_service.load_cache()
 
@@ -350,7 +346,7 @@ async def cleanup_smoke_join_request_messages(
 
     channel = resolve_join_requests_channel(guild)
     for request_id in request_ids:
-        request = await context.server_request_repo.get_by_id(request_id)
+        request = await context.store.requests.get_by_id(request_id)
         if request is None:
             continue
         if channel is not None and request.moderator_message_id is not None:
@@ -367,7 +363,7 @@ async def cleanup_smoke_join_request_messages(
                         "message_id": request.moderator_message_id,
                     },
                 )
-        await context.server_request_repo.delete_by_id(request_id)
+        await context.store.requests.delete_by_id(request_id)
 
 
 async def cleanup_join_requests_smoke_artifacts(
@@ -392,8 +388,8 @@ async def cleanup_join_requests_smoke_artifacts(
             )
 
     for prefix in _SMOKE_JOIN_REQUEST_PREFIXES:
-        for request in await context.server_request_repo.list_by_server_name_prefix(prefix):
-            await context.server_request_repo.delete_by_id(request.id)
+        for request in await context.store.requests.list_by_server_name_prefix(prefix):
+            await context.store.requests.delete_by_id(request.id)
 
 
 async def cleanup_all_hub_rebuild_smoke_clients(
@@ -409,7 +405,7 @@ async def cleanup_all_hub_rebuild_smoke_clients(
 
     rebuild_clients = [
         client
-        for client in await context.client_repo.list_all()
+        for client in await context.store.clients.list_all()
         if client.server_name.startswith("Smoke Rebuild ")
     ]
     for client in rebuild_clients:
@@ -457,7 +453,7 @@ async def run_join_approval_smoke_flow(
             if not submit_accept.success:
                 raise RuntimeError(f"Smoke submit (accept path) failed: {submit_accept.error}")
 
-            pending = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+            pending = await context.store.requests.get_pending_for_requester(bot_member.id)
             if pending is None:
                 raise RuntimeError("Smoke submit did not create a pending request.")
             accept_request_id = pending.id
@@ -471,7 +467,7 @@ async def run_join_approval_smoke_flow(
             if not approve.success:
                 raise RuntimeError(f"Smoke accept failed: {approve.error}")
 
-            client = await context.client_repo.get_by_server_name(guild.id, accept_server_name)
+            client = await context.store.clients.get_by_server_name(guild.id, accept_server_name)
             if client is None:
                 raise RuntimeError("Smoke accept did not register a client.")
 
@@ -507,7 +503,7 @@ async def run_join_approval_smoke_flow(
             else:
                 guard_role = None
 
-            networks = await context.network_repo.list_all()
+            networks = await context.store.networks.list_all()
             if networks:
                 from bot.clients.subscription import ClientSubscriptionService
 
@@ -519,8 +515,8 @@ async def run_join_approval_smoke_flow(
                     client=client,
                     network_id=network.id,
                     network_key=network.key,
-                    client_repo=context.client_repo,
-                    network_repo=context.network_repo,
+                    client_repo=context.store.clients,
+                    network_repo=context.store.networks,
                     access_role_name=bot.settings.network_access_role_name,
                 )
                 if not subscribe.success or subscribe.subscription is None:
@@ -561,7 +557,7 @@ async def run_join_approval_smoke_flow(
             if not submit_deny.success:
                 raise RuntimeError(f"Smoke submit (deny path) failed: {submit_deny.error}")
 
-            pending_deny = await context.server_request_repo.get_pending_for_requester(
+            pending_deny = await context.store.requests.get_pending_for_requester(
                 bot_member.id
             )
             if pending_deny is None:
@@ -575,7 +571,7 @@ async def run_join_approval_smoke_flow(
             if not deny.success:
                 raise RuntimeError(f"Smoke deny failed: {deny.error}")
 
-            resolved = await context.server_request_repo.get_by_id(pending_deny.id)
+            resolved = await context.store.requests.get_by_id(pending_deny.id)
             if resolved is None or resolved.status != ServerRequestStatus.DENIED:
                 raise RuntimeError("Smoke deny did not resolve the request.")
 
@@ -612,7 +608,7 @@ async def ensure_smoke_network_key(
     """Return a network key for subscribe/rebuild smokes, creating one if needed."""
     explicit = os.environ.get("SMOKE_NETWORK_KEY", "").strip().lower()
     if explicit:
-        existing = await context.network_repo.get_by_key(explicit)
+        existing = await context.store.networks.get_by_key(explicit)
         if existing is None:
             from bot.networks.admin import create_network
             from bot.ui.persistent_views import PersistentViewRegistry
@@ -629,7 +625,7 @@ async def ensure_smoke_network_key(
                 raise RuntimeError(created.error or f"could not create network {explicit!r}")
         return explicit
 
-    networks = await context.network_repo.list_all()
+    networks = await context.store.networks.list_all()
     if networks:
         return networks[0].key
 
@@ -684,9 +680,9 @@ async def provision_smoke_client_with_subscription(
     if bot_member is None:
         raise RuntimeError("Bot member is unavailable in the configured guild.")
 
-    network = await context.network_repo.get_by_key(network_key)
+    network = await context.store.networks.get_by_key(network_key)
     if network is None:
-        network = await context.network_repo.create(
+        network = await context.store.networks.create(
             guild_id=guild.id,
             key=network_key,
             display_name=network_display_name or network_key.title(),
@@ -700,7 +696,7 @@ async def provision_smoke_client_with_subscription(
     if not hasattr(bot, "get_guild"):
         bot.get_guild = lambda guild_id: guild if guild.id == guild_id else None  # type: ignore[method-assign]
 
-    stale = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    stale = await context.store.requests.get_pending_for_requester(bot_member.id)
     if stale is not None:
         await service.deny_request(request_id=stale.id, moderator=bot_member)
 
@@ -715,7 +711,7 @@ async def provision_smoke_client_with_subscription(
     if not submit.success:
         raise RuntimeError(f"Smoke submit failed: {submit.error}")
 
-    pending = await context.server_request_repo.get_pending_for_requester(bot_member.id)
+    pending = await context.store.requests.get_pending_for_requester(bot_member.id)
     if pending is None:
         raise RuntimeError("Smoke submit did not create a pending request.")
 
@@ -727,7 +723,7 @@ async def provision_smoke_client_with_subscription(
     if not approve.success:
         raise RuntimeError(f"Smoke accept failed: {approve.error}")
 
-    client = await context.client_repo.get_by_server_name(guild.id, server_name)
+    client = await context.store.clients.get_by_server_name(guild.id, server_name)
     if client is None:
         raise RuntimeError("Smoke accept did not register a client.")
 
@@ -740,8 +736,8 @@ async def provision_smoke_client_with_subscription(
         client=client,
         network_id=network.id,
         network_key=network.key,
-        client_repo=context.client_repo,
-        network_repo=context.network_repo,
+        client_repo=context.store.clients,
+        network_repo=context.store.networks,
         access_role_name=bot.settings.network_access_role_name,
     )
     if not subscribe.success or subscribe.subscription is None:
@@ -787,7 +783,7 @@ async def run_hub_rebuild_smoke_flow(
     await cleanup_all_hub_rebuild_smoke_clients(guild, context, bot_member)
 
     if resolve_join_requests_channel(guild) is None:
-        clients = await context.client_repo.list_all()
+        clients = await context.store.clients.list_all()
         bootstrap = await initialize_guild(
             guild,
             bot_member,
@@ -852,11 +848,11 @@ async def run_hub_rebuild_smoke_flow(
 
         await reset_hub_layout_data(context, guild.id)
 
-        client = await context.client_repo.get_by_id(state.client_id)
+        client = await context.store.clients.get_by_id(state.client_id)
         if client is None:
             raise RuntimeError("Smoke client disappeared from database after hub reset.")
 
-        clients = await context.client_repo.list_all()
+        clients = await context.store.clients.list_all()
         init = await initialize_guild(
             guild,
             bot_member,
@@ -882,7 +878,7 @@ async def run_hub_rebuild_smoke_flow(
         if not create.success or create.network is None:
             raise RuntimeError(create.error or "network recreate failed")
 
-        subscription = await context.client_repo.get_subscription(
+        subscription = await context.store.clients.get_subscription(
             state.client_id,
             create.network.id,
         )
@@ -909,7 +905,7 @@ async def run_hub_rebuild_smoke_flow(
         if client_role is None:
             from bot.clients.names import build_client_role_name
 
-            refreshed = await context.client_repo.get_by_id(state.client_id)
+            refreshed = await context.store.clients.get_by_id(state.client_id)
             expected_name = (
                 build_client_role_name(refreshed.server_name)
                 if refreshed is not None

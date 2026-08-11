@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import pytest
-from repository_helpers import create_test_network
+from store_helpers import create_test_network
 
 from bot.constants import RelayStatus
-from bot.db.repositories import NetworkRepository, RelayRecordRepository
+from bot.db.store import NetworkStore, RelayStore
 from bot.domain.errors import RelayError
 
 
 @pytest.mark.asyncio
 async def test_create_pending_and_exists(db) -> None:
-    network_repo = NetworkRepository(db)
-    relay_repo = RelayRecordRepository(db)
+    network_repo = NetworkStore(db)
+    relay_repo = RelayStore(db)
     network = await create_test_network(network_repo)
 
     record = await relay_repo.create_pending(
@@ -30,8 +30,8 @@ async def test_create_pending_and_exists(db) -> None:
 
 @pytest.mark.asyncio
 async def test_create_pending_rejects_duplicate(db) -> None:
-    network_repo = NetworkRepository(db)
-    relay_repo = RelayRecordRepository(db)
+    network_repo = NetworkStore(db)
+    relay_repo = RelayStore(db)
     network = await create_test_network(network_repo)
 
     await relay_repo.create_pending(
@@ -53,8 +53,8 @@ async def test_create_pending_rejects_duplicate(db) -> None:
 
 @pytest.mark.asyncio
 async def test_update_status_with_destination_ids(db) -> None:
-    network_repo = NetworkRepository(db)
-    relay_repo = RelayRecordRepository(db)
+    network_repo = NetworkStore(db)
+    relay_repo = RelayStore(db)
     network = await create_test_network(network_repo)
 
     record = await relay_repo.create_pending(
@@ -76,8 +76,8 @@ async def test_update_status_with_destination_ids(db) -> None:
 
 @pytest.mark.asyncio
 async def test_delete_by_network_id(db) -> None:
-    network_repo = NetworkRepository(db)
-    relay_repo = RelayRecordRepository(db)
+    network_repo = NetworkStore(db)
+    relay_repo = RelayStore(db)
     network = await create_test_network(network_repo)
 
     await relay_repo.create_pending(

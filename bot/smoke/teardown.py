@@ -39,7 +39,7 @@ async def teardown_smoke_guild(
     """Remove all smoke clients and leftover Discord artifacts from the configured guild."""
     result = TeardownResult()
 
-    for client in await context.client_repo.list_all():
+    for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
             continue
         if not is_smoke_client_server_name(client.server_name):

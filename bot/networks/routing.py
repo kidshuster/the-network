@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from bot.clients.cache import ClientCache
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 from bot.domain.client_subscription import ClientSubscription
 from bot.domain.errors import RoutingError
 from bot.domain.network import Network
@@ -16,8 +16,8 @@ class RoutingService:
 
     def __init__(
         self,
-        network_repo: NetworkRepository,
-        client_repo: ClientRepository | None = None,
+        network_repo: NetworkStore,
+        client_repo: ClientStore | None = None,
     ) -> None:
         self._network_repo = network_repo
         self._client_repo = client_repo

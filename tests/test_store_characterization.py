@@ -5,14 +5,14 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from repository_helpers import (
+from store_helpers import (
     create_test_client,
     create_test_network,
     create_test_subscription,
 )
 
 from bot.db.connection import Database
-from bot.db.repositories import ClientRepository, NetworkRepository
+from bot.db.store import ClientStore, NetworkStore
 
 
 def test_client_repository_owns_subscription_and_blacklist_methods() -> None:
@@ -48,7 +48,7 @@ def test_client_repository_owns_subscription_and_blacklist_methods() -> None:
         "delete_blacklists_blocking_client",
     }
 
-    client_methods = set(dir(ClientRepository))
+    client_methods = set(dir(ClientStore))
     assert subscription_methods.issubset(client_methods)
     assert blacklist_methods.issubset(client_methods)
 
@@ -62,8 +62,8 @@ def test_database_execute_commits_each_statement(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_network_delete_leaves_detached_subscriptions_on_mid_failure(db) -> None:
     """Characterize non-atomic network deletion before transaction support."""
-    network_repo = NetworkRepository(db)
-    client_repo = ClientRepository(db)
+    network_repo = NetworkStore(db)
+    client_repo = ClientStore(db)
 
     network = await create_test_network(network_repo, key="alpha", display_name="Alpha")
     client = await create_test_client(client_repo, guild_id=1, server_name="Acme")
