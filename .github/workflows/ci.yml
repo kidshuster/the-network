@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, refactor]
   pull_request:
 
 jobs:
@@ -28,11 +28,14 @@ jobs:
       - name: Mypy
         run: mypy bot tests/live
 
-      - name: Pytest
+      - name: Unit tests
         run: pytest -q tests/unit
 
-      - name: Discord API compatibility
-        run: pytest -q tests/unit/test_discord_api_compat.py
+      - name: Mock smoke tests
+        run: |
+          python -m tests.live.runner recipe full --backend mock
+          python -m tests.live.runner recipe server-init-stress \
+            --backend mock --scenario malformed_channels
 
       - name: Install bundle check
         run: ./bin/test_deploy_bundle.sh
