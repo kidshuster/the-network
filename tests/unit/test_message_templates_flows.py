@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.core.widgets import render_embed, render_text
+from bot.app.templates import render_embed, render_text
 
 
 def test_join_request_submitted_renders_server_name() -> None:

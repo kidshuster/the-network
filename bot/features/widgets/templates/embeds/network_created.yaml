@@ -1,0 +1,23 @@
+kind: embed
+title: "Network Created"
+colour: green
+fields:
+  - name: Key
+    value: "`{key}`"
+    inline: true
+  - name: Name
+    value: "{display_name}"
+    inline: true
+  - name: Next steps
+    value: |
+      Clients subscribe from their **client-profile** channel.
+      Each subscription creates **publish** and **subscribe** channels.
+    inline: false
+  - name: Relinked subscriptions
+    value: "Existing client subscriptions were relinked and forwarding resumed."
+    inline: false
+    when: "{relinked}"
+  - name: Client profiles
+    value: "Refreshed buttons on **{updated_count}** client profile(s)."
+    inline: false
+    when: "{updated_count}"

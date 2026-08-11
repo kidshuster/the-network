@@ -8,10 +8,10 @@ from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 from subscription_helpers import make_client_subscription
 
+from bot.app.templates import render_text
 from bot.core.models.client import Client
 from bot.core.models.network import Network
-from bot.core.widgets import render_text
-from bot.core.widgets.views.network_views import (
+from bot.features.widgets.views.network_views import (
     NetworkProfileView,
     SubscriptionModerationView,
     handle_subscribe_connected,
@@ -70,11 +70,11 @@ async def test_subscribe_button_success_renders_subscribe_success_embed(
 
     subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
     monkeypatch.setattr(
-        "bot.core.clients.subscription.ClientSubscriptionService.subscribe_client",
+        "bot.features.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.core.channels.stickies.subscription.sync_subscription_setup",
+        "bot.features.channels.stickies.subscription.sync_subscription_setup",
         AsyncMock(),
     )
 
@@ -174,7 +174,7 @@ async def test_subscribe_button_renders_failure_embed(
         error="Discord API error: Missing Permissions",
     )
     monkeypatch.setattr(
-        "bot.core.clients.subscription.ClientSubscriptionService.subscribe_client",
+        "bot.features.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
 
@@ -272,11 +272,11 @@ async def test_subscribe_button_allows_manage_guild_without_client_role(
 
     subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
     monkeypatch.setattr(
-        "bot.core.clients.subscription.ClientSubscriptionService.subscribe_client",
+        "bot.features.clients.subscription.ClientSubscriptionService.subscribe_client",
         AsyncMock(return_value=subscribe_result),
     )
     monkeypatch.setattr(
-        "bot.core.channels.stickies.subscription.sync_subscription_setup",
+        "bot.features.channels.stickies.subscription.sync_subscription_setup",
         AsyncMock(),
     )
 
@@ -428,7 +428,7 @@ async def test_leave_network_renders_failure_embed(
 
     unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
     monkeypatch.setattr(
-        "bot.core.clients.subscription.ClientSubscriptionService.unsubscribe_client",
+        "bot.features.clients.subscription.ClientSubscriptionService.unsubscribe_client",
         AsyncMock(return_value=unsubscribe_result),
     )
 

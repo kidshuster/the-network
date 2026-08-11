@@ -3,7 +3,7 @@ description: Read-only server-init prerequisites and resulting hub state
 steps:
   - hub.operator
   - hub.manage_server
-  - hub.moderator_channel
+  - hub.admin_channel
   - hub.layout
   - hub.announcement_channel
   - hub.leaders_access

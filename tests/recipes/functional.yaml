@@ -3,7 +3,7 @@ description: Permission and layout rectification checks used by the full suite
 steps:
   - hub.operator
   - hub.manage_server
-  - hub.moderator_channel
+  - hub.admin_channel
   - hub.layout
   - hub.announcement_channel
   - probe: hub.leaders_drift

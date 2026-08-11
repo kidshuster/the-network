@@ -3,7 +3,7 @@ permissions_valid: true
 leaders_access: false
 announcement_channel_regular: true
 missing_channels: [changelog]
-misplaced_channels: [moderator-only, leaders-channel]
+misplaced_channels: [admin, leaders-channel]
 wrong_channel_types: [network-announcements]
 duplicate_channels: [leaders-channel]
 stale_permission_targets: [leaders-channel, changelog]

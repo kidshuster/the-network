@@ -4,11 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.core.clients.names import announcement_channel_base_name, build_network_channel_name
-
-
-def test_announcement_channel_base_name() -> None:
-    assert announcement_channel_base_name("Stingers") == "stingers-announcements"
+from bot.core.clients.names import build_network_channel_name
 
 
 def test_build_network_channel_name_uses_suffix() -> None:

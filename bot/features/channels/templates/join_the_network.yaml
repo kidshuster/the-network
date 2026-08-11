@@ -1,0 +1,13 @@
+kind: embed
+title: "Join The Network"
+colour: green
+description: |
+  Click **Join Network** below and submit your community name and a profile image.
+  Moderators review submissions in their private area.
+fields:
+  - name: What happens next
+    value: |
+      After approval you receive a client category with **client-profile** and
+      step-by-step setup cards in your **publish** and **subscribe** channels.
+    inline: false
+footer: "The Network • join the network • v{version}"

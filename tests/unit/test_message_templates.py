@@ -4,9 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bot.core.channels.stickies.join import HOW_TO_JOIN_VERSION
-from bot.core.channels.stickies.rules import RULES_STICKY_VERSION
-from bot.core.widgets import (
+from bot.app.templates import (
     MessageTemplateError,
     clear_template_cache,
     modal_spec,
@@ -14,10 +12,12 @@ from bot.core.widgets import (
     render_text,
     validate_all_templates,
 )
+from bot.features.channels.stickies.join import HOW_TO_JOIN_VERSION
+from bot.features.channels.stickies.rules import RULES_STICKY_VERSION
 
 _BOT_DIR = Path(__file__).resolve().parents[2] / "bot"
-_WIDGET_TEMPLATES_DIR = _BOT_DIR / "widgets" / "templates"
-_CHANNEL_TEMPLATES_DIR = _BOT_DIR / "widgets" / "channels" / "templates"
+_WIDGET_TEMPLATES_DIR = _BOT_DIR / "features" / "widgets" / "templates"
+_CHANNEL_TEMPLATES_DIR = _BOT_DIR / "features" / "channels" / "templates"
 
 
 def test_validate_all_templates_passes() -> None:

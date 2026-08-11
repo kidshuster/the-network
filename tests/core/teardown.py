@@ -18,7 +18,7 @@ from tests.core.resource_guard import (
 )
 
 if TYPE_CHECKING:
-    from bot.core.runtime import BotContext
+    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 

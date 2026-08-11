@@ -7,8 +7,8 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
-from bot.core.widgets import render_text
-from bot.core.widgets.views.join_views import JoinNetworkModal, ModeratorReviewView
+from bot.app.templates import render_text
+from bot.features.widgets.views.join_views import JoinNetworkModal, ModeratorReviewView
 
 _DEFAULT_CONTEXT = object()
 
@@ -120,7 +120,7 @@ async def test_join_modal_renders_failure_embed_on_service_error(
 
     submit_result = MagicMock(success=False, error="Server name already exists.")
     monkeypatch.setattr(
-        "bot.core.widgets.recipes.onboarding.service.ServerRequestService.submit_request",
+        "bot.features.recipes.onboarding.service.ServerRequestService.submit_request",
         AsyncMock(return_value=submit_result),
     )
 
@@ -175,7 +175,7 @@ async def test_moderator_review_renders_failure_embed_on_service_error(
 
     deny_result = MagicMock(success=False, error="Request was already reviewed.", message=None)
     monkeypatch.setattr(
-        "bot.core.widgets.recipes.onboarding.service.ServerRequestService.deny_request",
+        "bot.features.recipes.onboarding.service.ServerRequestService.deny_request",
         AsyncMock(return_value=deny_result),
     )
 
@@ -202,7 +202,7 @@ async def test_moderator_review_renders_success_embed_on_deny(
         message="The join request was denied.",
     )
     monkeypatch.setattr(
-        "bot.core.widgets.recipes.onboarding.service.ServerRequestService.deny_request",
+        "bot.features.recipes.onboarding.service.ServerRequestService.deny_request",
         AsyncMock(return_value=deny_result),
     )
 

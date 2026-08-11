@@ -4,7 +4,7 @@ import asyncio
 import logging
 import sys
 
-from bot.client import NetworkRelayBot
+from bot.app.bot import NetworkRelayBot
 from bot.config import Settings
 from bot.logging_config import configure_logging
 

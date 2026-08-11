@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.clients.subscription import resolve_subscription_channels_in_category
 from bot.core.discord.step_runner import run_guild_step
+from bot.features.clients.subscription import resolve_subscription_channels_in_category
 
 
 @dataclass
@@ -76,7 +76,7 @@ def test_resolve_subscription_channels_falls_back_to_category_names() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_stored_embed_sticky_skips_when_current() -> None:
-    from bot.core.channels.stickies.reconciler import sync_stored_embed_sticky
+    from bot.features.channels.stickies.reconciler import sync_stored_embed_sticky
 
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 10

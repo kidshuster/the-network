@@ -2,7 +2,7 @@ layout_present: true
 permissions_valid: true
 leaders_access: true
 announcement_channel_regular: true
-hidden_community_channels: [moderator-only]
+hidden_community_channels: [admin]
 clients:
   - name: Existing Client
     subscriptions: [general]

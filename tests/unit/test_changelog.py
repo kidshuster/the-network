@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.hub.changelog import (
+from bot.features.hub.changelog import (
     ReleaseNotes,
     pending_release_versions,
     sync_changelog_releases,
@@ -52,8 +52,8 @@ async def test_sync_changelog_releases_posts_in_order(monkeypatch: pytest.Monkey
         "1.1.16": ReleaseNotes("1.1.16", "a", ("one",)),
         "1.1.19": ReleaseNotes("1.1.19", "b", ("two",)),
     }
-    monkeypatch.setattr("bot.core.hub.changelog._load_releases_catalog", lambda: catalog)
-    monkeypatch.setattr("bot.core.hub.changelog.installed_version", lambda: "1.1.19")
+    monkeypatch.setattr("bot.features.hub.changelog._load_releases_catalog", lambda: catalog)
+    monkeypatch.setattr("bot.features.hub.changelog.installed_version", lambda: "1.1.19")
 
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 999
@@ -81,8 +81,8 @@ async def test_sync_changelog_releases_stops_on_send_failure(
         "1.1.16": ReleaseNotes("1.1.16", "a", ("one",)),
         "1.1.19": ReleaseNotes("1.1.19", "b", ("two",)),
     }
-    monkeypatch.setattr("bot.core.hub.changelog._load_releases_catalog", lambda: catalog)
-    monkeypatch.setattr("bot.core.hub.changelog.installed_version", lambda: "1.1.19")
+    monkeypatch.setattr("bot.features.hub.changelog._load_releases_catalog", lambda: catalog)
+    monkeypatch.setattr("bot.features.hub.changelog.installed_version", lambda: "1.1.19")
 
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 999

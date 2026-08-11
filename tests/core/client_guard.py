@@ -8,7 +8,7 @@ import discord
 from tests.core.resource_guard import is_smoke_client_server_name
 
 if TYPE_CHECKING:
-    from bot.core.runtime import BotContext
+    from bot.app.context import BotContext
 
 
 @dataclass(frozen=True)

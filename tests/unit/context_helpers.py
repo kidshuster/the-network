@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from bot.app.context import BotContext
 from bot.core.clients.cache import ClientCache
 from bot.core.database.store import Store
 from bot.core.networks.routing import RoutingService
-from bot.core.runtime import BotContext
 
 
 def make_test_context(db) -> BotContext:

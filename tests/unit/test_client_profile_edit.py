@@ -8,7 +8,7 @@ from context_helpers import make_test_context
 from discord_helpers import make_guild_with_roles
 from view_registry_helpers import make_test_view_registry
 
-from bot.core.clients.profile_edit import apply_client_profile_edit
+from bot.features.clients.profile_edit import apply_client_profile_edit
 from bot.testing.png_fixtures import probe_png_bytes
 
 
@@ -57,7 +57,7 @@ async def test_apply_edit_updates_display_name_and_refreshes_profile(
     bot = MagicMock()
 
     refresh = AsyncMock()
-    monkeypatch.setattr("bot.core.clients.profile_edit.refresh_client_profile_message", refresh)
+    monkeypatch.setattr("bot.features.clients.profile_edit.refresh_client_profile_message", refresh)
 
     view_registry = make_test_view_registry()
     result = await apply_client_profile_edit(
@@ -93,7 +93,7 @@ async def test_apply_edit_invalid_image_returns_validation_error(
     attachment.read = AsyncMock(return_value=b"not-an-image")
 
     monkeypatch.setattr(
-        "bot.core.clients.profile_edit.refresh_client_profile_message",
+        "bot.features.clients.profile_edit.refresh_client_profile_message",
         AsyncMock(),
     )
 
@@ -141,7 +141,7 @@ async def test_apply_edit_with_valid_image_syncs_emoji(db, monkeypatch: pytest.M
         AsyncMock(return_value=emoji_result),
     )
     monkeypatch.setattr(
-        "bot.core.clients.profile_edit.refresh_client_profile_message",
+        "bot.features.clients.profile_edit.refresh_client_profile_message",
         AsyncMock(),
     )
     monkeypatch.setattr(

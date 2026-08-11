@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.adapters.discord.responses import DeferredEphemeralResponse
-from bot.core.widgets import render_embed
+from bot.app.discord.responses import DeferredEphemeralResponse
+from bot.app.templates import render_embed
 
 
 @pytest.mark.asyncio

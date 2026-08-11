@@ -12,7 +12,7 @@ import discord
 from tests.core.constants import TEST_CLEANUP_REASON
 
 if TYPE_CHECKING:
-    from bot.core.runtime import BotContext
+    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 

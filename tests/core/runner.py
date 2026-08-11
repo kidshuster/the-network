@@ -16,8 +16,8 @@ from tests.core.provision_flow import create_smoke_context
 from tests.core.recipes import RecipeRunner, load_recipes
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
-    from bot.core.runtime import BotContext
+    from bot.app.bot import NetworkRelayBot
+    from bot.app.context import BotContext
 
 
 class LiveBot:

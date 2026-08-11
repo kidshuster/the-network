@@ -5,32 +5,24 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.core.channels.resolve import (
+from bot.features.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
     CHANNEL_CHANGELOG,
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_NETWORK_ANNOUNCEMENTS,
-    CHANNEL_WELCOME_SINK,
     ChannelLookupError,
     find_channel,
-    join_channel_name,
     require_channel,
     resolve_announcement_channel_in_category,
     resolve_bot_role,
     resolve_changelog_channel,
     resolve_human_moderator_role,
     resolve_moderator_role,
-    resolve_network_announcement_channel,
     resolve_network_announcements_channel,
     resolve_network_hub_category,
-    resolve_welcome_sink_channel,
 )
-
-
-def test_join_channel_name() -> None:
-    assert join_channel_name("Stingers") == "join-stingers"
 
 
 def test_find_channel_prefers_canonical_name_and_respects_category() -> None:
@@ -115,16 +107,6 @@ def test_join_requests_channel_name_constant() -> None:
     assert CHANNEL_JOIN_REQUESTS == "join-requests"
 
 
-def test_resolve_welcome_sink_channel() -> None:
-    guild = MagicMock(spec=discord.Guild)
-    sink = MagicMock(spec=discord.TextChannel)
-    sink.name = CHANNEL_WELCOME_SINK
-    other = MagicMock(spec=discord.TextChannel)
-    other.name = "rules"
-    guild.text_channels = [other, sink]
-    assert resolve_welcome_sink_channel(guild) is sink
-
-
 def test_resolve_changelog_channel_only_in_leaders_category() -> None:
     guild = MagicMock(spec=discord.Guild)
     leaders_category = MagicMock(spec=discord.CategoryChannel)
@@ -143,22 +125,6 @@ def test_resolve_changelog_channel_only_in_leaders_category() -> None:
     guild.text_channels = [elsewhere, in_leaders]
 
     assert resolve_changelog_channel(guild) is in_leaders
-
-
-def test_resolve_network_announcement_channel() -> None:
-    guild = MagicMock(spec=discord.Guild)
-    category = MagicMock(spec=discord.CategoryChannel)
-    category.id = 10
-    match = MagicMock(spec=discord.TextChannel)
-    match.name = "stingers-announcements"
-    match.category_id = 10
-    match.type = discord.ChannelType.news
-    other = MagicMock(spec=discord.TextChannel)
-    other.name = "other-announcements"
-    other.category_id = 11
-    other.type = discord.ChannelType.news
-    guild.channels = [other, match]
-    assert resolve_network_announcement_channel(guild, "stingers", category=category) is match
 
 
 def test_resolve_network_announcements_channel_uses_regular_text_channel() -> None:

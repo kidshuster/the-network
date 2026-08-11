@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.widgets.recipes import RecipeRegistryError, build_recipe_registry
+from bot.app.features import build_recipe_registry
+from bot.app.recipes import RecipeRegistryError
 
 
 def _bot(*, core: object | None = None) -> SimpleNamespace:
@@ -61,6 +62,24 @@ def test_command_metadata_is_owned_by_recipes() -> None:
         spec.command is not None and spec.command.default_permissions == ("manage_guild",)
         for spec in commands.values()
     )
+    for spec in commands.values():
+        assert spec.command is not None
+        assert spec.command.presenter is not None
+        assert registry.spec(spec.command.presenter).name == spec.command.presenter
+
+
+def test_startup_and_ready_work_are_discovered_as_recipes() -> None:
+    registry = build_recipe_registry(_bot())
+
+    assert set(registry.recipes_for_event("app.services")) == {"app.initialize_relay"}
+    assert set(registry.recipes_for_event("app.setup")) == {
+        "app.register_persistent_views",
+        "app.validate_features",
+    }
+    assert set(registry.recipes_for_event("app.ready")) == {
+        "app.sync_changelog",
+        "app.sync_subscription_stickies",
+    }
 
 
 async def test_message_event_composes_announcement_and_relay_recipes(
@@ -74,7 +93,7 @@ async def test_message_event_composes_announcement_and_relay_recipes(
     bot = _bot(core=core)
     handled = AsyncMock()
     monkeypatch.setattr(
-        "bot.core.hub.announcements.handle_network_announcements_message",
+        "bot.features.hub.announcements.handle_network_announcements_message",
         handled,
     )
     registry = build_recipe_registry(bot)
@@ -179,9 +198,12 @@ async def test_network_create_recipe_owns_complete_operation(
     bot = _bot(core=core)
     resync = AsyncMock(return_value=3)
     refresh_profiles = AsyncMock(return_value=2)
-    monkeypatch.setattr("bot.core.clients.subscription.resync_subscriptions_for_network", resync)
     monkeypatch.setattr(
-        "bot.core.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
+        "bot.features.clients.subscription.resync_subscriptions_for_network",
+        resync,
+    )
+    monkeypatch.setattr(
+        "bot.features.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
     )
     registry = build_recipe_registry(bot)
     guild = MagicMock(spec=discord.Guild)
@@ -237,7 +259,7 @@ async def test_network_delete_recipe_refreshes_state_and_profiles(
     )
     refresh_profiles = AsyncMock(return_value=2)
     monkeypatch.setattr(
-        "bot.core.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
+        "bot.features.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
     )
     registry = build_recipe_registry(_bot(core=core))
     guild = MagicMock(spec=discord.Guild)

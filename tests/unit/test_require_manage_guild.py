@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.adapters.discord.checks import ensure_manage_guild
-from bot.core.widgets import render_text
+from bot.app.discord.checks import ensure_manage_guild
+from bot.app.templates import render_text
 
 
 @pytest.mark.asyncio

@@ -155,14 +155,14 @@ async def run_mock_probe(
         return ProbeOutcome("operator setup", "role hierarchy valid")
     if name == "hub.manage_server":
         return ProbeOutcome("manage server", "notification setting supported")
-    if name == "hub.moderator_channel":
-        if "moderator-only" in state.hidden_community_channels:
-            raise RuntimeError("moderator-only exists but denies the bot view access")
-        if "moderator-only" in state.misplaced_channels:
-            raise RuntimeError("moderator-only channel is outside Moderation")
+    if name == "hub.admin_channel":
+        if "admin" in state.hidden_community_channels:
+            raise RuntimeError("admin exists but denies the bot view access")
+        if "admin" in state.misplaced_channels:
+            raise RuntimeError("admin channel is outside Moderation")
         if not state.layout_present:
-            raise RuntimeError("moderator-only channel is missing")
-        return ProbeOutcome("moderator-only channel", "community channel placement valid")
+            raise RuntimeError("admin channel is missing")
+        return ProbeOutcome("admin channel", "community channel placement valid")
     if name == "hub.layout":
         if not state.layout_present:
             raise RuntimeError("hub layout resources are missing")

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.channels.stickies.join import (
+from bot.features.channels.stickies.join import (
     build_how_to_join_embed,
     build_how_to_join_footer,
     format_how_to_join_sticky_location,
@@ -62,7 +62,7 @@ def test_build_how_to_join_embed_is_minimal_prejoin_cta() -> None:
     embed = build_how_to_join_embed()
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "Join Network" in body
-    assert "network-profile" in body
+    assert "client-profile" in body
     assert "Enable Community" not in body
     assert "Blacklist" not in body
     assert embed.footer is not None

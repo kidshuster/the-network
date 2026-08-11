@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from bot.core.channels.stickies import load_sticky_catalog, validate_sticky_catalog
-from bot.core.widgets import load_template
+from bot.app.templates import load_template
+from bot.features.channels.stickies import load_sticky_catalog, validate_sticky_catalog
 
 
 def test_sticky_catalog_references_valid_templates() -> None:

@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.app.context import BotContext
 from bot.config import Settings
 from bot.core.models.server_request import ServerRequestStatus
-from bot.core.networks.roles import (
+from bot.features.networks.roles import (
     resolve_access_role,
 )
-from bot.core.runtime import BotContext
-from bot.core.widgets.recipes.onboarding.service import ServerRequestService
-from bot.core.widgets.views.persistent_views import PersistentViewRegistry
+from bot.features.recipes.onboarding.service import ServerRequestService
+from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 from bot.testing.context_factory import create_bot_context
 from tests.core.constants import SMOKE_CLEANUP_REASON
 from tests.core.permission_probe import (
@@ -26,7 +26,7 @@ from tests.core.permission_probe import (
 from tests.core.resource_guard import delete_guild_channel_for_cleanup, guild_test_resource_guard
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
+    from bot.app.bot import NetworkRelayBot
     from bot.core.database.connection import Database
 
 logger = logging.getLogger(__name__)
@@ -285,7 +285,7 @@ async def cleanup_smoke_join_request_messages(
     if not request_ids:
         return
 
-    from bot.core.channels.resolve import resolve_join_requests_channel
+    from bot.features.channels.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     for request_id in request_ids:
@@ -315,7 +315,7 @@ async def cleanup_join_requests_smoke_artifacts(
     bot_member: discord.Member,
 ) -> None:
     """Remove smoke join-request messages and DB rows from `#join-requests`."""
-    from bot.core.channels.resolve import resolve_join_requests_channel
+    from bot.features.channels.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     if channel is not None:
@@ -447,7 +447,7 @@ async def run_join_approval_smoke_flow(
 
             networks = await context.store.networks.list_all()
             if networks:
-                from bot.core.clients.subscription import ClientSubscriptionService
+                from bot.features.clients.subscription import ClientSubscriptionService
 
                 network = networks[0]
                 sub_service = ClientSubscriptionService()
@@ -550,8 +550,8 @@ async def ensure_smoke_network_key(
     if explicit:
         existing = await context.store.networks.get_by_key(explicit)
         if existing is None:
-            from bot.core.widgets.recipes.network.service import create_network
-            from bot.core.widgets.views.persistent_views import PersistentViewRegistry
+            from bot.features.recipes.network.service import create_network
+            from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 
             created = await create_network(
                 context,
@@ -569,8 +569,8 @@ async def ensure_smoke_network_key(
     if existing is not None:
         return existing.key
 
-    from bot.core.widgets.recipes.network.service import create_network
-    from bot.core.widgets.views.persistent_views import PersistentViewRegistry
+    from bot.features.recipes.network.service import create_network
+    from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 
     created = await create_network(
         context,
@@ -666,7 +666,7 @@ async def provision_smoke_client_with_subscription(
     if client is None:
         raise RuntimeError("Smoke accept did not register a client.")
 
-    from bot.core.clients.subscription import ClientSubscriptionService
+    from bot.features.clients.subscription import ClientSubscriptionService
 
     sub_service = ClientSubscriptionService()
     subscribe = await sub_service.subscribe_client(
@@ -703,12 +703,12 @@ async def run_hub_rebuild_smoke_flow(
     skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
-    from bot.core.channels.resolve import resolve_join_requests_channel
-    from bot.core.hub.data_reset import reset_hub_layout_data
-    from bot.core.widgets.recipes.hub.initialize import initialize_guild
-    from bot.core.widgets.recipes.hub.uninitialize import uninitialize_guild
-    from bot.core.widgets.recipes.network.service import create_network
-    from bot.core.widgets.views.persistent_views import PersistentViewRegistry
+    from bot.features.channels.resolve import resolve_join_requests_channel
+    from bot.features.hub.data_reset import reset_hub_layout_data
+    from bot.features.recipes.hub.initialize import initialize_guild
+    from bot.features.recipes.hub.uninitialize import uninitialize_guild
+    from bot.features.recipes.network.service import create_network
+    from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 
     view_registry = PersistentViewRegistry(bot)
 
@@ -755,7 +755,7 @@ async def run_hub_rebuild_smoke_flow(
         if not uninit.success:
             raise RuntimeError(uninit.reason or "server uninit failed")
 
-        from bot.core.channels.layout.managed import hub_category_names, preserved_channel_names
+        from bot.app.layout.managed import hub_category_names, preserved_channel_names
 
         # Client artifacts must survive hub uninit.
         if guild.get_role(state.client_role_id) is None:
@@ -880,10 +880,10 @@ async def run_hub_rebuild_smoke_flow(
             raise RuntimeError("Client category was removed during hub rebuild.")
 
         # Client layout overwrites must match YAML after re-init.
-        from bot.core.channels.layout import LayoutContext, compile_client
-        from bot.core.channels.resolve import resolve_human_moderator_role
+        from bot.app.layout import LayoutContext, compile_client
         from bot.core.clients.names import slugify_client_name
-        from bot.core.networks.roles import (
+        from bot.features.channels.resolve import resolve_human_moderator_role
+        from bot.features.networks.roles import (
             resolve_access_role,
             resolve_operator_role_by_name,
         )

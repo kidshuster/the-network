@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from bot.core.widgets.recipes.metadata import CommandSpec
-from bot.core.widgets.recipes.registry import RecipeRegistry, RecipeRegistryError, recipe
-from bot.core.widgets.recipes.runtime import RecipeContext
+from bot.app.recipes.metadata import CommandSpec
+from bot.app.recipes.registry import RecipeRegistry, RecipeRegistryError, recipe
+from bot.app.recipes.runtime import RecipeContext
 
 
 def test_registry_indexes_recipe_metadata() -> None:

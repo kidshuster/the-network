@@ -9,7 +9,7 @@ from test_guild_init import _patch_init_roles
 from view_registry_helpers import make_test_view_registry
 
 from bot.core.models.client import Client
-from bot.core.widgets.recipes.hub.initialize import initialize_guild
+from bot.features.recipes.hub.initialize import initialize_guild
 
 
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
@@ -76,7 +76,7 @@ async def test_init_moves_channel_from_wrong_category(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.core.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_category = AsyncMock()
@@ -95,7 +95,7 @@ async def test_init_moves_channel_from_wrong_category(
 
 
 @pytest.mark.asyncio
-async def test_init_syncs_existing_channel_in_correct_category(
+async def test_init_removes_retired_commands_channel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guild, bot, human_mod, access, operator = make_guild_with_roles()
@@ -108,7 +108,9 @@ async def test_init_syncs_existing_channel_in_correct_category(
     commands.category_id = moderation.id
     commands.overwrites = {}
     commands.edit = AsyncMock()
+    commands.delete = AsyncMock()
     guild.text_channels = [commands]
+    guild.get_channel.side_effect = lambda channel_id: commands if channel_id == 801 else None
     guild.create_text_channel = AsyncMock(
         side_effect=lambda **kwargs: MagicMock(
             spec=discord.TextChannel,
@@ -123,7 +125,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.core.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -137,7 +139,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
     )
 
     assert result.success is True
-    commands.edit.assert_awaited()
+    commands.delete.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -162,13 +164,13 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.core.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     reconnect = AsyncMock()
-    monkeypatch.setattr("bot.core.clients.reconnect.reconnect_clients_on_init", reconnect)
+    monkeypatch.setattr("bot.features.clients.reconnect.reconnect_clients_on_init", reconnect)
     monkeypatch.setattr(
-        "bot.core.hub.leaders.ensure_leaders_channels",
+        "bot.features.hub.leaders.ensure_leaders_channels",
         AsyncMock(
             return_value=(
                 None,

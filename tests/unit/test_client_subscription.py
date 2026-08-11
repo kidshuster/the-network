@@ -7,21 +7,20 @@ import pytest
 from view_registry_helpers import make_test_view_registry
 
 from bot.core.clients.names import (
-    LEGACY_CLIENT_PROFILE_CHANNEL,
     build_client_profile_channel_base,
     build_client_publish_channel_base,
     build_client_subscribe_channel_base,
     slugify_client_name,
 )
-from bot.core.clients.subscription import (
+from bot.core.database.store import ClientStore, NetworkStore
+from bot.core.models.client import Client
+from bot.features.clients.subscription import (
     ClientSubscriptionService,
     build_client_category_channel_order,
     find_network_subscription_channels,
     reorder_client_category_channels,
     resync_subscriptions_for_network,
 )
-from bot.core.database.store import ClientStore, NetworkStore
-from bot.core.models.client import Client
 
 
 def _client(server_name: str = "acme") -> Client:
@@ -58,11 +57,8 @@ def test_build_client_category_channel_order_single_network() -> None:
     client = _client()
     assert build_client_category_channel_order(client, ["stingers"]) == [
         "acme-profile",
-        LEGACY_CLIENT_PROFILE_CHANNEL,
         "acme-stingers-subscribe",
-        "stingers-subscribe",
         "acme-stingers-publish",
-        "stingers-publish",
     ]
 
 
@@ -70,19 +66,14 @@ def test_build_client_category_channel_order_sorts_network_keys() -> None:
     client = _client()
     assert build_client_category_channel_order(client, ["zebra", "alpha"]) == [
         "acme-profile",
-        LEGACY_CLIENT_PROFILE_CHANNEL,
         "acme-alpha-subscribe",
-        "alpha-subscribe",
         "acme-alpha-publish",
-        "alpha-publish",
         "acme-zebra-subscribe",
-        "zebra-subscribe",
         "acme-zebra-publish",
-        "zebra-publish",
     ]
 
 
-def test_find_network_subscription_channels_matches_new_and_legacy_names() -> None:
+def test_find_network_subscription_channels_matches_configured_names() -> None:
     category = MagicMock(spec=discord.CategoryChannel)
     publish = MagicMock(spec=discord.TextChannel)
     publish.name = "acme-stingers-publish"
@@ -91,23 +82,6 @@ def test_find_network_subscription_channels_matches_new_and_legacy_names() -> No
     other = MagicMock(spec=discord.TextChannel)
     other.name = "acme-profile"
     category.channels = [other, subscribe, publish]
-
-    found_publish, found_subscribe = find_network_subscription_channels(
-        category,
-        "stingers",
-        client=_client(),
-    )
-    assert found_publish is publish
-    assert found_subscribe is subscribe
-
-
-def test_find_network_subscription_channels_falls_back_to_legacy_names() -> None:
-    category = MagicMock(spec=discord.CategoryChannel)
-    publish = MagicMock(spec=discord.TextChannel)
-    publish.name = "stingers-publish"
-    subscribe = MagicMock(spec=discord.TextChannel)
-    subscribe.name = "stingers-subscribe"
-    category.channels = [subscribe, publish]
 
     found_publish, found_subscribe = find_network_subscription_channels(
         category,
@@ -139,18 +113,18 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
 
     publish = MagicMock(spec=discord.TextChannel)
     publish.id = 201
-    publish.name = "stingers-publish"
+    publish.name = "acme-stingers-publish"
     publish.edit = AsyncMock()
     publish.webhooks = AsyncMock(return_value=[])
     publish.send = AsyncMock(return_value=MagicMock(id=9001))
     subscribe = MagicMock(spec=discord.TextChannel)
     subscribe.id = 301
-    subscribe.name = "stingers-subscribe"
+    subscribe.name = "acme-stingers-subscribe"
     subscribe.edit = AsyncMock()
     subscribe.send = AsyncMock(return_value=MagicMock(id=9002))
     profile = MagicMock(spec=discord.TextChannel)
     profile.id = 30
-    profile.name = "network-profile"
+    profile.name = "acme-profile"
     profile.fetch_message = AsyncMock(side_effect=discord.HTTPException(MagicMock(), "missing"))
     profile.send = AsyncMock(return_value=MagicMock(id=999))
 
@@ -197,11 +171,11 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
-            "bot.core.clients.subscription.resolve_access_role",
+            "bot.features.clients.subscription.resolve_access_role",
             lambda *_args, **_kwargs: client_role,
         )
         patch.setattr(
-            "bot.core.clients.subscription.resolve_human_moderator_role",
+            "bot.features.clients.subscription.resolve_human_moderator_role",
             lambda *_args, **_kwargs: None,
         )
         relinked = await resync_subscriptions_for_network(

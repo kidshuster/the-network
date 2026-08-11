@@ -6,37 +6,37 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.app.layout import LayoutContext, compile_client, compile_hub
+from bot.app.layout.compiler import ResourceKind
+from bot.app.layout.managed import hub_category_names, preserved_channel_names
 from bot.config import Settings
-from bot.core.channels.layout import LayoutContext, compile_client, compile_hub
-from bot.core.channels.layout.compiler import ResourceKind
-from bot.core.channels.layout.managed import hub_category_names, preserved_channel_names
-from bot.core.channels.resolve import (
+from bot.core.clients.names import slugify_client_name
+from bot.features.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
+    CHANNEL_ADMIN,
     CHANNEL_CHANGELOG,
     CHANNEL_LEADERS,
-    CHANNEL_MODERATOR_ONLY,
     resolve_changelog_channel,
     resolve_human_moderator_role,
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.core.clients.names import slugify_client_name
-from bot.core.hub.leaders import ensure_leaders_channels
-from bot.core.networks.roles import (
+from bot.features.hub.leaders import ensure_leaders_channels
+from bot.features.networks.roles import (
     resolve_access_role,
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
-from bot.core.widgets.recipes.hub.initialize import initialize_guild
-from bot.core.widgets.views.persistent_views import PersistentViewRegistry
+from bot.features.recipes.hub.initialize import initialize_guild
+from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 from tests.core.constants import SERVER_INIT_PROBE_REASON
 from tests.core.provision_flow import run_configured_permission_provision_probe
 from tests.core.resource_guard import guild_test_resource_guard, is_smoke_client_server_name
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
-    from bot.core.runtime import BotContext
+    from bot.app.bot import NetworkRelayBot
+    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -172,17 +172,17 @@ async def probe_manage_server_permission(
     )
 
 
-async def probe_moderator_only_channel(
+async def probe_admin_channel(
     guild: discord.Guild,
     bot_member: discord.Member,
 ) -> ProbeResult:
     for channel in guild.text_channels:
-        if channel.name.casefold() != CHANNEL_MODERATOR_ONLY:
+        if channel.name.casefold() != CHANNEL_ADMIN:
             continue
         perms = channel.permissions_for(bot_member)
         if not perms.view_channel:
             return ProbeResult(
-                "moderator-only channel",
+                "admin channel",
                 False,
                 (
                     f"#{channel.name} exists outside hub control and denies bot view "
@@ -192,7 +192,7 @@ async def probe_moderator_only_channel(
             )
         if channel.category is None or channel.category.name != CATEGORY_MODERATION:
             return ProbeResult(
-                "moderator-only channel",
+                "admin channel",
                 False,
                 (
                     f"#{channel.name} is visible but not in **{CATEGORY_MODERATION}** — "
@@ -200,14 +200,14 @@ async def probe_moderator_only_channel(
                 ),
             )
         return ProbeResult(
-            "moderator-only channel",
+            "admin channel",
             True,
-            f"#{CHANNEL_MODERATOR_ONLY} is in **{CATEGORY_MODERATION}**",
+            f"#{CHANNEL_ADMIN} is in **{CATEGORY_MODERATION}**",
         )
     return ProbeResult(
-        "moderator-only channel",
+        "admin channel",
         True,
-        f"no #{CHANNEL_MODERATOR_ONLY} channel present (init will create one)",
+        f"no #{CHANNEL_ADMIN} channel present (init will create one)",
     )
 
 
@@ -283,11 +283,6 @@ async def probe_hub_layout(
                 if resource.community_slot is not None:
                     found = _channel_by_name(guild, resource.name)
                     if found is None:
-                        for legacy in resource.legacy_names:
-                            found = _channel_by_name(guild, legacy)
-                            if found is not None:
-                                break
-                    if found is None:
                         community_missing.append(resource.name)
                     elif (
                         resource.community_slot == "rules"
@@ -300,7 +295,7 @@ async def probe_hub_layout(
         except Exception as exc:
             return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
     else:
-        from bot.core.channels.layout.loader import load_layout
+        from bot.app.layout.loader import load_layout
 
         for category in load_layout().layout.categories.values():
             for channel in category.channels.values():
@@ -339,7 +334,7 @@ async def probe_hub_announcements(
     settings: Settings,
 ) -> ProbeResult:
     del context, settings
-    from bot.core.channels.resolve import (
+    from bot.features.channels.resolve import (
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )
@@ -834,7 +829,7 @@ async def run_server_init_audit(
     report.add(await probe_operator_setup(guild, bot_member, settings))
     report.add(await probe_permission_provision(guild, bot_member, settings))
     report.add(await probe_manage_server_permission(guild, bot_member))
-    report.add(await probe_moderator_only_channel(guild, bot_member))
+    report.add(await probe_admin_channel(guild, bot_member))
     report.add(await probe_hub_layout(guild, bot_member, settings))
     report.add(await probe_hub_announcements(guild, context, settings))
     report.add(await probe_leaders_access_current(guild, context))
@@ -854,7 +849,7 @@ async def run_server_init_stress_probes(
     report.add(await probe_operator_setup(guild, bot_member, settings))
     report.add(await probe_permission_provision(guild, bot_member, settings))
     report.add(await probe_manage_server_permission(guild, bot_member))
-    report.add(await probe_moderator_only_channel(guild, bot_member))
+    report.add(await probe_admin_channel(guild, bot_member))
     report.add(await probe_hub_layout(guild, bot_member, settings))
     report.add(await probe_hub_announcements(guild, context, settings))
     report.add(await probe_leaders_drift_resync(guild, bot_member, context, settings))
@@ -910,7 +905,7 @@ async def run_server_init_functional_probes(
     report = ServerInitProbeReport()
     report.add(await probe_operator_setup(guild, bot_member, settings))
     report.add(await probe_manage_server_permission(guild, bot_member))
-    report.add(await probe_moderator_only_channel(guild, bot_member))
+    report.add(await probe_admin_channel(guild, bot_member))
     report.add(await probe_hub_layout(guild, bot_member, settings))
     report.add(await probe_hub_announcements(guild, context, settings))
     report.add(await probe_leaders_drift_resync(guild, bot_member, context, settings))

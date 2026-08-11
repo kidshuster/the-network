@@ -5,10 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 from context_helpers import make_test_context
 
-from bot.client import NetworkRelayBot
-from bot.core.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
-from bot.core.widgets.views.network_admin_views import NetworkAdminView
-from bot.core.widgets.views.network_views import (
+from bot.app.bot import NetworkRelayBot
+from bot.app.features import build_recipe_registry
+from bot.features.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
+from bot.features.widgets.views.network_admin_views import NetworkAdminView
+from bot.features.widgets.views.network_views import (
     NetworkProfileView,
     SubscribeSetupView,
     SubscriptionModerationView,
@@ -55,7 +56,7 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
     added: list[object] = []
     bot.add_view = MagicMock(side_effect=lambda view: added.append(view))
 
-    await NetworkRelayBot._register_persistent_views(bot)
+    await build_recipe_registry(bot).run("app.register_persistent_views")
 
     view_types = {type(view) for view in added}
     assert JoinNetworkView in view_types
@@ -67,11 +68,13 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
 
 
 @pytest.mark.asyncio
-async def test_register_persistent_views_noop_without_context() -> None:
+async def test_register_persistent_views_requires_initialized_context() -> None:
     bot = MagicMock(spec=NetworkRelayBot)
     bot.bot_context = None
     bot.add_view = MagicMock()
 
-    await NetworkRelayBot._register_persistent_views(bot)
+    registry = build_recipe_registry(bot)
+    with pytest.raises(Exception, match="app.register_persistent_views"):
+        await registry.run("app.register_persistent_views")
 
     bot.add_view.assert_not_called()

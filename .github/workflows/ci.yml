@@ -39,3 +39,6 @@ jobs:
 
       - name: Install bundle check
         run: ./bin/test_deploy_bundle.sh
+
+      - name: Docker image build
+        run: docker build --tag the-network:ci .

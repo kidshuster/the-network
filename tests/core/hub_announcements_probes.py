@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.core.channels.resolve import resolve_network_announcements_channel
-from bot.core.hub.announcements import dispatch_system_announcement
+from bot.features.channels.resolve import resolve_network_announcements_channel
+from bot.features.hub.announcements import dispatch_system_announcement
 from tests.core.provision_flow import ensure_smoke_network_key
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
-    from bot.core.runtime import BotContext
+    from bot.app.bot import NetworkRelayBot
+    from bot.app.context import BotContext
 
 
 @dataclass(frozen=True)

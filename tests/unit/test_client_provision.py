@@ -6,11 +6,11 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 
-from bot.core.clients.provision import (
+from bot.core.models.errors import NetworkValidationError, ProfileValidationError
+from bot.features.clients.provision import (
     ClientProvisionService,
     build_unique_role_name,
 )
-from bot.core.models.errors import NetworkValidationError, ProfileValidationError
 
 
 def test_build_unique_role_name_suffixes_on_collision() -> None:
@@ -37,26 +37,26 @@ async def test_provision_client_creates_role_category_profile(
     guild.roles = [*guild.roles, client_role]
 
     monkeypatch.setattr(
-        "bot.core.clients.provision.resolve_operator_role_by_name",
+        "bot.features.clients.provision.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.core.clients.provision.resolve_access_role",
+        "bot.features.clients.provision.resolve_access_role",
         MagicMock(return_value=access),
     )
     monkeypatch.setattr(
-        "bot.core.clients.provision.validate_provision_permissions",
+        "bot.features.clients.provision.validate_provision_permissions",
         MagicMock(),
     )
     monkeypatch.setattr(
-        "bot.core.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.core.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.features.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
-    from bot.core.channels.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
 
     batch = BatchApplyResult(
         results=[
@@ -73,11 +73,11 @@ async def test_provision_client_creates_role_category_profile(
         ]
     )
     monkeypatch.setattr(
-        "bot.core.clients.provision.apply_layout",
+        "bot.features.clients.provision.apply_layout",
         AsyncMock(return_value=batch),
     )
     monkeypatch.setattr(
-        "bot.core.clients.provision.build_unique_channel_name",
+        "bot.features.clients.provision.build_unique_channel_name",
         MagicMock(return_value="acme-profile"),
     )
 
@@ -118,15 +118,15 @@ async def test_provision_client_maps_validation_error(
 ) -> None:
     guild, bot, _, _, operator = make_guild_with_roles()
     monkeypatch.setattr(
-        "bot.core.clients.provision.resolve_access_role",
+        "bot.features.clients.provision.resolve_access_role",
         MagicMock(return_value=MagicMock(spec=discord.Role)),
     )
     monkeypatch.setattr(
-        "bot.core.networks.roles.resolve_operator_role_by_name",
+        "bot.features.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.core.clients.provision.validate_provision_permissions",
+        "bot.features.clients.provision.validate_provision_permissions",
         MagicMock(
             side_effect=NetworkValidationError("operator misconfigured"),
         ),

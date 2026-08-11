@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock, call
 
 import discord
 
-from bot.core.adapters.discord.commands import register_recipe_commands
-from bot.core.widgets.recipes.metadata import CommandSpec, RecipeSpec
+from bot.app.discord.commands import register_recipe_commands
+from bot.app.recipes.metadata import CommandSpec, RecipeSpec
 
 
 def _bot() -> MagicMock:
@@ -21,7 +21,7 @@ def _bot() -> MagicMock:
                 "init",
                 "Initialize server",
                 default_permissions=("manage_guild",),
-                presenter="server.init",
+                presenter="present.server.init",
             ),
         ),
         RecipeSpec(
@@ -31,7 +31,7 @@ def _bot() -> MagicMock:
                 "uninit",
                 "Remove server layout",
                 default_permissions=("manage_guild",),
-                presenter="server.uninit",
+                presenter="present.server.uninit",
             ),
         ),
     )
@@ -55,8 +55,6 @@ async def test_generated_command_runs_recipe_and_presenter(
     bot = _bot()
     result = SimpleNamespace(success=True)
     bot.recipe_registry.run = AsyncMock(return_value=result)
-    presented = AsyncMock()
-    monkeypatch.setattr("bot.core.adapters.discord.commands.present_result", presented)
     register_recipe_commands(bot)
     group = bot.tree.add_command.call_args.args[0]
     command = group.get_command("init")
@@ -71,8 +69,16 @@ async def test_generated_command_runs_recipe_and_presenter(
 
     await command.callback(interaction)
 
-    bot.recipe_registry.run.assert_awaited_once_with("server.init", interaction=interaction)
-    presented.assert_awaited_once()
+    bot.recipe_registry.run.assert_has_awaits(
+        [
+            call("server.init", interaction=interaction),
+            call(
+                "present.server.init",
+                response=ANY,
+                value=result,
+            ),
+        ]
+    )
 
 
 async def test_generated_command_enforces_declared_permissions() -> None:

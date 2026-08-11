@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from bot.app.context import BotContext
 from bot.core.clients.cache import ClientCache
-from bot.core.clients.deletion import ClientDeletionService
 from bot.core.database.store import Store
 from bot.core.networks.routing import RoutingService
-from bot.core.runtime import BotContext
-from bot.core.widgets.views.network_views import NetworkProfileView
+from bot.features.clients.deletion import ClientDeletionService
+from bot.features.widgets.views.network_views import NetworkProfileView
 
 
 def _make_context(db) -> BotContext:
@@ -197,7 +197,7 @@ async def test_delete_client_stops_when_unsubscribe_fails(
 
     unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
     monkeypatch.setattr(
-        "bot.core.clients.subscription.ClientSubscriptionService.unsubscribe_client",
+        "bot.features.clients.subscription.ClientSubscriptionService.unsubscribe_client",
         AsyncMock(return_value=unsubscribe_result),
     )
 

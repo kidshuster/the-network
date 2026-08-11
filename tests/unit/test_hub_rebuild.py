@@ -7,8 +7,8 @@ import pytest
 from context_helpers import make_test_context
 from view_registry_helpers import make_test_view_registry
 
-from bot.core.clients.subscription import resync_subscriptions_for_network
-from bot.core.hub.data_reset import reset_hub_layout_data
+from bot.features.clients.subscription import resync_subscriptions_for_network
+from bot.features.hub.data_reset import reset_hub_layout_data
 
 
 @pytest.mark.asyncio
@@ -56,17 +56,17 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
 
     publish = MagicMock(spec=discord.TextChannel)
     publish.id = 201
-    publish.name = "stingers-publish"
+    publish.name = "acme-stingers-publish"
     publish.edit = AsyncMock()
     publish.send = AsyncMock(return_value=MagicMock(id=888))
     subscribe = MagicMock(spec=discord.TextChannel)
     subscribe.id = 301
-    subscribe.name = "stingers-subscribe"
+    subscribe.name = "acme-stingers-subscribe"
     subscribe.edit = AsyncMock()
     subscribe.send = AsyncMock(return_value=MagicMock(id=889))
     profile = MagicMock(spec=discord.TextChannel)
     profile.id = 30
-    profile.name = "network-profile"
+    profile.name = "acme-profile"
     profile.fetch_message = AsyncMock(side_effect=discord.HTTPException(MagicMock(), "missing"))
     profile.send = AsyncMock(return_value=MagicMock(id=888))
 
@@ -95,11 +95,11 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
-            "bot.core.clients.subscription.resolve_access_role",
+            "bot.features.clients.subscription.resolve_access_role",
             lambda *_args, **_kwargs: client_role,
         )
         patch.setattr(
-            "bot.core.clients.subscription.resolve_human_moderator_role",
+            "bot.features.clients.subscription.resolve_human_moderator_role",
             lambda *_args, **_kwargs: None,
         )
         relinked = await resync_subscriptions_for_network(

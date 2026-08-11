@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from bot.core.channels.stickies.admin import build_network_admin_embed
+from bot.app.recipes import RecipeRegistryError
 from bot.core.models.errors import NetworkValidationError
 from bot.core.models.network import Network
-from bot.core.widgets.recipes import RecipeRegistryError
-from bot.core.widgets.recipes.network.service import create_network, delete_network
+from bot.features.channels.stickies.admin import build_network_admin_embed
+from bot.features.recipes.network.service import create_network, delete_network
 
 
 def _network() -> Network:

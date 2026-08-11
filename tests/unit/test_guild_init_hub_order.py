@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.core.widgets.recipes.hub.initialize import (
+from bot.features.recipes.hub.initialize import (
     GuildInitResult,
     _reorder_guild_categories,
     _reorder_hub_categories,
@@ -26,7 +26,7 @@ async def test_reorder_hub_categories_places_moderation_and_network_at_top() -> 
         return await action()
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr("bot.core.hub.reconcilers._run_init_step", run_step)
+        patch.setattr("bot.features.hub.reconcilers._run_init_step", run_step)
         await _reorder_hub_categories(moderation, network, result=result)
 
     moderation.edit.assert_awaited_once_with(
@@ -62,7 +62,7 @@ async def test_reorder_guild_categories_places_leaders_below_network_and_clients
         return await action()
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr("bot.core.hub.reconcilers._run_init_step", run_step)
+        patch.setattr("bot.features.hub.reconcilers._run_init_step", run_step)
         await _reorder_guild_categories(
             moderation,
             network,

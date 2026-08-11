@@ -118,7 +118,7 @@ async def test_mock_functional_recipe_rectifies_stale_permissions() -> None:
 @pytest.mark.asyncio
 async def test_mock_audit_exposes_missing_layout() -> None:
     context = load_mock_context("missing_layout")
-    with pytest.raises(RuntimeError, match="moderator-only channel is missing"):
+    with pytest.raises(RuntimeError, match="admin channel is missing"):
         await RecipeRunner(context, load_recipes(), backend="mock").run("audit")
 
 

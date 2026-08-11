@@ -4,16 +4,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from bot.core.adapters.discord.errors import report_error, respond_to_error
-from bot.core.adapters.discord.responses import DeferredEphemeralResponse
-from bot.core.widgets.recipes import RecipeRegistryError
+from bot.app.discord.errors import report_error, respond_to_error
+from bot.app.discord.responses import DeferredEphemeralResponse
+from bot.app.recipes import RecipeRegistryError
 from bot.errors import UserFacingError
 
 
 def _guild_with_moderator_channel() -> tuple[MagicMock, MagicMock]:
     guild = MagicMock(spec=discord.Guild)
     channel = MagicMock(spec=discord.TextChannel)
-    channel.name = "moderator-only"
+    channel.name = "admin"
     channel.send = AsyncMock()
     guild.public_updates_channel = channel
     guild.text_channels = [channel]
@@ -73,7 +73,7 @@ async def test_unexpected_recipe_error_hides_internal_detail_from_user() -> None
     assert "RuntimeError" in moderator_embed.description
 
 
-async def test_error_report_falls_back_to_named_moderator_channel() -> None:
+async def test_error_report_does_not_guess_when_community_channel_is_missing() -> None:
     guild, moderator_channel = _guild_with_moderator_channel()
     guild.public_updates_channel = None
 
@@ -85,4 +85,4 @@ async def test_error_report_falls_back_to_named_moderator_channel() -> None:
     )
 
     assert reference
-    moderator_channel.send.assert_awaited_once()
+    moderator_channel.send.assert_not_awaited()

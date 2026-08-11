@@ -18,6 +18,7 @@ from tests.core.provision_flow import (
 from tests.core.resource_guard import cleanup_guild_test_artifacts
 from tests.core.server_init_probes import (
     ProbeResult,
+    probe_admin_channel,
     probe_client_layout_reinit,
     probe_hub_announcements,
     probe_hub_layout,
@@ -26,7 +27,6 @@ from tests.core.server_init_probes import (
     probe_leaders_drift_resync,
     probe_leaders_idempotent_reinit,
     probe_manage_server_permission,
-    probe_moderator_only_channel,
     probe_operator_setup,
     probe_reinit_rectifies_clients,
 )
@@ -34,9 +34,9 @@ from tests.core.setup_welcome_probes import run_setup_welcome_smoke_flow
 from tests.core.teardown import teardown_smoke_guild
 
 if TYPE_CHECKING:
-    from bot.client import NetworkRelayBot
+    from bot.app.bot import NetworkRelayBot
+    from bot.app.context import BotContext
     from bot.core.database.connection import Database
-    from bot.core.runtime import BotContext
     from tests.core.client_guard import ProtectedClient
 
 
@@ -152,9 +152,9 @@ async def hub_manage_server(context: LiveContext) -> ProbeOutcome:
     return _checked(await probe_manage_server_permission(context.guild, context.bot_member))
 
 
-@register("hub.moderator_channel")
+@register("hub.admin_channel")
 async def hub_moderator_channel(context: LiveContext) -> ProbeOutcome:
-    return _checked(await probe_moderator_only_channel(context.guild, context.bot_member))
+    return _checked(await probe_admin_channel(context.guild, context.bot_member))
 
 
 @register("hub.layout")

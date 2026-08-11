@@ -36,7 +36,7 @@ include = ["bot*"]
 
 [tool.setuptools.package-data]
 bot = [
-    "widgets/**/*.yaml",
+    "features/**/*.yaml",
 ]
 
 [tool.pytest.ini_options]

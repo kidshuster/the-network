@@ -6,15 +6,15 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.core.channels.layout import LayoutContext, compile_client, compile_hub, managed
-from bot.core.channels.layout.compiler import ResourceKind
-from bot.core.channels.layout.loader import (
+from bot.app.layout import LayoutContext, compile_client, compile_hub, managed
+from bot.app.layout.compiler import ResourceKind
+from bot.app.layout.loader import (
     clear_layout_cache,
     load_layout,
     load_roles,
     validate_all_layouts,
 )
-from bot.core.channels.layout.schema import RoleDefaultsSpec
+from bot.app.layout.schema import RoleDefaultsSpec
 
 
 def _context(*, clients: int = 1, network_key: str | None = "stingers") -> LayoutContext:
@@ -75,15 +75,17 @@ def test_hub_matches_expected_structure_and_channel_types() -> None:
     assert categories == ["Moderation", "The Network", "Leaders"]
     assert _resource(resources, "network_announcements").kind is ResourceKind.TEXT
     assert _resource(resources, "rules").community_slot == "rules"
-    assert _resource(resources, "moderator_only").community_slot == "public_updates"
+    assert _resource(resources, "admin").community_slot == "public_updates"
     assert _resource(resources, "rules").preserve_on_uninit
-    assert _resource(resources, "moderator_only").preserve_on_uninit
+    assert _resource(resources, "admin").preserve_on_uninit
+    assert all(resource.id != "commands" for resource in resources)
+    assert "commands" in load_layout().retired_channels
 
 
 @pytest.mark.parametrize(
     ("category_id", "channel_ids"),
     [
-        ("moderation", ("moderator_only", "join_requests", "network_announcements")),
+        ("moderation", ("admin", "join_requests", "network_announcements")),
         ("network", ("rules", "join_the_network")),
         ("leaders", ("leaders_channel", "changelog")),
     ],
@@ -105,6 +107,9 @@ def test_category_profile_materializes_onto_children(
             ):
                 assert actual.send_messages is True
                 continue
+            if category_id == "moderation" and channel_id == "admin":
+                assert actual.view_channel == expected.view_channel
+                continue
             assert actual.pair() == expected.pair()
 
 
@@ -121,14 +126,14 @@ def test_channel_exception_changes_only_requested_fields() -> None:
         assert _overwrite(leaders, client).view_channel is True
 
 
-def test_commands_adds_slash_permission_without_repeating_moderator_defaults() -> None:
+def test_admin_adds_slash_permission_without_repeating_moderator_defaults() -> None:
     ctx = _context()
     resources = compile_hub(ctx)
     moderation = _resource(resources, "moderation")
-    commands = _resource(resources, "commands")
+    admin = _resource(resources, "admin")
     assert _overwrite(moderation, ctx.moderator_role).use_application_commands is None
-    assert _overwrite(commands, ctx.moderator_role).use_application_commands is True
-    assert _overwrite(commands, ctx.moderator_role).manage_channels is True
+    assert _overwrite(admin, ctx.moderator_role).use_application_commands is True
+    assert _overwrite(admin, ctx.moderator_role).manage_channels is True
 
 
 def test_client_layout_has_one_profile_and_subscription_pair() -> None:
