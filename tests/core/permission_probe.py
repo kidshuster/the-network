@@ -154,11 +154,11 @@ async def verify_provision_permissions_live(
 
     from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_client
     from bot.core.clients.names import build_client_role_name
-    from bot.features.channels.resolve import resolve_human_moderator_role
-    from bot.features.networks.roles import (
+    from bot.core.networks.roles import (
         resolve_operator_role_by_name,
         validate_provision_permissions,
     )
+    from bot.features.channels.resolve import resolve_human_moderator_role
 
     _ = access_role_name
     suffix = secrets.token_hex(3)
@@ -336,7 +336,7 @@ async def _run_probe_step[T](
 
 def _probe_failure_detail(exc: BaseException) -> tuple[str, str]:
     """Return (failure line, guidance paragraph)."""
-    from bot.features.hub.changelog import installed_version
+    from bot.features.recipes.hub.changelog import installed_version
 
     version = installed_version()
     if isinstance(exc, discord.RateLimited):

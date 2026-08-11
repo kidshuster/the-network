@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.app.widgets import PersistentViewRegistry
 from bot.core.clients.setup_state import SubscriptionSetupState
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
@@ -15,8 +16,7 @@ from bot.features.channels.stickies.subscription import (
     _maybe_post_activation_welcome,
     sync_subscription_setup,
 )
-from bot.features.recipes.onboarding.service import ServerRequestService
-from bot.features.widgets.views.persistent_views import PersistentViewRegistry
+from bot.features.recipes.hub.onboarding.service import ServerRequestService
 from tests.core.permission_probe import PROBE_PNG
 from tests.core.provision_flow import (
     _SmokeProfileAttachment,
@@ -132,7 +132,7 @@ async def _provision_smoke_welcome_client(
     if client is None:
         raise RuntimeError("Smoke welcome accept did not register a client.")
 
-    from bot.features.clients.subscription import ClientSubscriptionService
+    from bot.features.recipes.hub.clients.subscription import ClientSubscriptionService
 
     sub_service = ClientSubscriptionService()
     subscribe = await sub_service.subscribe_client(

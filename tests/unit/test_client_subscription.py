@@ -14,7 +14,7 @@ from bot.core.clients.names import (
 )
 from bot.core.database.store import ClientStore, NetworkStore
 from bot.core.models.client import Client
-from bot.features.clients.subscription import (
+from bot.features.recipes.hub.clients.subscription import (
     ClientSubscriptionService,
     build_client_category_channel_order,
     find_network_subscription_channels,
@@ -171,11 +171,11 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
-            "bot.features.clients.subscription.resolve_access_role",
+            "bot.features.recipes.hub.clients.subscription.resolve_access_role",
             lambda *_args, **_kwargs: client_role,
         )
         patch.setattr(
-            "bot.features.clients.subscription.resolve_human_moderator_role",
+            "bot.features.recipes.hub.clients.subscription.resolve_human_moderator_role",
             lambda *_args, **_kwargs: None,
         )
         relinked = await resync_subscriptions_for_network(

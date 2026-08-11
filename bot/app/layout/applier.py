@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -8,6 +9,7 @@ import discord
 
 from bot.app.layout.compiler import DesiredResource, ResourceKind
 from bot.app.layout.roles import LayoutContext, resolve_targets
+from bot.core.channels.order import align_categories_hub_first, align_positions
 from bot.core.channels.finder import find_channel
 from bot.core.permissions.service import (
     PermissionContext,
@@ -128,10 +130,28 @@ async def _recreate_inaccessible_channel(
     )
 
 
+def _bound_channel(
+    guild: discord.Guild,
+    resource: DesiredResource,
+    bound_ids: Mapping[str, int] | None,
+) -> discord.abc.GuildChannel | None:
+    if not bound_ids:
+        return None
+    discord_id = bound_ids.get(resource.id)
+    if discord_id is None:
+        return None
+    return guild.get_channel(discord_id)
+
+
 def _find_category(
     guild: discord.Guild,
     resource: DesiredResource,
+    *,
+    bound_ids: Mapping[str, int] | None = None,
 ) -> discord.CategoryChannel | None:
+    bound = _bound_channel(guild, resource, bound_ids)
+    if isinstance(bound, discord.CategoryChannel):
+        return bound
     return find_channel(guild, resource.name, channel_type=discord.CategoryChannel)
 
 
@@ -140,7 +160,11 @@ def _find_text_channel(
     resource: DesiredResource,
     *,
     category: discord.CategoryChannel | None,
+    bound_ids: Mapping[str, int] | None = None,
 ) -> discord.TextChannel | None:
+    bound = _bound_channel(guild, resource, bound_ids)
+    if isinstance(bound, discord.TextChannel):
+        return bound
     if resource.community_slot == "rules":
         rules = guild.rules_channel
         if isinstance(rules, discord.TextChannel):
@@ -168,10 +192,11 @@ async def _ensure_category(
     context: LayoutContext,
     resource: DesiredResource,
     *,
+    bound_ids: Mapping[str, int] | None = None,
     _allow_recreate: bool = True,
 ) -> ResourceApplyResult:
     perm = _permission_context(context)
-    existing = _find_category(context.guild, resource)
+    existing = _find_category(context.guild, resource, bound_ids=bound_ids)
     try:
         result = await permission_service.ensure_category(
             context.guild,
@@ -181,6 +206,7 @@ async def _ensure_category(
             overwrites=resource.overwrites,
             managed_targets=resource.managed_targets,
             reason=context.reason,
+            position=resource.position,
         )
     except (discord.HTTPException, ValueError) as exc:
         detail = str(exc)
@@ -196,19 +222,6 @@ async def _ensure_category(
             success=False,
             detail=detail,
         )
-    position_changed = False
-    if resource.position is not None and result.resource.position != resource.position:
-        try:
-            await result.resource.edit(position=resource.position, reason=context.reason)
-            position_changed = True
-        except discord.HTTPException as exc:
-            return ResourceApplyResult(
-                resource_id=resource.id,
-                success=False,
-                changed=result.sync.changed,
-                detail=str(exc),
-                channel=result.resource,
-            )
     sync_detail: str | None = "; ".join(result.sync.failures) or None
     if (
         not result.sync.success
@@ -221,7 +234,7 @@ async def _ensure_category(
     return ResourceApplyResult(
         resource_id=resource.id,
         success=result.sync.success,
-        changed=result.sync.changed or position_changed,
+        changed=result.sync.changed,
         detail=sync_detail,
         channel=result.resource,
     )
@@ -233,11 +246,17 @@ async def _ensure_channel(
     categories: dict[str, discord.CategoryChannel],
     *,
     reconcile_only: bool,
+    bound_ids: Mapping[str, int] | None = None,
     _allow_recreate: bool = True,
 ) -> ResourceApplyResult:
     perm = _permission_context(context)
     category = categories.get(resource.category_ref or "")
-    existing = _find_text_channel(context.guild, resource, category=category)
+    existing = _find_text_channel(
+        context.guild,
+        resource,
+        category=category,
+        bound_ids=bound_ids,
+    )
 
     if existing is not None:
         wants_news = resource.kind is ResourceKind.ANNOUNCEMENT
@@ -491,6 +510,7 @@ async def apply_layout(
     resources: list[DesiredResource],
     *,
     mode: ApplyMode = ApplyMode.ENSURE,
+    bound_ids: Mapping[str, int] | None = None,
 ) -> BatchApplyResult:
     if mode is ApplyMode.TEARDOWN_HUB:
         return await _teardown_hub(context, resources)
@@ -502,7 +522,11 @@ async def apply_layout(
     for resource in resources:
         if resource.kind is ResourceKind.CATEGORY:
             if reconcile_only:
-                existing = _find_category(context.guild, resource)
+                existing = _find_category(
+                    context.guild,
+                    resource,
+                    bound_ids=bound_ids,
+                )
                 if existing is None:
                     batch.results.append(
                         ResourceApplyResult(
@@ -532,7 +556,11 @@ async def apply_layout(
                 categories[resource.id] = existing
                 continue
 
-            result = await _ensure_category(context, resource)
+            result = await _ensure_category(
+                context,
+                resource,
+                bound_ids=bound_ids,
+            )
             batch.results.append(result)
             if isinstance(result.channel, discord.CategoryChannel):
                 categories[resource.id] = result.channel
@@ -543,31 +571,12 @@ async def apply_layout(
             resource,
             categories,
             reconcile_only=reconcile_only,
+            bound_ids=bound_ids,
         )
         batch.results.append(result)
 
-    # Position pass for channels with explicit positions
-    by_category: dict[str, list[DesiredResource]] = {}
-    for resource in resources:
-        if resource.kind is ResourceKind.CATEGORY:
-            continue
-        if resource.position is None or resource.category_ref is None:
-            continue
-        by_category.setdefault(resource.category_ref, []).append(resource)
-    for category_id, ordered in by_category.items():
-        category = categories.get(category_id)
-        if category is None:
-            continue
-        for resource in sorted(ordered, key=lambda item: item.position or 0):
-            channel = batch.resource(resource.id)
-            if not isinstance(channel, discord.TextChannel):
-                continue
-            if resource.position is None:
-                continue
-            try:
-                await channel.edit(position=resource.position, reason=context.reason)
-            except discord.HTTPException:
-                logger.debug("Could not set position for #%s", resource.name, exc_info=True)
+    # Align sibling positions from layout order (relative indices, not YAML ints).
+    await _align_batch_positions(context, resources, batch, categories)
 
     if not reconcile_only and any(resource.managed == "hub" for resource in resources):
         from bot.app.layout.loader import load_layout
@@ -602,3 +611,84 @@ async def apply_layout(
             )
 
     return batch
+
+
+async def _align_batch_positions(
+    context: LayoutContext,
+    resources: list[DesiredResource],
+    batch: BatchApplyResult,
+    categories: dict[str, discord.CategoryChannel],
+) -> None:
+    """Move created/updated resources into layout order; keep clients below hub."""
+    category_resources = [
+        resource
+        for resource in resources
+        if resource.kind is ResourceKind.CATEGORY and resource.position is not None
+    ]
+    # Hub applies own the guild category stack: hub order first, then other
+    # categories (clients) packed below. Client-only batches keep the absolute
+    # position applied in _ensure_category (hub_count + index).
+    if any(resource.managed == "hub" for resource in category_resources):
+        category_resources.sort(key=lambda item: item.position or 0)
+        hub_categories: list[discord.CategoryChannel] = []
+        for resource in category_resources:
+            channel = batch.resource(resource.id)
+            if isinstance(channel, discord.CategoryChannel):
+                hub_categories.append(channel)
+        if hub_categories:
+            failures = await align_categories_hub_first(
+                context.guild,
+                hub_categories,
+                reason=f"{context.reason}: category order",
+            )
+            for detail in failures:
+                batch.results.append(
+                    ResourceApplyResult(
+                        resource_id="align:category",
+                        success=False,
+                        detail=detail,
+                    )
+                )
+
+    by_category: dict[str, list[DesiredResource]] = {}
+    for resource in resources:
+        if resource.kind is ResourceKind.CATEGORY:
+            continue
+        if resource.position is None or resource.category_ref is None:
+            continue
+        by_category.setdefault(resource.category_ref, []).append(resource)
+
+    for category_id, ordered in by_category.items():
+        category = categories.get(category_id)
+        if category is None:
+            continue
+        channels: list[discord.abc.GuildChannel] = []
+        for resource in sorted(ordered, key=lambda item: item.position or 0):
+            channel = batch.resource(resource.id)
+            if isinstance(channel, discord.TextChannel):
+                channels.append(channel)
+        if not channels:
+            continue
+        # Only pack when this batch covers every channel in the category.
+        # Partial client subscription creates leave profile in place; features
+        # call align_positions with the full desired order afterward.
+        sibling_ids = {
+            channel.id
+            for channel in category.channels
+            if isinstance(channel, discord.TextChannel)
+        }
+        managed_ids = {channel.id for channel in channels}
+        if sibling_ids - managed_ids:
+            continue
+        failures = await align_positions(
+            channels,
+            reason=f"{context.reason}: #{category_id} channel order",
+        )
+        for detail in failures:
+            batch.results.append(
+                ResourceApplyResult(
+                    resource_id=f"align:{category_id}",
+                    success=False,
+                    detail=detail,
+                )
+            )

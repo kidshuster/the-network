@@ -1,0 +1,33 @@
+kind: view
+id: delete_client_confirm
+timeout: 60
+components:
+  - type: button
+    id: confirm
+    label: "Delete permanently"
+    style: danger
+    params:
+      client_id: context.client_id
+    action:
+      trigger: client.delete
+      require:
+        - bot_ready
+        - client_role:
+            popup: client_role_required_delete
+            membership: required
+            ephemeral: null
+      inject: [guild, bot_member]
+      on_success:
+        embed: delete_client_success
+        map:
+          server_name: params.client.server_name
+  - type: button
+    id: cancel
+    label: Cancel
+    style: secondary
+    action:
+      reply:
+        popup: delete_client_cancelled
+        edit_message: true
+        clear_view: true
+      defer: false

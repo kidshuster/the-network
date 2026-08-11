@@ -19,7 +19,7 @@ async def test_ensure_human_moderator_role_creates_mentionable_role(
     created_role = MagicMock(spec=discord.Role)
     guild.create_role = AsyncMock(return_value=created_role)
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers.resolve_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=None),
     )
 
@@ -49,7 +49,7 @@ async def test_ensure_human_moderator_role_enables_mentions_on_existing_role(
     role.edit = AsyncMock(return_value=role)
 
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers.resolve_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=role),
     )
 

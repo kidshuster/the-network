@@ -8,7 +8,7 @@ from bot.app.recipes import RecipeRegistryError
 from bot.core.models.errors import NetworkValidationError
 from bot.core.models.network import Network
 from bot.features.channels.stickies.admin import build_network_admin_embed
-from bot.features.recipes.network.service import create_network, delete_network
+from bot.features.recipes.hub.network.service import create_network, delete_network
 
 
 def _network() -> Network:

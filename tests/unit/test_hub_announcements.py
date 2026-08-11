@@ -7,7 +7,7 @@ import pytest
 from context_helpers import make_test_context
 
 from bot.config import Settings
-from bot.features.hub.announcements import (
+from bot.features.recipes.hub.announcements import (
     can_post_hub_announcement,
     dispatch_system_announcement,
     parse_announcement_content,

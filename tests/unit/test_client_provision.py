@@ -7,9 +7,9 @@ import pytest
 from discord_helpers import make_guild_with_roles
 
 from bot.core.models.errors import NetworkValidationError, ProfileValidationError
-from bot.features.clients.provision import (
-    ClientProvisionService,
+from bot.features.recipes.hub.clients.provision import (
     build_unique_role_name,
+    provision_client,
 )
 
 
@@ -37,23 +37,28 @@ async def test_provision_client_creates_role_category_profile(
     guild.roles = [*guild.roles, client_role]
 
     monkeypatch.setattr(
-        "bot.features.clients.provision.resolve_operator_role_by_name",
+        "bot.features.recipes.hub.clients.provision.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.features.clients.provision.resolve_access_role",
+        "bot.features.recipes.hub.clients.provision.resolve_access_role",
         MagicMock(return_value=access),
     )
     monkeypatch.setattr(
-        "bot.features.clients.provision.validate_provision_permissions",
+        "bot.features.recipes.hub.clients.provision.validate_provision_permissions",
         MagicMock(),
+    )
+    bot_access = MagicMock(spec=discord.Role, id=45, name="The Network Bot Access")
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.provision.ensure_bot_access_role",
+        AsyncMock(return_value=bot_access),
     )
     monkeypatch.setattr(
         "bot.features.channels.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.features.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.features.recipes.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
     from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
@@ -73,16 +78,16 @@ async def test_provision_client_creates_role_category_profile(
         ]
     )
     monkeypatch.setattr(
-        "bot.features.clients.provision.apply_layout",
+        "bot.features.recipes.hub.clients.provision.apply_layout",
         AsyncMock(return_value=batch),
     )
     monkeypatch.setattr(
-        "bot.features.clients.provision.build_unique_channel_name",
+        "bot.features.recipes.hub.clients.provision.build_unique_channel_name",
         MagicMock(return_value="acme-profile"),
     )
 
-    service = ClientProvisionService()
-    result = await service.provision_client(
+    # fn
+    result = await provision_client(
         guild,
         bot,
         server_name="Acme",
@@ -101,9 +106,9 @@ async def test_provision_client_requires_manage_roles() -> None:
     guild, bot, _, _, _ = make_guild_with_roles()
     bot.guild_permissions.manage_roles = False
 
-    service = ClientProvisionService()
+    # fn
     with pytest.raises(ProfileValidationError, match="Manage Roles"):
-        await service.provision_client(
+        await provision_client(
             guild,
             bot,
             server_name="Acme",
@@ -118,23 +123,23 @@ async def test_provision_client_maps_validation_error(
 ) -> None:
     guild, bot, _, _, operator = make_guild_with_roles()
     monkeypatch.setattr(
-        "bot.features.clients.provision.resolve_access_role",
+        "bot.features.recipes.hub.clients.provision.resolve_access_role",
         MagicMock(return_value=MagicMock(spec=discord.Role)),
     )
     monkeypatch.setattr(
-        "bot.features.networks.roles.resolve_operator_role_by_name",
+        "bot.core.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.features.clients.provision.validate_provision_permissions",
+        "bot.features.recipes.hub.clients.provision.validate_provision_permissions",
         MagicMock(
             side_effect=NetworkValidationError("operator misconfigured"),
         ),
     )
 
-    service = ClientProvisionService()
+    # fn
     with pytest.raises(ProfileValidationError, match="operator misconfigured"):
-        await service.provision_client(
+        await provision_client(
             guild,
             bot,
             server_name="Acme",

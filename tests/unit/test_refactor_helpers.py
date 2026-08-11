@@ -7,7 +7,7 @@ import discord
 import pytest
 
 from bot.core.discord.step_runner import run_guild_step
-from bot.features.clients.subscription import resolve_subscription_channels_in_category
+from bot.features.recipes.hub.clients.subscription import resolve_subscription_channels_in_category
 
 
 @dataclass

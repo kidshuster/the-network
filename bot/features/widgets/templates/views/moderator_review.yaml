@@ -1,0 +1,42 @@
+kind: view
+id: moderator_review
+timeout: null
+components:
+  - type: button
+    id: approve
+    label: Accept
+    style: success
+    custom_id: "tn:req_approve:{request_id}"
+    params:
+      request_id: context.request_id
+    action:
+      trigger: request.approve
+      require:
+        - manage_guild
+        - bot_ready
+      inject: [guild, moderator, view_registry]
+      on_success:
+        embed: review_success
+        map:
+          label: params.label
+          colour: params.colour
+          description: params.description
+  - type: button
+    id: deny
+    label: Deny
+    style: danger
+    custom_id: "tn:req_deny:{request_id}"
+    params:
+      request_id: context.request_id
+    action:
+      trigger: request.deny
+      require:
+        - manage_guild
+        - bot_ready
+      inject: [moderator, view_registry]
+      on_success:
+        embed: review_success
+        map:
+          label: params.label
+          colour: params.colour
+          description: params.description

@@ -1,48 +1,38 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.app.layout import (
-    ApplyMode,
-    LayoutContext,
-    apply_layout,
-    compile_client,
-    compile_hub,
-)
+from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_hub
+from bot.app.layout.compiler import ResourceKind
+from bot.app.layout.managed import hub_channel_name
+from bot.app.recipes.registry import RecipeRegistry, recipe
 from bot.core.models.client import Client
 from bot.core.models.errors import NetworkValidationError
-from bot.core.views import ViewRegistry
-from bot.features.channels.resolve import (
-    HUB_CATEGORY_LEADERS,
-    HUB_CATEGORY_MODERATION,
-    HUB_CATEGORY_NETWORK,
-    HUB_CHANNEL_ADMIN,
-    HUB_CHANNEL_JOIN_THE_NETWORK,
-    resolve_hub_category,
-    resolve_hub_channel,
-    resolve_human_moderator_role,
-)
-from bot.features.hub.reconcilers import (
-    _ensure_human_moderator_role,
-    _reorder_guild_categories,
-    _reorder_hub_categories,
-    _run_init_step,
-    _sync_hub_notification_defaults,
-)
-from bot.features.hub.result import GuildInitResult
-from bot.features.networks.roles import (
+from bot.core.networks.roles import (
     ensure_bot_access_role,
     resolve_access_role_by_name,
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.core.views import ViewRegistry
+from bot.features.channels.resolve import (
+    HUB_CHANNEL_ADMIN,
+    resolve_human_moderator_role,
+)
+from bot.features.recipes.hub.reconcilers import (
+    _ensure_human_moderator_role,
+    _run_init_step,
+    _sync_hub_notification_defaults,
+)
+from bot.features.recipes.hub.result import GuildInitResult
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot
     from bot.app.context import BotContext
+    from bot.app.recipes.runtime import RecipeContext
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +40,6 @@ __all__ = [
     "GuildInitResult",
     "initialize_guild",
     "_ensure_human_moderator_role",
-    "_reorder_guild_categories",
-    "_reorder_hub_categories",
     "_run_init_step",
 ]
 
@@ -78,6 +66,105 @@ def _layout_context(
     )
 
 
+async def _compose_lifecycle_recipe(
+    recipe_context: RecipeContext | None,
+    bot: NetworkRelayBot | None,
+    name: str,
+    *,
+    core: BotContext | None = None,
+    **inputs: Any,
+) -> Any:
+    """Prefer ``run()``; body helpers only when no recipe context/registry exists."""
+    if recipe_context is not None:
+        return await recipe_context.run(name, **inputs)
+    registry = getattr(bot, "recipe_registry", None) if bot is not None else None
+    if isinstance(registry, RecipeRegistry):
+        return await registry.run(name, **inputs)
+    return await _lifecycle_body(name, core=core, bot=bot, **inputs)
+
+
+async def _lifecycle_body(
+    name: str,
+    *,
+    core: BotContext | None,
+    bot: NetworkRelayBot | None,
+    **inputs: Any,
+) -> Any:
+    """Direct-call fallback for unit/live callers that bypass the recipe registry."""
+    if name == "hub.migrate":
+        from bot.features.recipes.hub.migrate import migrate_hub_layout
+
+        return await migrate_hub_layout(
+            inputs["guild"],
+            inputs["layout_context"],
+            context=core,
+            clients=inputs.get("clients"),
+            interaction=inputs.get("interaction"),
+        )
+    if name == "hub.ensure_installs":
+        from bot.features.recipes.hub.installs import ensure_hub_installs
+
+        if core is None:
+            return None
+        pass_result = await ensure_hub_installs(
+            inputs["guild"],
+            inputs["bot_member"],
+            context=core,
+            bot=bot,
+            view_registry=inputs.get("view_registry"),
+            bound_ids=inputs.get("bound_ids"),
+        )
+        result = inputs.get("result")
+        if result is not None:
+            result.notes.extend(pass_result.notes)
+            result.failed_steps.extend(pass_result.failed_steps)
+        return pass_result
+    if name == "clients.reconnect":
+        from bot.features.recipes.hub.clients.reconnect import reconnect_clients_on_init
+
+        if bot is None or core is None:
+            return None
+        await reconnect_clients_on_init(
+            inputs["guild"],
+            bot,
+            core,
+            inputs["bot_member"],
+            inputs["access_role"],
+            inputs["human_moderator_role"],
+            list(inputs.get("clients") or []),
+            result=inputs["result"],
+            view_registry=inputs["view_registry"],
+        )
+        return None
+    raise RuntimeError(f"No lifecycle fallback for recipe {name!r}")
+
+
+@recipe("hub.initialize")
+async def initialize_guild_recipe(
+    recipe_context: RecipeContext,
+    *,
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    interaction: discord.Interaction | None = None,
+    view_registry: ViewRegistry | None = None,
+) -> GuildInitResult:
+    from bot.app.widgets import PersistentViewRegistry
+
+    registry = view_registry or PersistentViewRegistry(recipe_context.bot)
+    return await initialize_guild(
+        guild,
+        bot_member,
+        access_role_name=recipe_context.bot.settings.network_access_role_name,
+        operator_role_name=recipe_context.bot.settings.network_operator_role_name,
+        clients=await recipe_context.core.store.clients.list_all(),
+        bot=recipe_context.bot,
+        context=recipe_context.core,
+        view_registry=registry,
+        interaction=interaction,
+        recipe_context=recipe_context,
+    )
+
+
 async def initialize_guild(
     guild: discord.Guild,
     bot_member: discord.Member,
@@ -88,6 +175,8 @@ async def initialize_guild(
     bot: NetworkRelayBot | None = None,
     context: BotContext | None = None,
     view_registry: ViewRegistry | None = None,
+    interaction: discord.Interaction | None = None,
+    recipe_context: RecipeContext | None = None,
 ) -> GuildInitResult:
     result = GuildInitResult(success=True)
 
@@ -141,10 +230,33 @@ async def initialize_guild(
             human_moderator_role=human_moderator_role,
             client_roles=tuple(client_roles),
         )
+        migration = await _compose_lifecycle_recipe(
+            recipe_context,
+            bot,
+            "hub.migrate",
+            core=context,
+            guild=guild,
+            layout_context=layout_ctx,
+            interaction=interaction,
+            clients=list(clients or []),
+        )
+        if not migration.success:
+            result.success = False
+            result.reason = migration.reason or "Hub migration did not complete."
+            result.notes.extend(migration.notes)
+            return result
+        bound_ids = dict(migration.bound_ids)
+        result.notes.extend(migration.notes)
+        result.rectifications.extend(
+            note for note in migration.notes if note.startswith("Migrated ")
+        )
+
+        hub_resources = compile_hub(layout_ctx)
         hub_batch = await apply_layout(
             layout_ctx,
-            compile_hub(layout_ctx),
+            hub_resources,
             mode=ApplyMode.ENSURE,
+            bound_ids=bound_ids,
         )
         for item in hub_batch.results:
             if not item.success:
@@ -154,208 +266,59 @@ async def initialize_guild(
                     f"Synced layout resource `{item.resource_id}` ({item.channel.mention})."
                 )
 
-        moderation = hub_batch.resource("moderation")
-        network_cat = hub_batch.resource("network")
-        if not isinstance(moderation, discord.CategoryChannel) or not isinstance(
-            network_cat,
-            discord.CategoryChannel,
-        ):
+        hub_category_ids = {
+            resource.id
+            for resource in hub_resources
+            if resource.kind is ResourceKind.CATEGORY
+        }
+        missing_hub_categories = [
+            item
+            for item in hub_batch.results
+            if item.resource_id in hub_category_ids
+            and not isinstance(item.channel, discord.CategoryChannel)
+        ]
+        if missing_hub_categories:
             result.success = False
             result.reason = (
-                "Could not create or sync hub categories. "
+                "Could not create or sync hub layout. "
                 "Check the bot role has **Manage Channels**."
             )
+            if hub_batch.failures:
+                result.notes.extend(hub_batch.failures)
             return result
 
-        leaders_channel = hub_batch.resource("leaders_channel")
-        changelog_channel = hub_batch.resource("changelog")
-        if isinstance(leaders_channel, discord.TextChannel):
-            result.notes.append(f"Leaders channel synced at {leaders_channel.mention}.")
-        if context is not None and isinstance(changelog_channel, discord.TextChannel):
-            from bot.features.hub.changelog import sync_changelog_releases
+        for item in hub_batch.results:
+            if item.channel is not None:
+                bound_ids[item.resource_id] = item.channel.id
 
-            posted = await sync_changelog_releases(context, changelog_channel)
-            if posted:
-                result.notes.append(
-                    f"Posted {posted} changelog release(s) to {changelog_channel.mention}."
-                )
-            if context is not None:
-                from bot.features.hub.leaders import (
-                    CHANGELOG_CHANNEL_SETTINGS_KEY,
-                    LEADERS_CHANNEL_SETTINGS_KEY,
-                )
-
-                if isinstance(leaders_channel, discord.TextChannel):
-                    await context.store.settings.set(
-                        LEADERS_CHANNEL_SETTINGS_KEY,
-                        str(leaders_channel.id),
-                    )
-                if isinstance(changelog_channel, discord.TextChannel):
-                    await context.store.settings.set(
-                        CHANGELOG_CHANNEL_SETTINGS_KEY,
-                        str(changelog_channel.id),
-                    )
-
-        from bot.features.hub.announcements import sync_announcements_guide
-
-        await sync_announcements_guide(guild, bot_member)
-
-        guild_clients = [client for client in (clients or []) if client.guild_id == guild.id]
-        if clients and bot is not None and context is not None and view_registry is not None:
-            from bot.features.clients.reconnect import reconnect_clients_on_init
-
-            await reconnect_clients_on_init(
-                guild,
+        if recipe_context is not None or context is not None:
+            await _compose_lifecycle_recipe(
+                recipe_context,
                 bot,
-                context,
-                bot_member,
-                access_role,
-                human_moderator_role,
-                clients,
+                "hub.ensure_installs",
+                core=context,
+                guild=guild,
+                bot_member=bot_member,
+                bound_ids=bound_ids,
+                view_registry=view_registry,
+                result=result,
+            )
+
+        if bot is not None and context is not None and view_registry is not None:
+            await _compose_lifecycle_recipe(
+                recipe_context,
+                bot,
+                "clients.reconnect",
+                core=context,
+                guild=guild,
+                bot_member=bot_member,
+                access_role=access_role,
+                human_moderator_role=human_moderator_role,
+                clients=list(clients or []),
                 result=result,
                 view_registry=view_registry,
             )
             await context.refresh_projections()
-        elif clients:
-            from bot.core.clients.names import slugify_client_name
-
-            for client in guild_clients:
-                role = guild.get_role(client.client_role_id)
-                if role is None:
-                    result.notes.append(f"Skipped client {client.server_name}: role missing")
-                    continue
-                client_ctx = LayoutContext(
-                    guild=guild,
-                    bot_member=bot_member,
-                    access_role=access_role,
-                    moderator_role=human_moderator_role,
-                    operator_role=operator_role,
-                    client_role=role,
-                    server_name=client.server_name,
-                    slug=slugify_client_name(client.server_name),
-                    reason="The Network server init",
-                )
-                subs = []
-                if context is not None:
-                    subs = await context.store.clients.list_subscriptions_by_client(client.id)
-                # reconcile category+profile; subscription channels when keys known
-                batch = await apply_layout(
-                    client_ctx,
-                    compile_client(client_ctx),
-                    mode=ApplyMode.RECONCILE_ONLY,
-                )
-                for item in batch.results:
-                    if item.success and item.resource_id == "client":
-                        result.rectifications.append(
-                            f"**{client.server_name}**: rectified category permissions."
-                        )
-                    elif not item.success:
-                        result.failed_steps.append(
-                            f"sync client category {client.server_name}: {item.detail}"
-                        )
-                for subscription in subs:
-                    if context is None:
-                        break
-                    network_id = subscription.network_id
-                    if network_id is None:
-                        continue
-                    network = await context.store.networks.get_by_id(network_id)
-                    if network is None:
-                        continue
-                    sub_ctx = LayoutContext(
-                        guild=guild,
-                        bot_member=bot_member,
-                        access_role=access_role,
-                        moderator_role=human_moderator_role,
-                        operator_role=operator_role,
-                        client_role=role,
-                        server_name=client.server_name,
-                        slug=slugify_client_name(client.server_name),
-                        network_key=network.key,
-                        reason="The Network server init",
-                    )
-                    await apply_layout(
-                        sub_ctx,
-                        compile_client(
-                            sub_ctx,
-                            include_subscribed=True,
-                            channel_ids={"publish", "subscribe"},
-                        ),
-                        mode=ApplyMode.RECONCILE_ONLY,
-                    )
-
-        client_categories: list[discord.CategoryChannel] = []
-        for client in guild_clients:
-            category = guild.get_channel(client.category_id)
-            if isinstance(category, discord.CategoryChannel):
-                client_categories.append(category)
-        client_categories.sort(key=lambda cat: cat.name.casefold())
-
-        await _reorder_guild_categories(
-            moderation,
-            network_cat,
-            leaders_category=resolve_hub_category(guild, HUB_CATEGORY_LEADERS),
-            client_categories=client_categories,
-            result=result,
-        )
-
-        if bot is not None and context is not None and view_registry is not None:
-            from bot.features.channels.stickies.join import sync_hub_join_sticky
-            from bot.features.channels.stickies.rules import sync_rules_sticky
-
-            network_hub = resolve_hub_category(guild, HUB_CATEGORY_NETWORK)
-            join_channel = resolve_hub_channel(
-                guild,
-                HUB_CHANNEL_JOIN_THE_NETWORK,
-                category_id=None if network_hub is None else network_hub.id,
-            )
-            if join_channel is not None:
-                join_view = view_registry.register_join_network_view()
-                join_result = await sync_hub_join_sticky(
-                    guild,
-                    bot_member,
-                    join_channel,
-                    join_view,
-                    get_setting=context.store.settings.get,
-                    set_setting=context.store.settings.set,
-                    wipe_channel=True,
-                )
-                if join_result.message is not None:
-                    result.notes.append(f"Join guide synced in {join_channel.mention}.")
-
-            rules_result = await sync_rules_sticky(
-                guild,
-                bot_member,
-                get_setting=context.store.settings.get,
-                set_setting=context.store.settings.set,
-            )
-            if rules_result.message is not None:
-                result.notes.append("Hub rules sticky synced.")
-
-            from bot.features.channels.stickies.admin import sync_network_admin_sticky
-
-            mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
-            admin_channel = resolve_hub_channel(
-                guild,
-                HUB_CHANNEL_ADMIN,
-                category_id=None if mod_category is None else mod_category.id,
-            )
-            if admin_channel is not None:
-                admin_view = view_registry.register_network_admin_view()
-                admin_result = await sync_network_admin_sticky(
-                    guild,
-                    bot_member,
-                    admin_channel,
-                    context,
-                    admin_view,
-                    get_setting=context.store.settings.get,
-                    set_setting=context.store.settings.set,
-                    wipe_channel=True,
-                )
-                if admin_result.message is not None:
-                    result.notes.append(f"Network admin panel synced in {admin_channel.mention}.")
-                elif admin_result.reason:
-                    result.failed_steps.append(f"Network admin sticky: {admin_result.reason}")
 
         await _sync_hub_notification_defaults(
             guild,
@@ -363,8 +326,6 @@ async def initialize_guild(
             result=result,
             step="refresh server notification defaults",
         )
-
-        from bot.app.layout.managed import hub_channel_name
 
         admin_channel_name = hub_channel_name(HUB_CHANNEL_ADMIN)
         result.notes.append(

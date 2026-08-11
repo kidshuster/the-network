@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.core.models.errors import NetworkValidationError
-from bot.features.networks.roles import (
+from bot.core.networks.roles import (
     format_operator_setup_instructions,
     resolve_access_role,
     validate_hub_permissions,

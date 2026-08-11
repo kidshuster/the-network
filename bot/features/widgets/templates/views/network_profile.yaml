@@ -1,0 +1,76 @@
+kind: view
+id: network_profile
+timeout: null
+components:
+  - type: button
+    id: subscribe
+    foreach: networks
+    label: "Join {network_key}"
+    style: primary
+    custom_id: "tn:sub:{client_id}:{network_key}"
+    disabled_when: item.subscribed
+    params:
+      client_id: context.client_id
+      network_key: item.key
+    action:
+      trigger: subscription.create
+      require:
+        - bot_ready
+        - client_role:
+            popup: client_role_required_subscribe
+            membership: allow_non_member
+            ephemeral: null
+      inject: [guild, bot_member, view_registry]
+      on_success:
+        embed: subscribe_success
+        map:
+          description: params.description
+  - type: button
+    id: timecode
+    label: "Timecodes"
+    style: secondary
+    row: 4
+    custom_id: "tn:timecode_toggle:{client_id}"
+    params:
+      client_id: context.client_id
+    action:
+      trigger: client.toggle_timecode
+      require:
+        - bot_ready
+        - client_role:
+            popup: client_role_required_edit
+            membership: allow_non_member
+            ephemeral: null
+      inject: [guild, view_registry]
+      on_success:
+        popup: timecode_toggle_updated
+        map:
+          state: params.state
+  - type: button
+    id: edit
+    label: "Edit Profile"
+    style: secondary
+    row: 4
+    custom_id: "tn:profile_edit:{client_id}"
+    params:
+      client_id: context.client_id
+    action:
+      open_modal: edit_client_profile
+      defer: false
+      require: [bot_ready]
+  - type: button
+    id: delete
+    label: "Delete Client"
+    style: danger
+    row: 4
+    custom_id: "tn:delete_client:{client_id}"
+    params:
+      client_id: context.client_id
+    action:
+      open_view: delete_client_confirm
+      defer: false
+      require:
+        - bot_ready
+        - client_role:
+            popup: client_role_required_delete
+            membership: required

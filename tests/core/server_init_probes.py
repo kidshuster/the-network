@@ -9,8 +9,14 @@ import discord
 from bot.app.layout import LayoutContext, compile_client, compile_hub
 from bot.app.layout.compiler import ResourceKind
 from bot.app.layout.managed import hub_category_names, preserved_channel_names
+from bot.app.widgets import PersistentViewRegistry
 from bot.config import Settings
 from bot.core.clients.names import slugify_client_name
+from bot.core.networks.roles import (
+    resolve_access_role,
+    resolve_operator_role_by_name,
+    validate_hub_permissions,
+)
 from bot.features.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
@@ -22,14 +28,8 @@ from bot.features.channels.resolve import (
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.features.hub.leaders import ensure_leaders_channels
-from bot.features.networks.roles import (
-    resolve_access_role,
-    resolve_operator_role_by_name,
-    validate_hub_permissions,
-)
 from bot.features.recipes.hub.initialize import initialize_guild
-from bot.features.widgets.views.persistent_views import PersistentViewRegistry
+from bot.features.recipes.hub.leaders import ensure_leaders_channels
 from tests.core.constants import SERVER_INIT_PROBE_REASON
 from tests.core.provision_flow import run_configured_permission_provision_probe
 from tests.core.resource_guard import guild_test_resource_guard, is_smoke_client_server_name

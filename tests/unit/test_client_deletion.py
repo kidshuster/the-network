@@ -6,11 +6,11 @@ import discord
 import pytest
 
 from bot.app.context import BotContext
+from bot.app.widgets import render_view
 from bot.core.clients.cache import ClientCache
 from bot.core.database.store import Store
 from bot.core.networks.routing import RoutingService
-from bot.features.clients.deletion import ClientDeletionService
-from bot.features.widgets.views.network_views import NetworkProfileView
+from bot.features.recipes.hub.clients.deletion import delete_client_resources
 
 
 def _make_context(db) -> BotContext:
@@ -31,7 +31,7 @@ def _make_context(db) -> BotContext:
 
 def test_network_profile_view_has_edit_and_delete_buttons() -> None:
     bot = MagicMock()
-    view = NetworkProfileView(bot, client_id=1, network_keys=["stingers"])
+    view = render_view("network_profile", bot, client_id=1, network_keys=["stingers"])
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
     assert "Edit Profile" in labels
     assert "Delete Client" in labels
@@ -40,7 +40,8 @@ def test_network_profile_view_has_edit_and_delete_buttons() -> None:
 def test_network_profile_view_stays_within_discord_component_limit() -> None:
     bot = MagicMock()
     network_keys = [f"net{i}" for i in range(30)]
-    view = NetworkProfileView(
+    view = render_view(
+        "network_profile",
         bot,
         client_id=1,
         network_keys=network_keys,
@@ -144,8 +145,7 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
 
     context.refresh_projections = AsyncMock()
 
-    service = ClientDeletionService()
-    result = await service.delete_client(
+    result = await delete_client_resources(
         guild,
         guild.me,
         client=client,
@@ -197,15 +197,14 @@ async def test_delete_client_stops_when_unsubscribe_fails(
 
     unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
     monkeypatch.setattr(
-        "bot.features.clients.subscription.ClientSubscriptionService.unsubscribe_client",
+        "bot.features.recipes.hub.clients.subscription.unsubscribe_client",
         AsyncMock(return_value=unsubscribe_result),
     )
 
     guild = MagicMock(spec=discord.Guild)
     guild.me = MagicMock(spec=discord.Member)
 
-    service = ClientDeletionService()
-    result = await service.delete_client(
+    result = await delete_client_resources(
         guild,
         guild.me,
         client=client,

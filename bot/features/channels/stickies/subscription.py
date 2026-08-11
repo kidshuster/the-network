@@ -70,7 +70,7 @@ async def _post_network_member_welcome(
     network: Network,
 ) -> None:
     """Post once to #network-announcements and dispatch through the relay recipe."""
-    from bot.features.hub.announcements import dispatch_system_announcement
+    from bot.features.recipes.hub.announcements import dispatch_system_announcement
 
     mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
     channel = resolve_hub_channel(
@@ -300,7 +300,7 @@ async def sync_subscription_setup(
     view_registry: ViewRegistry,
 ) -> SubscriptionSetupState:
     """Refresh setup stickies, moderation card, and profile for one subscription."""
-    from bot.features.clients.profile_sync import (
+    from bot.features.recipes.hub.clients.profile_sync import (
         post_subscription_moderation_embed,
         refresh_client_profile_message,
     )

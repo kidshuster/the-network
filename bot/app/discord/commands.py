@@ -8,18 +8,14 @@ from discord import app_commands
 
 from bot.app.discord.errors import respond_to_error
 from bot.app.discord.responses import defer_ephemeral
-from bot.app.recipes.metadata import RecipeSpec
+from bot.core.triggers import TriggerKind, TriggerSpec
 from bot.errors import UserFacingError
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot
 
 
-def _callback(bot: NetworkRelayBot, spec: RecipeSpec) -> Callable[..., Any]:
-    command = spec.command
-    if command is None:
-        raise TypeError(f"Recipe {spec.name!r} has no command metadata")
-
+def _callback(bot: NetworkRelayBot, spec: TriggerSpec) -> Callable[..., Any]:
     async def invoke(interaction: discord.Interaction) -> None:
         response = await defer_ephemeral(interaction)
         try:
@@ -30,7 +26,7 @@ def _callback(bot: NetworkRelayBot, spec: RecipeSpec) -> Callable[..., Any]:
             permissions = getattr(member, "guild_permissions", None)
             missing = [
                 permission
-                for permission in command.default_permissions
+                for permission in spec.default_permissions
                 if permissions is None or not getattr(permissions, permission, False)
             ]
             if missing:
@@ -39,44 +35,45 @@ def _callback(bot: NetworkRelayBot, spec: RecipeSpec) -> Callable[..., Any]:
                     title="Permission Required",
                     code="permission_required",
                 )
-            value = await bot.recipe_registry.run(spec.name, interaction=interaction)
-            if command.presenter is None:
+            value = await bot.dispatch_trigger(spec.id, interaction=interaction)
+            if spec.presenter is None:
                 await response.send(content="Operation completed.", ephemeral=True)
             else:
                 await bot.recipe_registry.run(
-                    command.presenter,
+                    spec.presenter,
                     response=response,
                     value=value,
                 )
         except Exception as error:
-            await respond_to_error(bot, interaction, response, error, operation=spec.name)
+            await respond_to_error(bot, interaction, response, error, operation=spec.id)
 
-    invoke.__name__ = spec.name.replace(".", "_")
+    invoke.__name__ = spec.id.replace(".", "_")
     return invoke
 
 
 def register_recipe_commands(bot: NetworkRelayBot) -> None:
     groups: dict[str, app_commands.Group] = {}
-    for spec in bot.recipe_registry.command_specs():
-        metadata = spec.command
-        assert metadata is not None
-        group = groups.get(metadata.group)
+    for spec in bot.trigger_catalog.list_by_kind(TriggerKind.SLASH):
+        assert spec.slash_group is not None
+        assert spec.slash_name is not None
+        assert spec.slash_description is not None
+        group = groups.get(spec.slash_group)
         if group is None:
             group = app_commands.Group(
-                name=metadata.group,
-                description=metadata.group_description,
+                name=spec.slash_group,
+                description=spec.slash_group_description,
                 guild_only=True,
             )
-            groups[metadata.group] = group
+            groups[spec.slash_group] = group
         callback = _callback(bot, spec)
-        if metadata.default_permissions:
+        if spec.default_permissions:
             callback = app_commands.default_permissions(
-                **{permission: True for permission in metadata.default_permissions}
+                **{permission: True for permission in spec.default_permissions}
             )(callback)
         group.add_command(
             app_commands.Command(
-                name=metadata.name,
-                description=metadata.description,
+                name=spec.slash_name,
+                description=spec.slash_description,
                 callback=callback,
             )
         )

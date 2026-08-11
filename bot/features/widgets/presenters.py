@@ -7,8 +7,8 @@ import discord
 from bot.app.recipes import RecipeContext, recipe
 from bot.app.templates import render_embed
 from bot.errors import UserFacingError
-from bot.features.hub.probe import ServerProbeReport
-from bot.features.hub.result import GuildInitResult
+from bot.features.recipes.hub.probe import ServerProbeReport
+from bot.features.recipes.hub.result import GuildInitResult
 from bot.features.recipes.hub.uninitialize import GuildUninitResult
 
 _MAX_FIELD_CHARS = 1024

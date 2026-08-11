@@ -223,17 +223,16 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
 ) -> None:
     from unittest.mock import AsyncMock
 
+    from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
+
     guild = MagicMock(spec=discord.Guild)
     rules = MagicMock(spec=discord.TextChannel, id=99, category_id=100)
     rules.name = CHANNEL_RULES
     guild.rules_channel = rules
-
-    hub_channel = MagicMock(spec=discord.TextChannel, id=200, category_id=100)
-    hub_channel.name = "join-the-network"
-    network = MagicMock(spec=discord.CategoryChannel, id=100)
-    network.name = "The Network"
-    guild.categories = [network]
-    guild.channels = [network, rules, hub_channel]
+    guild.public_updates_channel = None
+    guild.text_channels = []
+    guild.categories = []
+    guild.channels = []
 
     partner = MagicMock(spec=discord.Role, managed=False, position=1)
     partner.is_default.return_value = False
@@ -246,11 +245,38 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
     perms.manage_roles = True
     bot_member.guild_permissions = perms
 
-    delete_channel = AsyncMock(return_value=True)
+    batch = BatchApplyResult(
+        results=[
+            ResourceApplyResult(
+                resource_id="detach:rules",
+                success=True,
+                changed=True,
+                channel=rules,
+            ),
+            ResourceApplyResult(
+                resource_id="delete:join-the-network",
+                success=True,
+                changed=True,
+            ),
+            ResourceApplyResult(
+                resource_id="delete_cat:The Network",
+                success=True,
+                changed=True,
+            ),
+        ]
+    )
+    apply_layout = AsyncMock(return_value=batch)
     delete_role = AsyncMock(return_value=True)
-    monkeypatch.setattr("bot.features.recipes.hub.uninitialize.delete_channel", delete_channel)
+    monkeypatch.setattr("bot.features.recipes.hub.uninitialize.apply_layout", apply_layout)
     monkeypatch.setattr("bot.features.recipes.hub.uninitialize.delete_role", delete_role)
-    rules.edit = AsyncMock()
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.uninitialize.resolve_access_role_by_name",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.uninitialize.resolve_operator_role_by_name",
+        MagicMock(return_value=None),
+    )
 
     result = await uninitialize_guild(guild, bot_member)
 
@@ -259,4 +285,4 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
     assert result.deleted_channels == ["#join-the-network"]
     assert result.deleted_categories == ["The Network"]
     assert result.deleted_roles == [LEGACY_MODERATOR_ROLE_NAME]
-    rules.edit.assert_awaited_once()
+    apply_layout.assert_awaited_once()

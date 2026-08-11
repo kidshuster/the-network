@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.features.clients.profile_post import build_client_profile_embed
+from bot.features.recipes.hub.clients.profile_post import build_client_profile_embed
 
 
 def test_build_client_profile_embed_shows_network_status_per_line() -> None:

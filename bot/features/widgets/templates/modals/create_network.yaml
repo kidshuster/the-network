@@ -1,5 +1,16 @@
 kind: modal
 title: "Create network"
+trigger: network.create
+require: [manage_guild, hub_guild]
+inject: [guild, view_registry]
+on_success:
+  reply:
+    embed: network_created
+    map:
+      key: params.key
+      display_name: params.display_name
+      updated_count: params.updated_count
+      relinked: params.relinked
 fields:
   - id: key
     type: text

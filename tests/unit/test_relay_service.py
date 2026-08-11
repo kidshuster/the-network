@@ -11,7 +11,7 @@ from bot.core.database.store import ClientStore, NetworkStore, RelayStore
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.networks.routing import RoutingService
-from bot.features.relay.service import RelayService
+from bot.features.recipes.hub.relay.service import RelayService
 
 
 def _settings(monkeypatch: pytest.MonkeyPatch) -> Settings:

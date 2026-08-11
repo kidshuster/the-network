@@ -1,0 +1,20 @@
+kind: view
+id: blacklist_select
+timeout: 120
+components:
+  - type: select
+    id: clients
+    placeholder: "Clients to blacklist"
+    min_values: 0
+    max_values: 25
+    options_from: select_options
+    params:
+      subscription_id: context.subscription_id
+    action:
+      trigger: blacklist.replace
+      require: [bot_ready]
+      defer: false
+      on_success:
+        popup: blacklist_updated
+        map:
+          count: params.count

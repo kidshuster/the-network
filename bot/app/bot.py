@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.metadata
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands
@@ -12,6 +12,7 @@ from bot.app.context import BotContext
 from bot.app.discord import register_recipe_commands, register_recipe_events
 from bot.app.features import build_recipe_registry
 from bot.app.recipes import RecipeRegistry
+from bot.app.triggers import TriggerCatalog, build_trigger_catalog, dispatch, dispatch_event
 from bot.core.clients.cache import ClientCache
 from bot.core.database import migrations
 from bot.core.database.connection import Database
@@ -37,10 +38,27 @@ class NetworkRelayBot(commands.Bot):
         self.db = Database(settings.database_path)
         self.bot_context: BotContext | None = None
         self.recipe_registry: RecipeRegistry = build_recipe_registry(self)
+        self.trigger_catalog: TriggerCatalog = build_trigger_catalog()
         self.schema_version: int = 0
         self._slash_sync_started = False
         self._subscription_setup_synced = False
         self._changelog_synced = False
+
+    async def dispatch_trigger(self, trigger_id: str, **payload: Any) -> Any:
+        return await dispatch(
+            self.trigger_catalog,
+            self.recipe_registry.run,
+            trigger_id,
+            **payload,
+        )
+
+    async def dispatch_event(self, event: str, **payload: Any) -> list[Any]:
+        return await dispatch_event(
+            self.trigger_catalog,
+            self.recipe_registry.run,
+            event,
+            **payload,
+        )
 
     async def setup_hook(self) -> None:
         await self.db.connect()
@@ -69,11 +87,11 @@ class NetworkRelayBot(commands.Bot):
         self.bot_context.client_count = client_cache.client_count
         self.bot_context.enabled_client_count = client_cache.enabled_client_count
 
-        await self.recipe_registry.dispatch("app.services")
+        await self.dispatch_event("app.services")
         register_recipe_commands(self)
         register_recipe_events(self)
 
-        await self.recipe_registry.dispatch("app.setup")
+        await self.dispatch_event("app.setup")
 
         guild = discord.Object(id=self.settings.guild_id)
         self.tree.copy_global_to(guild=guild)
@@ -127,7 +145,7 @@ class NetworkRelayBot(commands.Bot):
 
         if context is not None:
             try:
-                await self.recipe_registry.dispatch("app.ready", guild=guild)
+                await self.dispatch_event("app.ready", guild=guild)
             except Exception:
                 logger.exception("Ready recipe dispatch failed")
 

@@ -8,7 +8,7 @@ from discord_helpers import make_guild_with_roles
 from view_registry_helpers import make_test_view_registry
 
 from bot.core.models.client import Client
-from bot.features.clients.reconnect import reconnect_clients_on_init
+from bot.features.recipes.hub.clients.reconnect import reconnect_clients_on_init
 from bot.features.recipes.hub.initialize import GuildInitResult
 
 
@@ -50,27 +50,27 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.rectify_client_permissions",
+        "bot.features.recipes.hub.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.sync_client_channel_names",
+        "bot.features.recipes.hub.clients.reconnect.sync_client_channel_names",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.sync_subscription_setup",
+        "bot.features.recipes.hub.clients.reconnect.sync_subscription_setup",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.reorder_client_category_channels",
+        "bot.features.recipes.hub.clients.reconnect.reorder_client_category_channels",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.refresh_client_profile_message",
+        "bot.features.recipes.hub.clients.reconnect.refresh_client_profile_message",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.resync_subscriptions_for_network",
+        "bot.features.recipes.hub.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 
@@ -78,6 +78,7 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
     bot.settings.network_access_role_name = "The Network"
     bot.add_view = MagicMock()
     context = MagicMock()
+    context.store.clients.list_all = AsyncMock(return_value=[client])
     context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
     context.store.networks.list_all = AsyncMock(return_value=[])
 
@@ -117,19 +118,19 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.rectify_client_permissions",
+        "bot.features.recipes.hub.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.sync_client_channel_names",
+        "bot.features.recipes.hub.clients.reconnect.sync_client_channel_names",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.refresh_client_profile_message",
+        "bot.features.recipes.hub.clients.reconnect.refresh_client_profile_message",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.resync_subscriptions_for_network",
+        "bot.features.recipes.hub.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 
@@ -137,6 +138,7 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
     bot.settings.network_access_role_name = "The Network"
     bot.add_view = MagicMock()
     context = MagicMock()
+    context.store.clients.list_all = AsyncMock(return_value=[client])
     context.store.networks.list_all = AsyncMock(return_value=[])
 
     view_registry = make_test_view_registry()
@@ -175,21 +177,22 @@ async def test_reconnect_records_failure_when_post_rectify_http_error(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.rectify_client_permissions",
+        "bot.features.recipes.hub.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.sync_client_channel_names",
+        "bot.features.recipes.hub.clients.reconnect.sync_client_channel_names",
         AsyncMock(side_effect=discord.HTTPException(MagicMock(), "Missing Permissions")),
     )
     monkeypatch.setattr(
-        "bot.features.clients.reconnect.resync_subscriptions_for_network",
+        "bot.features.recipes.hub.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 
     bot = MagicMock()
     bot.settings.network_access_role_name = "The Network"
     context = MagicMock()
+    context.store.clients.list_all = AsyncMock(return_value=[client])
     context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
     context.store.networks.list_all = AsyncMock(return_value=[])
 

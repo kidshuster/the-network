@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.features.widgets.views.custom_ids import (
+from bot.app.widgets.legacy_ids import (
     delete_client_button,
     join_server_button,
     parse_delete_client_button,
@@ -36,7 +36,7 @@ def test_timecode_toggle_custom_id_roundtrip() -> None:
 
 
 def test_network_create_button() -> None:
-    from bot.features.widgets.views.custom_ids import network_create_button, network_delete_button
+    from bot.app.widgets.legacy_ids import network_create_button, network_delete_button
 
     assert network_create_button() == "tn:network_create"
     assert network_delete_button() == "tn:network_delete"

@@ -50,12 +50,12 @@ if [[ "$need_install" -eq 1 ]]; then
   touch "$INSTALL_STAMP"
 fi
 
-# Fail fast if the editable install is stale relative to the adapters/core layout.
-if ! python -c "import bot.adapters, bot.core, bot.channels, bot.widgets" >/dev/null 2>&1; then
+# Fail fast if the editable install is stale relative to the app/core/features layout.
+if ! python -c "import bot.app, bot.core, bot.features, bot.main" >/dev/null 2>&1; then
   echo "Package import check failed — reinstalling editable package..."
   pip install -q -e .
   touch "$INSTALL_STAMP"
-  python -c "import bot.adapters, bot.core, bot.channels, bot.widgets"
+  python -c "import bot.app, bot.core, bot.features, bot.main"
 fi
 
 # Do not `source` .env here — values with spaces (role names) break shell parsing.

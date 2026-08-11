@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.app.context import BotContext
+from bot.app.widgets import PersistentViewRegistry
 from bot.config import Settings
 from bot.core.models.server_request import ServerRequestStatus
-from bot.features.networks.roles import (
+from bot.core.networks.roles import (
     resolve_access_role,
 )
-from bot.features.recipes.onboarding.service import ServerRequestService
-from bot.features.widgets.views.persistent_views import PersistentViewRegistry
+from bot.features.recipes.hub.onboarding.service import ServerRequestService
 from bot.testing.context_factory import create_bot_context
 from tests.core.constants import SMOKE_CLEANUP_REASON
 from tests.core.permission_probe import (
@@ -447,7 +447,7 @@ async def run_join_approval_smoke_flow(
 
             networks = await context.store.networks.list_all()
             if networks:
-                from bot.features.clients.subscription import ClientSubscriptionService
+                from bot.features.recipes.hub.clients.subscription import ClientSubscriptionService
 
                 network = networks[0]
                 sub_service = ClientSubscriptionService()
@@ -550,8 +550,8 @@ async def ensure_smoke_network_key(
     if explicit:
         existing = await context.store.networks.get_by_key(explicit)
         if existing is None:
-            from bot.features.recipes.network.service import create_network
-            from bot.features.widgets.views.persistent_views import PersistentViewRegistry
+            from bot.app.widgets import PersistentViewRegistry
+            from bot.features.recipes.hub.network.service import create_network
 
             created = await create_network(
                 context,
@@ -569,8 +569,8 @@ async def ensure_smoke_network_key(
     if existing is not None:
         return existing.key
 
-    from bot.features.recipes.network.service import create_network
-    from bot.features.widgets.views.persistent_views import PersistentViewRegistry
+    from bot.app.widgets import PersistentViewRegistry
+    from bot.features.recipes.hub.network.service import create_network
 
     created = await create_network(
         context,
@@ -666,7 +666,7 @@ async def provision_smoke_client_with_subscription(
     if client is None:
         raise RuntimeError("Smoke accept did not register a client.")
 
-    from bot.features.clients.subscription import ClientSubscriptionService
+    from bot.features.recipes.hub.clients.subscription import ClientSubscriptionService
 
     sub_service = ClientSubscriptionService()
     subscribe = await sub_service.subscribe_client(
@@ -703,12 +703,12 @@ async def run_hub_rebuild_smoke_flow(
     skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
+    from bot.app.widgets import PersistentViewRegistry
     from bot.features.channels.resolve import resolve_join_requests_channel
-    from bot.features.hub.data_reset import reset_hub_layout_data
+    from bot.features.recipes.hub.data_reset import reset_hub_layout_data
     from bot.features.recipes.hub.initialize import initialize_guild
+    from bot.features.recipes.hub.network.service import create_network
     from bot.features.recipes.hub.uninitialize import uninitialize_guild
-    from bot.features.recipes.network.service import create_network
-    from bot.features.widgets.views.persistent_views import PersistentViewRegistry
 
     view_registry = PersistentViewRegistry(bot)
 
@@ -882,11 +882,11 @@ async def run_hub_rebuild_smoke_flow(
         # Client layout overwrites must match YAML after re-init.
         from bot.app.layout import LayoutContext, compile_client
         from bot.core.clients.names import slugify_client_name
-        from bot.features.channels.resolve import resolve_human_moderator_role
-        from bot.features.networks.roles import (
+        from bot.core.networks.roles import (
             resolve_access_role,
             resolve_operator_role_by_name,
         )
+        from bot.features.channels.resolve import resolve_human_moderator_role
 
         access = resolve_access_role(
             guild,

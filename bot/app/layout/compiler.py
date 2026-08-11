@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -153,7 +154,10 @@ def _channel_resource(
 def compile_hub(context: LayoutContext) -> list[DesiredResource]:
     categories = load_layout().layout.categories
     resources: list[DesiredResource] = []
-    for category_id, category in sorted(categories.items(), key=lambda item: item[1].position):
+    for category_id, category in sorted(
+        categories.items(),
+        key=lambda item: item[1].position if item[1].position is not None else 10_000,
+    ):
         resources.append(_category_resource(context, category_id, category, managed="hub"))
         for channel_id, channel in category.channels.items():
             resource = _channel_resource(
@@ -186,16 +190,38 @@ def compile_hub_slice(
     ]
 
 
+@dataclass(frozen=True)
+class SubscriptionCompileInput:
+    """One client subscription to expand into per_subscription layout channels."""
+
+    network_key: str
+
+
 def compile_client(
     context: LayoutContext,
     *,
+    subscriptions: Sequence[SubscriptionCompileInput] | None = None,
     include_subscribed: bool = False,
     channel_ids: set[str] | None = None,
+    category_position: int | None = None,
 ) -> list[DesiredResource]:
+    """Compile client category/channels.
+
+    Pass ``subscriptions`` to emit publish/subscribe resources for every network in
+    one list. ``include_subscribed=True`` remains for single-network callers that
+    already set ``context.network_key``.
+    """
     category = load_layout().layout.client_category
     channels: list[DesiredResource] = []
+
+    subscription_inputs: list[SubscriptionCompileInput] = []
+    if subscriptions is not None:
+        subscription_inputs = list(subscriptions)
+    elif include_subscribed and context.network_key:
+        subscription_inputs = [SubscriptionCompileInput(network_key=context.network_key)]
+
     for channel_id, channel in category.channels.items():
-        if channel.instances == "per_subscription" and not include_subscribed:
+        if channel.instances == "per_subscription":
             continue
         if channel_ids is not None and channel_id not in channel_ids:
             continue
@@ -204,13 +230,37 @@ def compile_client(
         )
         if resource is not None:
             channels.append(resource)
+
+    multi = len(subscription_inputs) > 1
+    for subscription in subscription_inputs:
+        sub_context = replace(context, network_key=subscription.network_key)
+        for channel_id, channel in category.channels.items():
+            if channel.instances != "per_subscription":
+                continue
+            logical_id = channel_id
+            if channel_ids is not None and logical_id not in channel_ids:
+                continue
+            resource_id = (
+                f"{logical_id}:{subscription.network_key}" if multi else logical_id
+            )
+            resource = _channel_resource(
+                sub_context,
+                resource_id,
+                channel,
+                "client",
+                category,
+                managed="client",
+            )
+            if resource is not None:
+                channels.append(resource)
+
     include_category = channel_ids is None or "client" in channel_ids or bool(channels)
-    resources = (
-        [_category_resource(context, "client", category, managed="client")]
-        if include_category
-        else []
-    )
-    return [*resources, *channels]
+    if not include_category:
+        return channels
+    category_resource = _category_resource(context, "client", category, managed="client")
+    if category_position is not None:
+        category_resource = replace(category_resource, position=category_position)
+    return [category_resource, *channels]
 
 
 def compile_overwrites_for_profile(

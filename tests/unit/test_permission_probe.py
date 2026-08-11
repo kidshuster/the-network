@@ -207,11 +207,11 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.features.networks.roles.resolve_operator_role_by_name",
+        "bot.core.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.features.networks.roles.validate_provision_permissions",
+        "bot.core.networks.roles.validate_provision_permissions",
         MagicMock(),
     )
     from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
@@ -307,11 +307,11 @@ async def test_verify_provision_permissions_live_fails_at_profile_channel_50013(
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.features.networks.roles.resolve_operator_role_by_name",
+        "bot.core.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.features.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.features.recipes.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
     monkeypatch.setattr(

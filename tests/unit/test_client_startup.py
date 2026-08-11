@@ -7,13 +7,7 @@ from context_helpers import make_test_context
 
 from bot.app.bot import NetworkRelayBot
 from bot.app.features import build_recipe_registry
-from bot.features.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
-from bot.features.widgets.views.network_admin_views import NetworkAdminView
-from bot.features.widgets.views.network_views import (
-    NetworkProfileView,
-    SubscribeSetupView,
-    SubscriptionModerationView,
-)
+from bot.app.widgets.engine import DeclarativeView
 
 
 @pytest.mark.asyncio
@@ -58,13 +52,16 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
 
     await build_recipe_registry(bot).run("app.register_persistent_views")
 
-    view_types = {type(view) for view in added}
-    assert JoinNetworkView in view_types
-    assert NetworkAdminView in view_types
-    assert ModeratorReviewView in view_types
-    assert NetworkProfileView in view_types
-    assert SubscriptionModerationView in view_types
-    assert SubscribeSetupView in view_types
+    assert all(isinstance(view, DeclarativeView) for view in added)
+    view_ids = {view.spec.id for view in added if isinstance(view, DeclarativeView)}
+    assert view_ids >= {
+        "join_network",
+        "network_admin",
+        "moderator_review",
+        "network_profile",
+        "subscription_moderation",
+        "subscribe_setup",
+    }
 
 
 @pytest.mark.asyncio

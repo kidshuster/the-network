@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.features.channels.resolve import resolve_network_announcements_channel
-from bot.features.hub.announcements import dispatch_system_announcement
+from bot.features.recipes.hub.announcements import dispatch_system_announcement
 from tests.core.provision_flow import ensure_smoke_network_key
 
 if TYPE_CHECKING:

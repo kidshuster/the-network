@@ -21,7 +21,7 @@ from bot.features.channels.resolve import (
     HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
     HUB_CHANNEL_RULES,
 )
-from bot.features.hub.probe import run_server_probe
+from bot.features.recipes.hub.probe import run_server_probe
 from bot.features.widgets.presenters import server_probe_embed
 
 

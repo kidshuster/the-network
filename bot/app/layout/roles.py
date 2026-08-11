@@ -38,12 +38,14 @@ def resolve_targets(
         role = context.moderator_role
     elif target == "bot_access":
         role = context.bot_access_role
-        if role is None and isinstance(context.guild.roles, (list, tuple)):
+        if role is None:
+            # Prefer plain iteration: discord.utils.get may return a coroutine for
+            # async iterables, and guild.roles is a SequenceProxy (not list/tuple).
             role = next(
                 (
                     item
                     for item in context.guild.roles
-                    if item.name == DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+                    if getattr(item, "name", None) == DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
                 ),
                 None,
             )

@@ -6,7 +6,13 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.app.layout import LayoutContext, compile_client, compile_hub, managed
+from bot.app.layout import (
+    LayoutContext,
+    SubscriptionCompileInput,
+    compile_client,
+    compile_hub,
+    managed,
+)
 from bot.app.layout.compiler import ResourceKind
 from bot.app.layout.loader import (
     clear_layout_cache,
@@ -14,7 +20,32 @@ from bot.app.layout.loader import (
     load_roles,
     validate_all_layouts,
 )
+from bot.app.layout.roles import resolve_targets
 from bot.app.layout.schema import RoleDefaultsSpec
+from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+
+
+def test_resolve_bot_access_from_sequence_proxy_guild_roles() -> None:
+    """discord.py 2.7+ exposes guild.roles as SequenceProxy, not list/tuple."""
+    guild, bot, moderator, access, operator = make_guild_with_roles()
+    bot_access = next(
+        role for role in guild.roles if role.name == DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+    )
+    guild.roles = discord.utils.SequenceProxy(
+        {role.id: role for role in guild.roles}.values(),
+        sorted=False,
+    )
+    context = LayoutContext(
+        guild=guild,
+        bot_member=bot,
+        access_role=access,
+        moderator_role=moderator,
+        operator_role=operator,
+    )
+
+    resolved = resolve_targets(context, "bot_access")
+
+    assert resolved == (bot_access,)
 
 
 def _context(*, clients: int = 1, network_key: str | None = "stingers") -> LayoutContext:
@@ -148,6 +179,29 @@ def test_client_layout_has_one_profile_and_subscription_pair() -> None:
     assert _resource(subscribed, "publish").name == "acme-stingers-publish"
     assert _resource(subscribed, "subscribe").name == "acme-stingers-subscribe"
     assert _resource(subscribed, "subscribe").kind is ResourceKind.ANNOUNCEMENT
+
+
+def test_compile_client_emits_all_subscriptions_in_one_pass() -> None:
+    ctx = _context(network_key=None)
+    resources = compile_client(
+        ctx,
+        subscriptions=[
+            SubscriptionCompileInput(network_key="stingers"),
+            SubscriptionCompileInput(network_key="wasps"),
+        ],
+        category_position=3,
+    )
+    assert [item.id for item in resources] == [
+        "client",
+        "profile",
+        "publish:stingers",
+        "subscribe:stingers",
+        "publish:wasps",
+        "subscribe:wasps",
+    ]
+    assert _resource(resources, "client").position == 3
+    assert _resource(resources, "publish:stingers").name == "acme-stingers-publish"
+    assert _resource(resources, "publish:wasps").name == "acme-wasps-publish"
 
 
 def test_client_category_defaults_propagate_until_profile_replacement() -> None:

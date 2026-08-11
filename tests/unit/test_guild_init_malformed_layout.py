@@ -76,7 +76,7 @@ async def test_init_moves_channel_from_wrong_category(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_category = AsyncMock()
@@ -125,7 +125,7 @@ async def test_init_removes_retired_commands_channel(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -164,13 +164,16 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     reconnect = AsyncMock()
-    monkeypatch.setattr("bot.features.clients.reconnect.reconnect_clients_on_init", reconnect)
     monkeypatch.setattr(
-        "bot.features.hub.leaders.ensure_leaders_channels",
+        "bot.features.recipes.hub.clients.reconnect.reconnect_clients_on_init",
+        reconnect,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.leaders.ensure_leaders_channels",
         AsyncMock(
             return_value=(
                 None,

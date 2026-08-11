@@ -15,7 +15,7 @@ def register_recipe_events(bot: NetworkRelayBot) -> None:
         if bot.bot_context is None:
             return
         try:
-            await bot.recipe_registry.dispatch("discord.message", message=message)
+            await bot.dispatch_event("discord.message", message=message)
         except Exception as error:
             await report_error(bot, message.guild, error, operation="discord.message")
 
@@ -24,7 +24,7 @@ def register_recipe_events(bot: NetworkRelayBot) -> None:
         if bot.bot_context is None or guild is None or guild.id != bot.settings.guild_id:
             return
         try:
-            await bot.recipe_registry.dispatch("discord.webhooks_update", channel=channel)
+            await bot.dispatch_event("discord.webhooks_update", channel=channel)
         except Exception as error:
             await report_error(bot, guild, error, operation="discord.webhooks_update")
 

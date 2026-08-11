@@ -1,1 +1,1 @@
-"""Feature-owned Discord views and presentation recipes."""
+"""Feature-owned presentation recipes and YAML UI templates."""

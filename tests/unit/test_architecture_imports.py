@@ -87,15 +87,52 @@ def test_retired_yaml_recipe_runtime_does_not_return() -> None:
     assert offenders == []
 
 
-def test_discord_event_adapters_dispatch_through_recipe_registry() -> None:
+def test_discord_event_adapters_dispatch_through_trigger_catalog() -> None:
     event_adapter = (
         Path(bot.__file__).resolve().parent
         / "app"
         / "discord"
         / "events.py"
     ).read_text(encoding="utf-8")
-    assert 'recipe_registry.dispatch("discord.message"' in event_adapter
-    assert 'recipe_registry.dispatch("discord.webhooks_update"' in event_adapter
+    assert 'dispatch_event("discord.message"' in event_adapter
+    assert 'dispatch_event("discord.webhooks_update"' in event_adapter
+
+
+def test_features_do_not_declare_command_or_invocation_decorators() -> None:
+    package = Path(bot.__file__).resolve().parent / "features"
+    offenders: list[str] = []
+    for path in package.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "@command(" in source or "@invocation(" in source:
+            offenders.append(str(path.relative_to(package.parent)))
+    assert offenders == []
+
+
+def test_app_owns_trigger_entry_catalog() -> None:
+    triggers = Path(bot.__file__).resolve().parent / "app" / "triggers"
+    assert (triggers / "slash.py").is_file()
+    assert (triggers / "events.py").is_file()
+    assert (triggers / "ui.py").is_file()
+    assert "TriggerSpec" in (triggers / "slash.py").read_text(encoding="utf-8")
+
+
+def test_features_widgets_are_yaml_and_presenters_only() -> None:
+    widgets = Path(bot.__file__).resolve().parent / "features" / "widgets"
+    assert (widgets / "templates").is_dir()
+    assert list((widgets / "templates" / "views").glob("*.yaml"))
+    py_files = [path for path in widgets.rglob("*.py") if path.name != "__init__.py"]
+    assert {path.name for path in py_files} == {"presenters.py"}
+    for path in py_files:
+        source = path.read_text(encoding="utf-8")
+        assert "discord.ui.View" not in source
+        assert "discord.ui.Modal" not in source
+
+
+def test_app_owns_declarative_widget_engine() -> None:
+    widgets = Path(bot.__file__).resolve().parent / "app" / "widgets"
+    assert (widgets / "engine.py").is_file()
+    assert (widgets / "registry.py").is_file()
+    assert "DeclarativeView" in (widgets / "engine.py").read_text(encoding="utf-8")
 
 
 def test_legacy_packages_are_removed() -> None:
@@ -117,22 +154,21 @@ def test_test_core_is_not_imported_by_production_code() -> None:
     assert offenders == []
 
 
-def test_client_deletion_is_reachable_only_from_delete_button_view() -> None:
+def test_client_deletion_is_reachable_only_from_delete_recipe_module() -> None:
     package = Path(bot.__file__).resolve().parent
-    deletion_callers: list[str] = []
     repository_callers: list[str] = []
     for path in package.rglob("*.py"):
         source = path.read_text(encoding="utf-8")
         relative = str(path.relative_to(package.parent))
-        if "ClientDeletionService" in source and path.name != "deletion.py":
-            deletion_callers.append(relative)
         if (
             "client_repo.delete_with_relations(" in source
             or "clients.delete_with_relations(" in source
         ):
             repository_callers.append(relative)
-    assert deletion_callers == ["bot/features/widgets/views/profile_views.py"]
-    assert repository_callers == ["bot/features/clients/deletion.py"]
+    assert repository_callers == ["bot/features/recipes/hub/clients/deletion.py"]
+    assert "ClientDeletionService" not in (
+        package / "features" / "recipes" / "hub" / "clients" / "deletion.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_test_tree_separates_unit_and_live_code() -> None:
@@ -179,13 +215,58 @@ def test_app_is_generic_and_core_has_no_feature_vocabulary() -> None:
         "server.init",
     )
     offenders: list[str] = []
+    triggers_root = package / "app" / "triggers"
     for root in (package / "app", package / "core"):
         for path in root.rglob("*.py"):
+            # Entry catalog intentionally lists product trigger ids.
+            try:
+                path.relative_to(triggers_root)
+            except ValueError:
+                pass
+            else:
+                continue
             source = path.read_text(encoding="utf-8")
             if any(value in source for value in forbidden):
                 offenders.append(str(path.relative_to(package.parent)))
     assert offenders == []
+    for path in (package / "core" / "triggers").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "server.init" not in source
+        assert "request.submit" not in source
 
+
+
+def test_hub_initialize_uses_install_recipe_not_direct_stickies() -> None:
+    initialize = (
+        Path(bot.__file__).resolve().parent / "features" / "recipes" / "hub" / "initialize.py"
+    ).read_text(encoding="utf-8")
+    index = (
+        Path(bot.__file__).resolve().parent / "features" / "recipes" / "recipes.py"
+    ).read_text(encoding="utf-8")
+    assert "from bot.features.channels.stickies" not in initialize
+    assert "clients.reconnect" in initialize
+    assert "hub.ensure_installs" in initialize
+    assert "hub.migrate" in initialize
+    assert "_compose_lifecycle_recipe" in initialize
+    assert 'run(\n        "hub.initialize"' in index or 'run("hub.initialize"' in index
+    assert '@recipe("hub.migrate")' not in index
+
+
+def test_widget_presenters_do_not_import_hub_process_modules() -> None:
+    presenters = (
+        Path(bot.__file__).resolve().parent / "features" / "widgets" / "presenters.py"
+    )
+    forbidden = (
+        "bot.features.recipes.hub.clients",
+        "bot.features.recipes.hub.onboarding",
+        "bot.features.recipes.hub.network",
+        "bot.features.recipes.hub.installs",
+        "bot.features.recipes.hub.migrate",
+        "bot.features.recipes.hub.relay",
+    )
+    source = presenters.read_text(encoding="utf-8")
+    hits = [name for name in forbidden if name in source]
+    assert hits == []
 
 def test_only_generic_feature_loader_imports_feature_package_from_app() -> None:
     package = Path(bot.__file__).resolve().parent

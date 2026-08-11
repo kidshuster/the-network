@@ -1,0 +1,22 @@
+kind: view
+id: network_admin
+timeout: null
+components:
+  - type: button
+    id: create
+    label: "Create Network"
+    style: success
+    custom_id: "tn:network_create"
+    action:
+      require: [manage_guild]
+      open_modal: create_network
+      defer: false
+  - type: button
+    id: delete
+    label: "Delete Network"
+    style: danger
+    custom_id: "tn:network_delete"
+    action:
+      require: [manage_guild]
+      open_modal: delete_network
+      defer: false

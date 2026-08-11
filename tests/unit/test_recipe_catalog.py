@@ -26,31 +26,47 @@ def test_catalog_exposes_stable_public_operations() -> None:
 
     expected = {
         "blacklist.replace",
+        "client.delete",
+        "client.edit_profile",
         "client.provision_from_request",
+        "client.toggle_timecode",
+        "clients.reconnect",
+        "clients.rectify",
+        "hub.ensure_installs",
         "hub.handle_announcement",
+        "hub.initialize",
+        "hub.migrate",
+        "hub.reset_data",
+        "hub.teardown_installs",
+        "hub.uninitialize",
         "network.create",
         "network.delete",
         "relay.deliver",
         "relay.on_message",
+        "request.approve",
+        "request.deny",
+        "request.submit",
         "server.init",
         "server.sync_join_guide",
         "server.uninit",
+        "subscription.confirm_connected",
+        "subscription.create",
+        "subscription.leave",
         "subscription.webhook_updated",
         "text.parse_dates",
     }
     assert {registry.spec(name).name for name in expected} == expected
-    assert registry.recipes_for_event("discord.message") == ("relay.on_message",)
-    assert registry.recipes_for_event("discord.webhooks_update") == (
-        "subscription.webhook_updated",
-    )
 
 
-def test_command_metadata_is_owned_by_recipes() -> None:
+def test_entry_surfaces_are_owned_by_trigger_catalog() -> None:
+    from bot.app.triggers import build_trigger_catalog
+    from bot.core.triggers import TriggerKind
+
+    catalog = build_trigger_catalog()
     registry = build_recipe_registry(_bot())
     commands = {
-        (spec.command.group, spec.command.name): spec
-        for spec in registry.command_specs()
-        if spec.command is not None
+        (spec.slash_group, spec.slash_name): spec
+        for spec in catalog.list_by_kind(TriggerKind.SLASH)
     }
 
     assert set(commands) == {
@@ -59,33 +75,36 @@ def test_command_metadata_is_owned_by_recipes() -> None:
         ("server", "sync-join-guide"),
         ("server", "uninit"),
     }
-    assert all(
-        spec.command is not None and spec.command.default_permissions == ("manage_guild",)
-        for spec in commands.values()
-    )
     for spec in commands.values():
-        assert spec.command is not None
-        assert spec.command.presenter is not None
-        assert registry.spec(spec.command.presenter).name == spec.command.presenter
+        assert spec.default_permissions == ("manage_guild",)
+        assert spec.presenter is not None
+        assert registry.spec(spec.presenter).name == spec.presenter
+        assert registry.spec(spec.recipe).name == spec.recipe
 
-
-def test_startup_and_ready_work_are_discovered_as_recipes() -> None:
-    registry = build_recipe_registry(_bot())
-
-    assert set(registry.recipes_for_event("app.services")) == {"app.initialize_relay"}
-    assert set(registry.recipes_for_event("app.setup")) == {
+    assert {s.recipe for s in catalog.triggers_for_event("app.services")} == {
+        "app.initialize_relay"
+    }
+    assert {s.recipe for s in catalog.triggers_for_event("app.setup")} == {
         "app.register_persistent_views",
         "app.validate_features",
     }
-    assert set(registry.recipes_for_event("app.ready")) == {
+    assert {s.recipe for s in catalog.triggers_for_event("app.ready")} == {
         "app.sync_changelog",
         "app.sync_subscription_stickies",
+    }
+    assert {s.recipe for s in catalog.triggers_for_event("discord.message")} == {
+        "relay.on_message"
+    }
+    assert {s.recipe for s in catalog.triggers_for_event("discord.webhooks_update")} == {
+        "subscription.webhook_updated"
     }
 
 
 async def test_message_event_composes_announcement_and_relay_recipes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from bot.app.triggers import build_trigger_catalog, dispatch_event
+
     relay = MagicMock()
     relay.is_potential_feed_message.return_value = True
     relay.relay_message = AsyncMock(return_value="relayed")
@@ -94,13 +113,18 @@ async def test_message_event_composes_announcement_and_relay_recipes(
     bot = _bot(core=core)
     handled = AsyncMock()
     monkeypatch.setattr(
-        "bot.features.hub.announcements.handle_network_announcements_message",
+        "bot.features.recipes.hub.announcements.handle_network_announcements_message",
         handled,
     )
     registry = build_recipe_registry(bot)
     message = MagicMock(spec=discord.Message)
 
-    assert await registry.dispatch("discord.message", message=message) == ["relayed"]
+    assert await dispatch_event(
+        build_trigger_catalog(),
+        registry.run,
+        "discord.message",
+        message=message,
+    ) == ["relayed"]
     handled.assert_awaited_once_with(bot, message)
     relay.relay_message.assert_awaited_once_with(message)
 
@@ -118,10 +142,17 @@ async def test_relay_recipe_ignores_non_feed_messages() -> None:
 
 
 async def test_webhook_event_ignores_non_text_channels() -> None:
+    from bot.app.triggers import build_trigger_catalog, dispatch_event
+
     registry = build_recipe_registry(_bot(core=SimpleNamespace()))
     channel = MagicMock(spec=discord.CategoryChannel)
 
-    assert await registry.dispatch("discord.webhooks_update", channel=channel) == [None]
+    assert await dispatch_event(
+        build_trigger_catalog(),
+        registry.run,
+        "discord.webhooks_update",
+        channel=channel,
+    ) == [None]
 
 
 async def test_date_parser_is_available_through_recipe_boundary() -> None:
@@ -200,11 +231,12 @@ async def test_network_create_recipe_owns_complete_operation(
     resync = AsyncMock(return_value=3)
     refresh_profiles = AsyncMock(return_value=2)
     monkeypatch.setattr(
-        "bot.features.clients.subscription.resync_subscriptions_for_network",
+        "bot.features.recipes.hub.clients.subscription.resync_subscriptions_for_network",
         resync,
     )
     monkeypatch.setattr(
-        "bot.features.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
+        "bot.features.recipes.hub.clients.profile_sync.refresh_all_client_profiles",
+        refresh_profiles,
     )
     registry = build_recipe_registry(bot)
     guild = MagicMock(spec=discord.Guild)
@@ -260,7 +292,8 @@ async def test_network_delete_recipe_refreshes_state_and_profiles(
     )
     refresh_profiles = AsyncMock(return_value=2)
     monkeypatch.setattr(
-        "bot.features.clients.profile_sync.refresh_all_client_profiles", refresh_profiles
+        "bot.features.recipes.hub.clients.profile_sync.refresh_all_client_profiles",
+        refresh_profiles,
     )
     registry = build_recipe_registry(_bot(core=core))
     guild = MagicMock(spec=discord.Guild)

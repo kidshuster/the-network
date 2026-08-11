@@ -1,0 +1,12 @@
+kind: view
+id: join_network
+timeout: null
+components:
+  - type: button
+    id: join
+    label: "Join Network"
+    style: success
+    custom_id: "tn:join_network"
+    action:
+      open_modal: join_network
+      defer: false

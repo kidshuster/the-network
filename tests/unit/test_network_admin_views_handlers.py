@@ -7,7 +7,7 @@ from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
 from bot.app.templates import render_text
-from bot.features.widgets.views.network_admin_views import NetworkAdminView
+from bot.app.widgets import render_view
 
 
 @pytest.mark.asyncio
@@ -18,7 +18,7 @@ async def test_network_admin_create_button_requires_manage_guild() -> None:
     member = make_member(guild=guild, manage_guild=False)
     interaction = make_interaction(guild=guild, user=member)
 
-    view = NetworkAdminView(bot)
+    view = render_view("network_admin", bot)
     create_button = next(
         child for child in view.children if getattr(child, "label", None) == "Create Network"
     )
@@ -39,7 +39,7 @@ async def test_network_admin_create_button_opens_modal_for_admin() -> None:
     member = make_member(guild=guild, manage_guild=True)
     interaction = make_interaction(guild=guild, user=member)
 
-    view = NetworkAdminView(bot)
+    view = render_view("network_admin", bot)
     create_button = next(
         child for child in view.children if getattr(child, "label", None) == "Create Network"
     )

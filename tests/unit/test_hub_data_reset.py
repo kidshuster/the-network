@@ -5,7 +5,7 @@ from context_helpers import make_test_context
 
 from bot.features.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
 from bot.features.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
-from bot.features.hub.data_reset import reset_hub_layout_data
+from bot.features.recipes.hub.data_reset import reset_hub_layout_data
 
 
 @pytest.mark.asyncio

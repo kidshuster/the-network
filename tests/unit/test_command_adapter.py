@@ -1,44 +1,45 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock, MagicMock, call
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import discord
 
 from bot.app.discord.commands import register_recipe_commands
-from bot.app.recipes.metadata import CommandSpec, RecipeSpec
+from bot.core.triggers import TriggerKind, TriggerSpec
 
 
 def _bot() -> MagicMock:
     bot = MagicMock()
     bot.settings.guild_id = 100
     bot.tree = MagicMock()
-    bot.recipe_registry.command_specs.return_value = (
-        RecipeSpec(
-            "server.init",
-            command=CommandSpec(
-                "server",
-                "init",
-                "Initialize server",
-                default_permissions=("manage_guild",),
-                presenter="present.server.init",
-            ),
+    bot.trigger_catalog.list_by_kind.return_value = (
+        TriggerSpec(
+            id="server.init",
+            kind=TriggerKind.SLASH,
+            recipe="server.init",
+            slash_group="server",
+            slash_name="init",
+            slash_description="Initialize server",
+            default_permissions=("manage_guild",),
+            presenter="present.server.init",
         ),
-        RecipeSpec(
-            "server.uninit",
-            command=CommandSpec(
-                "server",
-                "uninit",
-                "Remove server layout",
-                default_permissions=("manage_guild",),
-                presenter="present.server.uninit",
-            ),
+        TriggerSpec(
+            id="server.uninit",
+            kind=TriggerKind.SLASH,
+            recipe="server.uninit",
+            slash_group="server",
+            slash_name="uninit",
+            slash_description="Remove server layout",
+            default_permissions=("manage_guild",),
+            presenter="present.server.uninit",
         ),
     )
+    bot.dispatch_trigger = AsyncMock(return_value=SimpleNamespace(success=True))
     return bot
 
 
-def test_command_adapter_batches_recipe_metadata_into_group() -> None:
+def test_command_adapter_batches_trigger_metadata_into_group() -> None:
     bot = _bot()
 
     register_recipe_commands(bot)
@@ -49,12 +50,13 @@ def test_command_adapter_batches_recipe_metadata_into_group() -> None:
     assert all(command.default_permissions.manage_guild for command in group.commands)
 
 
-async def test_generated_command_runs_recipe_and_presenter(
+async def test_generated_command_runs_trigger_and_presenter(
     monkeypatch,
 ) -> None:
     bot = _bot()
     result = SimpleNamespace(success=True)
-    bot.recipe_registry.run = AsyncMock(return_value=result)
+    bot.dispatch_trigger = AsyncMock(return_value=result)
+    bot.recipe_registry.run = AsyncMock()
     register_recipe_commands(bot)
     group = bot.tree.add_command.call_args.args[0]
     command = group.get_command("init")
@@ -69,21 +71,17 @@ async def test_generated_command_runs_recipe_and_presenter(
 
     await command.callback(interaction)
 
-    bot.recipe_registry.run.assert_has_awaits(
-        [
-            call("server.init", interaction=interaction),
-            call(
-                "present.server.init",
-                response=ANY,
-                value=result,
-            ),
-        ]
+    bot.dispatch_trigger.assert_awaited_once_with("server.init", interaction=interaction)
+    bot.recipe_registry.run.assert_awaited_once_with(
+        "present.server.init",
+        response=ANY,
+        value=result,
     )
 
 
 async def test_generated_command_enforces_declared_permissions() -> None:
     bot = _bot()
-    bot.recipe_registry.run = AsyncMock()
+    bot.dispatch_trigger = AsyncMock()
     register_recipe_commands(bot)
     command = bot.tree.add_command.call_args.args[0].get_command("init")
     assert command is not None
@@ -99,6 +97,6 @@ async def test_generated_command_enforces_declared_permissions() -> None:
 
     await command.callback(interaction)
 
-    bot.recipe_registry.run.assert_not_awaited()
+    bot.dispatch_trigger.assert_not_awaited()
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert embed.title == "Permission Required"

@@ -34,9 +34,13 @@ layout:
           topic: Moderator commands, administration, and bot error reports
           community_slot: public_updates
           lifecycle: preserve
+          legacy_names: [commands, moderator-only, mod-only, staff-only]
           overrides:
             moderator: {use_application_commands: true}
           position: 0
+          installs:
+            - sticky: network-admin
+              view: network_admin
         join_requests:
           name: join-requests
           topic: Pending client join requests
@@ -45,6 +49,8 @@ layout:
           name: network-announcements
           type: text
           position: 2
+          installs:
+            - guide: announcements
     network:
       name: The Network
       position: 1
@@ -55,10 +61,15 @@ layout:
           community_slot: rules
           lifecycle: preserve
           position: 0
+          installs:
+            - sticky: hub-rules
         join_the_network:
           name: join-the-network
           topic: Join The Network hub as a client
           position: 1
+          installs:
+            - sticky: join-the-network
+              view: join_network
     leaders:
       name: Leaders
       position: 2
@@ -68,6 +79,7 @@ layout:
           name: leaders-channel
           topic: Private channel for participating server leaders
           lifecycle: preserve
+          legacy_names: [leaders]
           position: 0
           overrides:
             client_roles: {send_messages: true, embed_links: true, attach_files: true, add_reactions: true}
@@ -76,6 +88,8 @@ layout:
           topic: Release notes for The Network bot
           lifecycle: preserve
           position: 1
+          installs:
+            - sync: changelog_releases
   client_category:
     name: "{server_name}"
     profile: client_private
@@ -90,9 +104,9 @@ layout:
         topic: "Publish channel for network {network_key}"
         instances: per_subscription
         profile: client_publish
-        position: 10
+        position: 11
       subscribe:
         name: "{slug}-{network_key}-subscribe"
         type: announcement
         instances: per_subscription
-        position: 11
+        position: 10

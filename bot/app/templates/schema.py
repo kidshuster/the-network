@@ -42,6 +42,7 @@ class ModalFieldSpec(BaseModel):
 class ModalTemplateSpec(BaseModel):
     kind: Literal["modal"] = "modal"
     title: str
+    trigger: str | None = None
     fields: list[ModalFieldSpec]
 
 

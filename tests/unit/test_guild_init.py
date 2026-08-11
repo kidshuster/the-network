@@ -91,11 +91,11 @@ def _patch_init_roles(
         MagicMock(return_value=operator_role),
     )
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers.resolve_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
 
@@ -143,7 +143,7 @@ async def test_initialize_guild_survives_category_sync_50013(
 
     assert result.success is True
     assert result.failed_steps
-    assert any("category" in step.casefold() for step in result.failed_steps)
+    assert any("missing permissions" in step.casefold() for step in result.failed_steps)
 
 
 @pytest.mark.asyncio
@@ -263,7 +263,13 @@ async def test_initialize_guild_survives_client_category_sync_50013(
     guild.text_channels = []
 
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
+    profile = MagicMock(spec=discord.TextChannel, id=700, mention="#alpha-profile")
+    profile.edit = AsyncMock()
+    profile.overwrites = {}
     guild.get_role = MagicMock(return_value=client_role)
+    guild.get_channel = MagicMock(
+        side_effect=lambda cid: {600: client_category, 700: profile}.get(cid),
+    )
     guild.create_text_channel = AsyncMock(
         side_effect=lambda **kwargs: MagicMock(
             spec=discord.TextChannel,
@@ -294,16 +300,39 @@ async def test_initialize_guild_survives_client_category_sync_50013(
         degraded_reason=None,
     )
 
+    network_bot = MagicMock()
+    network_bot.settings.network_access_role_name = "The Network"
+    context = MagicMock()
+    context.store.clients.list_all = AsyncMock(return_value=[client])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
+    context.store.networks.list_all = AsyncMock(return_value=[])
+    context.store.networks.get_by_id = AsyncMock(return_value=None)
+    context.refresh_projections = AsyncMock()
+    context.store.settings.get = AsyncMock(return_value=None)
+    context.store.settings.set = AsyncMock()
+
+    from view_registry_helpers import make_test_view_registry
+
     result = await initialize_guild(
         guild,
         bot,
         access_role_name="The Network",
         operator_role_name="The Network+",
         clients=[client],
+        bot=network_bot,
+        context=context,
+        view_registry=make_test_view_registry(),
     )
 
     assert result.success is True
-    assert any("client category" in step.casefold() for step in result.failed_steps)
+    assert any(
+        "category" in note.casefold() or "missing permissions" in note.casefold()
+        for note in [
+            *result.failed_steps,
+            *result.rectification_failures,
+            *result.rectifications,
+        ]
+    )
 
 
 @pytest.mark.asyncio
@@ -355,11 +384,11 @@ async def test_initialize_guild_renames_community_admin_channel_or_reports_block
 
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     monkeypatch.setattr(
-        "bot.features.hub.reconcilers._ensure_human_moderator_role",
+        "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.features.hub.leaders.ensure_leaders_channels",
+        "bot.features.recipes.hub.leaders.ensure_leaders_channels",
         AsyncMock(
             return_value=(
                 None,

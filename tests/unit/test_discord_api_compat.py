@@ -52,7 +52,7 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     category.id = 100
 
     with patch(
-        "bot.features.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.features.recipes.hub.notifications.ensure_guild_only_mention_notifications",
         new=AsyncMock(),
     ):
         await permission_service.ensure_text_channel(

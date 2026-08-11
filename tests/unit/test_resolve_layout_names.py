@@ -28,10 +28,12 @@ def _clear_caches() -> None:
     clear_layout_cache()
 
 
-def test_hub_channel_aliases_only_include_current_yaml_name() -> None:
+def test_hub_channel_aliases_include_current_and_legacy_names() -> None:
     aliases = hub_channel_aliases(HUB_CHANNEL_ADMIN)
     assert hub_channel_name(HUB_CHANNEL_ADMIN) == aliases[0]
-    assert aliases == ("admin",)
+    assert aliases[0] == "admin"
+    assert "commands" in aliases
+    assert "moderator-only" in aliases
 
 
 def test_resolve_hub_category_matches_yaml_name() -> None:
@@ -43,7 +45,7 @@ def test_resolve_hub_category_matches_yaml_name() -> None:
     assert resolve_hub_category(guild, HUB_CATEGORY_NETWORK) is match
 
 
-def test_resolve_hub_channel_does_not_match_retired_name() -> None:
+def test_resolve_hub_channel_matches_legacy_name() -> None:
     guild = MagicMock(spec=discord.Guild)
     channel = MagicMock(spec=discord.TextChannel)
     channel.name = "mod-only"
@@ -52,14 +54,14 @@ def test_resolve_hub_channel_does_not_match_retired_name() -> None:
     guild.text_channels = [channel]
 
     found = resolve_hub_channel(guild, HUB_CHANNEL_ADMIN)
-    assert found is None
+    assert found is channel
 
     found_in_category = resolve_hub_channel(
         guild,
         HUB_CHANNEL_ADMIN,
         category_id=10,
     )
-    assert found_in_category is None
+    assert found_in_category is channel
     assert (
         resolve_hub_channel(
             guild,

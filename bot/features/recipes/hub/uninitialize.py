@@ -6,15 +6,26 @@ from dataclasses import dataclass, field
 
 import discord
 
-from bot.app.layout.managed import hub_category_names, preserved_channel_names
+from bot.app.layout import ApplyMode, LayoutContext, apply_layout
+from bot.app.layout.managed import (
+    compile_hub_teardown_resources,
+    hub_category_names,
+    preserved_channel_names,
+)
+from bot.app.recipes.registry import recipe
+from bot.app.recipes.runtime import RecipeContext
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
-from bot.core.discord.cleanup import delete_channel, delete_role
+from bot.core.discord.cleanup import delete_role
 from bot.core.discord.step_runner import run_guild_step
+from bot.core.networks.roles import (
+    resolve_access_role_by_name,
+    resolve_operator_role_by_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +60,7 @@ def is_preserved_hub_channel(
 
 
 def is_hub_managed_category(category: discord.CategoryChannel) -> bool:
-    name = category.name.casefold()
-    return name in hub_category_names()
+    return category.name.casefold() in hub_category_names()
 
 
 def is_deletable_hub_role(
@@ -104,7 +114,7 @@ def collect_uninit_targets(
         category_id = getattr(channel, "category_id", None)
         if category_id in category_ids_to_delete:
             channels_to_delete.append(channel)
-            continue
+
     roles_to_delete = [
         role
         for role in guild.roles
@@ -114,7 +124,6 @@ def collect_uninit_targets(
             operator_role_name=operator_role_name,
         )
     ]
-
     return channels_to_delete, categories_to_delete, roles_to_delete, preserved
 
 
@@ -126,30 +135,19 @@ async def _run_uninit_step[T](
     return await run_guild_step(result, step, action)
 
 
-async def _detach_preserved_channels(
-    preserved: list[discord.abc.GuildChannel],
+@recipe("hub.uninitialize")
+async def uninitialize_guild_recipe(
+    recipe_context: RecipeContext,
     *,
-    result: GuildUninitResult,
-) -> None:
-    for channel in preserved:
-        if not isinstance(channel, discord.TextChannel):
-            continue
-        if channel.category_id is None:
-            continue
-
-        async def _detach(ch: discord.TextChannel = channel) -> bool:
-            await ch.edit(category=None, reason="The Network guild uninit")
-            return True
-
-        if await _run_uninit_step(
-            result,
-            f"move preserved {_channel_label(channel)} out of its category",
-            _detach,
-        ):
-            result.notes.append(
-                f"Moved preserved {_channel_label(channel)} out of its category "
-                "so hub categories can be removed."
-            )
+    guild: discord.Guild,
+    bot_member: discord.Member,
+) -> GuildUninitResult:
+    return await uninitialize_guild(
+        guild,
+        bot_member,
+        access_role_name=recipe_context.bot.settings.network_access_role_name,
+        operator_role_name=recipe_context.bot.settings.network_operator_role_name,
+    )
 
 
 async def uninitialize_guild(
@@ -167,58 +165,51 @@ async def uninitialize_guild(
             reason="The bot needs **Manage Channels** to remove hub channels and categories.",
         )
 
-    channels, categories, roles, preserved = collect_uninit_targets(
-        guild,
-        access_role_name=access_role_name,
-        operator_role_name=operator_role_name,
+    access_role = resolve_access_role_by_name(guild, role_name=access_role_name)
+    operator_role = resolve_operator_role_by_name(guild, role_name=operator_role_name)
+    layout_ctx = LayoutContext(
+        guild=guild,
+        bot_member=bot_member,
+        access_role=access_role,
+        operator_role=operator_role,
+        reason="The Network guild uninit",
     )
-
-    for channel in preserved:
-        result.preserved_channels.append(_channel_label(channel))
-
-    await _detach_preserved_channels(preserved, result=result)
-
-    seen_channel_ids: set[int] = set()
-    for channel in sorted(channels, key=lambda ch: ch.id):
-        if channel.id in seen_channel_ids:
+    batch = await apply_layout(
+        layout_ctx,
+        compile_hub_teardown_resources(layout_ctx),
+        mode=ApplyMode.TEARDOWN_HUB,
+    )
+    for item in batch.results:
+        if not item.success and item.detail:
+            result.failed_steps.append(f"{item.resource_id}: {item.detail}")
             continue
-        seen_channel_ids.add(channel.id)
-
-        async def _delete_step(ch: discord.abc.GuildChannel = channel) -> bool:
-            return await delete_channel(guild, ch.id, label="guild uninit")
-
-        deleted = await _run_uninit_step(
-            result,
-            f"delete {_channel_label(channel)}",
-            _delete_step,
-        )
-        if deleted:
-            result.deleted_channels.append(_channel_label(channel))
-
-    seen_category_ids: set[int] = set()
-    for category in sorted(categories, key=lambda cat: cat.id):
-        if category.id in seen_category_ids:
+        if not item.changed:
             continue
-        seen_category_ids.add(category.id)
+        if item.resource_id.startswith("detach:"):
+            name = item.resource_id.removeprefix("detach:")
+            result.preserved_channels.append(f"#{name}")
+            result.notes.append(
+                f"Moved preserved #{name} out of its category so hub categories can be removed."
+            )
+        elif item.resource_id.startswith("delete_cat:"):
+            result.deleted_categories.append(item.resource_id.removeprefix("delete_cat:"))
+        elif item.resource_id.startswith("delete:"):
+            result.deleted_channels.append(f"#{item.resource_id.removeprefix('delete:')}")
 
-        async def _delete_category_step(
-            cat: discord.CategoryChannel = category,
-        ) -> bool:
-            return await delete_channel(guild, cat.id, label="guild uninit category")
-
-        deleted = await _run_uninit_step(
-            result,
-            f"delete category {category.name}",
-            _delete_category_step,
+    roles = [
+        role
+        for role in guild.roles
+        if is_deletable_hub_role(
+            role,
+            access_role_name=access_role_name,
+            operator_role_name=operator_role_name,
         )
-        if deleted:
-            result.deleted_categories.append(category.name)
-
+    ]
     if perms.manage_roles:
-        for role in sorted(roles, key=lambda r: r.position):
+        for role in sorted(roles, key=lambda item: item.position):
 
-            async def _delete_role_step(r: discord.Role = role) -> bool:
-                return await delete_role(guild, r.id, label="guild uninit role")
+            async def _delete_role_step(target: discord.Role = role) -> bool:
+                return await delete_role(guild, target.id, label="guild uninit role")
 
             deleted = await _run_uninit_step(
                 result,

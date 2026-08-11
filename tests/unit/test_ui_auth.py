@@ -9,15 +9,15 @@ from interaction_helpers import make_interaction, make_member
 
 from bot.app.discord.responses import defer_ephemeral
 from bot.app.templates import render_text
+from bot.app.widgets.policies import (
+    MembershipPolicy,
+    ensure_client_access,
+    validate_hub_modal_context,
+)
 from bot.core.models.client import Client
 from bot.features.channels.stickies.reconciler import (
     embed_content_signature,
     sticky_channel_embed_permission_error,
-)
-from bot.features.widgets.views._auth import (
-    MembershipPolicy,
-    ensure_client_access,
-    validate_hub_modal_context,
 )
 
 
@@ -102,7 +102,7 @@ async def test_validate_client_modal_context_rejects_missing_guild() -> None:
     interaction = MagicMock()
     interaction.guild = None
 
-    from bot.features.widgets.views._auth import validate_client_modal_context
+    from bot.app.widgets.policies import validate_client_modal_context
 
     result = validate_client_modal_context(bot, interaction)
 

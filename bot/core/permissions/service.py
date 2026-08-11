@@ -272,6 +272,7 @@ class PermissionService:
         overwrites: OverwriteMap,
         managed_targets: Collection[Target],
         reason: str,
+        position: int | None = None,
     ) -> PermissionResourceResult[discord.CategoryChannel]:
         category = existing
         if category is None:
@@ -286,6 +287,23 @@ class PermissionService:
         sync = await self.reconcile(
             category, context, overwrites, managed_targets=managed_targets, reason=reason
         )
+        if position is not None and category.position != position:
+            try:
+                await category.edit(position=position, reason=reason)
+            except discord.HTTPException as exc:
+                return PermissionResourceResult(
+                    category,
+                    PermissionSyncResult(
+                        False,
+                        sync.changed,
+                        category.id,
+                        sync.added,
+                        sync.updated,
+                        sync.removed,
+                        sync.preserved,
+                        failures=(*sync.failures, str(exc)),
+                    ),
+                )
         return PermissionResourceResult(category, sync)
 
     async def ensure_text_channel(
@@ -301,6 +319,7 @@ class PermissionService:
         reason: str,
         topic: str | None = None,
         news: bool = False,
+        position: int | None = None,
     ) -> PermissionResourceResult[discord.TextChannel]:
         channel = existing
         if channel is None:
@@ -323,6 +342,23 @@ class PermissionService:
         sync = await self.reconcile(
             channel, context, overwrites, managed_targets=managed_targets, reason=reason
         )
+        if position is not None and channel.position != position:
+            try:
+                await channel.edit(position=position, reason=reason)
+            except discord.HTTPException as exc:
+                return PermissionResourceResult(
+                    channel,
+                    PermissionSyncResult(
+                        False,
+                        sync.changed,
+                        channel.id,
+                        sync.added,
+                        sync.updated,
+                        sync.removed,
+                        sync.preserved,
+                        failures=(*sync.failures, str(exc)),
+                    ),
+                )
         return PermissionResourceResult(channel, sync)
 
 

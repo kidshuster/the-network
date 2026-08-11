@@ -7,41 +7,46 @@ from bot.app.layout.roles import LayoutContext
 
 
 @lru_cache(maxsize=1)
-def _hub_category_by_id() -> dict[str, str]:
-    from bot.app.layout.loader import load_layout
-
-    return {key: value.name for key, value in load_layout().layout.categories.items()}
-
-
-@lru_cache(maxsize=1)
-def _hub_channel_by_id() -> dict[str, str]:
+def _hub_category_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
     from bot.app.layout.loader import load_layout
 
     return {
-        key: channel.name
+        key: (value.name, tuple(value.legacy_names))
+        for key, value in load_layout().layout.categories.items()
+    }
+
+
+@lru_cache(maxsize=1)
+def _hub_channel_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
+    from bot.app.layout.loader import load_layout
+
+    return {
+        key: (channel.name, tuple(channel.legacy_names))
         for category in load_layout().layout.categories.values()
         for key, channel in category.channels.items()
     }
 
 
 def hub_category_name(category_id: str) -> str:
-    return _hub_category_by_id()[category_id]
+    return _hub_category_by_id()[category_id][0]
 
 
 def hub_channel_name(channel_id: str) -> str:
-    return _hub_channel_by_id()[channel_id]
+    return _hub_channel_by_id()[channel_id][0]
 
 
 def hub_category_aliases(category_id: str) -> tuple[str, ...]:
-    return (hub_category_name(category_id),)
+    name, legacy = _hub_category_by_id()[category_id]
+    return (name, *legacy)
 
 
 def hub_channel_aliases(channel_id: str) -> tuple[str, ...]:
-    return (hub_channel_name(channel_id),)
+    name, legacy = _hub_channel_by_id()[channel_id]
+    return (name, *legacy)
 
 
 def hub_category_names() -> frozenset[str]:
-    return frozenset(name.casefold() for name in _hub_category_by_id().values())
+    return frozenset(name.casefold() for name, _legacy in _hub_category_by_id().values())
 
 
 def preserved_channel_names() -> frozenset[str]:

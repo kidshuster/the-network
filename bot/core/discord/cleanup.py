@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 import discord
 
@@ -49,6 +50,7 @@ async def delete_channel(
     channel_id: int,
     *,
     label: str,
+    reorder: Sequence[discord.abc.GuildChannel] | None = None,
 ) -> bool:
     channel: discord.abc.GuildChannel | None = guild.get_channel(channel_id)
     if channel is None:
@@ -68,7 +70,6 @@ async def delete_channel(
 
     try:
         await channel.delete(reason=f"The Network: {label} cleanup")
-        return True
     except discord.NotFound:
         return False
     except discord.HTTPException as exc:
@@ -77,6 +78,15 @@ async def delete_channel(
             extra={"channel_id": channel_id, "label": label, "error": str(exc)},
         )
         return False
+
+    if reorder:
+        from bot.core.channels.order import align_positions
+
+        await align_positions(
+            reorder,
+            reason=f"The Network: {label} order",
+        )
+    return True
 
 
 async def delete_role(

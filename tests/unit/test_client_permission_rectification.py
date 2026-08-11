@@ -7,7 +7,7 @@ import pytest
 
 from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
 from bot.core.models.client import Client
-from bot.features.clients.rectification import rectify_client_permissions
+from bot.features.recipes.hub.clients.rectification import rectify_client_permissions
 
 
 async def test_rectify_client_permissions_syncs_category_and_profile(
@@ -49,11 +49,11 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
     context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
 
     monkeypatch.setattr(
-        "bot.features.clients.rectification.resolve_operator_role_by_name",
+        "bot.features.recipes.hub.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        "bot.features.clients.rectification.apply_layout",
+        "bot.features.recipes.hub.clients.rectification.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[
@@ -127,11 +127,11 @@ async def test_rectify_client_permissions_records_category_http_failure(
     guild.get_role = MagicMock(return_value=client_role)
 
     monkeypatch.setattr(
-        "bot.features.clients.rectification.resolve_operator_role_by_name",
+        "bot.features.recipes.hub.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        "bot.features.clients.rectification.apply_layout",
+        "bot.features.recipes.hub.clients.rectification.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[
@@ -203,7 +203,7 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
     guild.get_role = MagicMock(return_value=client_role)
 
     monkeypatch.setattr(
-        "bot.features.clients.rectification.resolve_operator_role_by_name",
+        "bot.features.recipes.hub.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
 
@@ -213,23 +213,19 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
         *,
         mode: object = None,
     ) -> BatchApplyResult:
-        ids = {getattr(r, "id", None) for r in resources}
-        if "publish" in ids or "subscribe" in ids:
-            return BatchApplyResult(
-                results=[
-                    ResourceApplyResult("publish", True, channel=publish),
-                    ResourceApplyResult("subscribe", True, channel=subscribe),
-                ]
-            )
+        ids = [getattr(r, "id", None) for r in resources]
+        assert ids == ["client", "profile", "publish", "subscribe"]
         return BatchApplyResult(
             results=[
                 ResourceApplyResult("client", True, channel=category),
                 ResourceApplyResult("profile", True, channel=profile),
+                ResourceApplyResult("publish", True, channel=publish),
+                ResourceApplyResult("subscribe", True, channel=subscribe),
             ]
         )
 
     monkeypatch.setattr(
-        "bot.features.clients.rectification.apply_layout",
+        "bot.features.recipes.hub.clients.rectification.apply_layout",
         AsyncMock(side_effect=_apply),
     )
 

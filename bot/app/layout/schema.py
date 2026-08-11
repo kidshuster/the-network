@@ -64,6 +64,21 @@ class ProfileSpec(StrictModel):
         return self
 
 
+class ChannelInstallSpec(StrictModel):
+    """Opaque install refs resolved by features (sticky/view/guide/sync)."""
+
+    sticky: str | None = None
+    view: str | None = None
+    guide: str | None = None
+    sync: str | None = None
+
+    @model_validator(mode="after")
+    def _has_target(self) -> ChannelInstallSpec:
+        if not any((self.sticky, self.view, self.guide, self.sync)):
+            raise ValueError("install entry must set sticky, view, guide, or sync")
+        return self
+
+
 class ChannelSpec(StrictModel):
     name: str
     type: ChannelType = "text"
@@ -74,6 +89,8 @@ class ChannelSpec(StrictModel):
     lifecycle: Literal["managed", "preserve"] = "managed"
     position: int | None = None
     instances: InstanceKind = "static"
+    legacy_names: list[str] = Field(default_factory=list)
+    installs: list[ChannelInstallSpec] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _community_is_preserved(self) -> ChannelSpec:
@@ -85,10 +102,13 @@ class ChannelSpec(StrictModel):
 
 class CategorySpec(StrictModel):
     name: str
-    position: int = 0
+    # Hub categories set this explicitly. Client categories omit it so Discord
+    # placement is controlled by compile/apply (below hub), not forced to 0.
+    position: int | None = None
     profile: str
     overrides: dict[str, dict[str, bool | None] | None] = Field(default_factory=dict)
     channels: dict[str, ChannelSpec] = Field(default_factory=dict)
+    legacy_names: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _valid_overrides(self) -> CategorySpec:
@@ -135,7 +155,25 @@ class LayoutSpec(StrictModel):
             for category in self.layout.categories.values()
             for channel in category.channels.values()
         }
+        category_names = {
+            category.name.casefold() for category in self.layout.categories.values()
+        }
         overlap = desired_names & {name.casefold() for name in self.retired_channels}
         if overlap:
             raise ValueError(f"active channels cannot be retired: {sorted(overlap)}")
+        # Legacy aliases are kind-scoped: a channel may reuse a category's display name.
+        for category_id, category in self.layout.categories.items():
+            for legacy in category.legacy_names:
+                if legacy.casefold() in category_names:
+                    raise ValueError(
+                        f"{category_id}: legacy_names entry {legacy!r} conflicts with an "
+                        "active category name",
+                    )
+            for channel_id, channel in category.channels.items():
+                for legacy in channel.legacy_names:
+                    if legacy.casefold() in desired_names:
+                        raise ValueError(
+                            f"{category_id}.{channel_id}: legacy_names entry {legacy!r} "
+                            "conflicts with an active channel name",
+                        )
         return self

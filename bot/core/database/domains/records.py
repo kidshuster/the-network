@@ -507,6 +507,9 @@ class SettingsStore:
             (key, value, now),
         )
 
+    async def delete(self, key: str) -> None:
+        await self._db.execute("DELETE FROM settings WHERE key = ?", (key,))
+
 
 class ClientStore:
     def __init__(self, db: Database) -> None:

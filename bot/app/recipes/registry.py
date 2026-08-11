@@ -3,11 +3,10 @@ from __future__ import annotations
 import contextvars
 import inspect
 import secrets
-from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, TypeVar, cast
 
-from bot.app.recipes.metadata import CommandSpec, RecipeSpec
+from bot.app.recipes.metadata import RecipeSpec
 from bot.app.recipes.runtime import RecipeContext
 from bot.errors import UserFacingError
 
@@ -36,16 +35,12 @@ class RecipeRegistryError(RuntimeError):
 def recipe(
     name: str,
     *,
-    command: CommandSpec | None = None,
-    events: tuple[str, ...] = (),
     interactions: tuple[str, ...] = (),
 ) -> Callable[[F], F]:
+    """Mark a features callable as invokable via the recipe registry."""
+
     def decorate(function: F) -> F:
-        setattr(
-            function,
-            _SPEC_ATTRIBUTE,
-            RecipeSpec(name, command, events, interactions),
-        )
+        setattr(function, _SPEC_ATTRIBUTE, RecipeSpec(name, interactions))
         return function
 
     return decorate
@@ -56,7 +51,6 @@ class RecipeRegistry:
         self._bot = bot
         self._recipes: dict[str, RecipeFunction] = {}
         self._specs: dict[str, RecipeSpec] = {}
-        self._events: dict[str, list[str]] = defaultdict(list)
         self._interactions: dict[str, str] = {}
 
     def register(self, function: RecipeFunction) -> None:
@@ -73,8 +67,6 @@ class RecipeRegistry:
                 )
         self._recipes[spec.name] = function
         self._specs[spec.name] = spec
-        for event in spec.events:
-            self._events[event].append(spec.name)
         for interaction in spec.interactions:
             self._interactions[interaction] = spec.name
 
@@ -88,17 +80,11 @@ class RecipeRegistry:
         except KeyError as exc:
             raise RecipeRegistryError(f"Unknown recipe {name!r}") from exc
 
-    def recipes_for_event(self, event: str) -> tuple[str, ...]:
-        return tuple(self._events.get(event, ()))
-
     def recipe_for_interaction(self, interaction: str) -> str:
         try:
             return self._interactions[interaction]
         except KeyError as exc:
             raise RecipeRegistryError(f"Unknown interaction {interaction!r}") from exc
-
-    def command_specs(self) -> tuple[RecipeSpec, ...]:
-        return tuple(spec for spec in self._specs.values() if spec.command is not None)
 
     async def run(self, name: str, **inputs: Any) -> Any:
         try:
@@ -133,9 +119,6 @@ class RecipeRegistry:
             ) from exc
         finally:
             _call_stack.reset(token)
-
-    async def dispatch(self, event: str, **inputs: Any) -> list[Any]:
-        return [await self.run(name, **inputs) for name in self.recipes_for_event(event)]
 
 
 def collect_recipes(module: object) -> list[RecipeFunction]:

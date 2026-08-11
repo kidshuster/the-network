@@ -8,7 +8,7 @@ from bot.core.database.connection import Database
 from bot.core.database.store import Store
 from bot.core.networks.routing import RoutingService
 from bot.core.settings import BotSettingsService
-from bot.features.relay.service import RelayService
+from bot.features.recipes.hub.relay.service import RelayService
 
 
 async def create_bot_context(settings: Settings) -> tuple[Database, BotContext]:

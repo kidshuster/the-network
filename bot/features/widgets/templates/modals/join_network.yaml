@@ -1,5 +1,17 @@
 kind: modal
 title: "Join the network"
+trigger: request.submit
+require:
+  - hub_guild:
+      popup: hub_guild_only
+inject: [guild, requester, view_registry]
+field_map:
+  name: server_name
+on_success:
+  reply:
+    embed: join_request_submitted
+    map:
+      client_name: params.client_name
 fields:
   - id: name
     type: text

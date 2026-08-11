@@ -1,5 +1,20 @@
 kind: modal
 title: "Edit profile"
+trigger: client.edit_profile
+require:
+  - hub_guild:
+      popup: hub_guild_form_only
+  - client_role:
+      popup: client_role_required_edit
+      membership: allow_non_member
+      ephemeral: null
+inject: [guild, view_registry]
+on_success:
+  reply:
+    embed: profile_updated
+    map:
+      display_name: params.display_name
+      warnings: params.warnings
 fields:
   - id: display_name
     type: text

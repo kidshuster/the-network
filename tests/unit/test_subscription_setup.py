@@ -328,7 +328,10 @@ async def test_network_member_welcome_posts_to_network_announcements(
         "bot.features.channels.stickies.subscription.resolve_hub_channel",
         lambda *args, **kwargs: channel,
     )
-    monkeypatch.setattr("bot.features.hub.announcements.dispatch_system_announcement", dispatch)
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.announcements.dispatch_system_announcement",
+        dispatch,
+    )
 
     await _post_network_member_welcome(
         bot,

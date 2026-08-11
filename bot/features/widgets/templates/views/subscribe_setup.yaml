@@ -1,0 +1,22 @@
+kind: view
+id: subscribe_setup
+timeout: null
+components:
+  - type: button
+    id: connected
+    label: "Subscribed channel connected"
+    style: success
+    custom_id: "tn:sub_connected:{subscription_id}"
+    params:
+      subscription_id: context.subscription_id
+      network_key: context.network_key
+    action:
+      trigger: subscription.confirm_connected
+      require: [bot_ready]
+      inject: [guild, view_registry]
+      on_success:
+        embed: review_success
+        map:
+          label: "'Confirmed'"
+          colour: "'green'"
+          description: "'Subscribe channel marked as connected. Relays can flow once both links are active.'"
