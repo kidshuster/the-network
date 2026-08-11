@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
-from bot.app.context import BotContext
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
+from bot.contracts.recipes import RecipeContext, recipe
 from bot.features.recipes.hub.installs import hub_sticky_settings_keys
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ class HubDataResetResult:
         return f"Cleared hub layout data: {', '.join(parts)} (clients preserved)."
 
 
-async def reset_hub_layout_data(context: BotContext, guild_id: int) -> HubDataResetResult:
+async def reset_hub_layout_data(context: Any, guild_id: int) -> HubDataResetResult:
     """Clear hub/network DB state for ``guild_id`` while preserving client rows."""
     deleted = await context.store.maintenance.reset_hub_layout(
         guild_id,
@@ -65,7 +64,7 @@ async def reset_hub_layout_data(context: BotContext, guild_id: int) -> HubDataRe
     )
 
 
-async def reset_hub_data(context: BotContext, guild_id: int) -> HubDataResetResult:
+async def reset_hub_data(context: Any, guild_id: int) -> HubDataResetResult:
     """Backwards-compatible alias for :func:`reset_hub_layout_data`."""
     return await reset_hub_layout_data(context, guild_id)
 

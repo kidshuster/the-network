@@ -2,17 +2,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.core.clients.resources import fetch_client_role, resolve_client_category
 from bot.core.models.client import Client
 
 if TYPE_CHECKING:
-    from bot.app.context import BotContext
     from bot.core.database.store import ClientStore, NetworkStore
 
 logger = logging.getLogger(__name__)
@@ -33,7 +30,7 @@ async def delete_client_resources(
     client: Client,
     client_repo: ClientStore,
     network_repo: NetworkStore,
-    context: BotContext,
+    context: Any,
 ) -> DeleteClientResult:
     from bot.features.recipes.hub.clients.subscription import unsubscribe_client
 
@@ -129,28 +126,10 @@ async def delete_client_resources(
     return DeleteClientResult(success=True)
 
 
-@recipe("client.delete")
-async def delete_client(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    client: Client,
-) -> DeleteClientResult:
-    return await delete_client_resources(
-        guild,
-        bot_member,
-        client=client,
-        client_repo=recipe_context.core.store.clients,
-        network_repo=recipe_context.core.store.networks,
-        context=recipe_context.core,
-    )
-
-
 async def _realign_categories_after_client_delete(guild: discord.Guild) -> None:
-    from bot.app.layout.loader import load_layout
-    from bot.app.layout.managed import hub_category_name
     from bot.core.channels.order import align_categories_hub_first
+    from bot.features.channels.layout.loader import load_layout
+    from bot.features.channels.layout.managed import hub_category_name
 
     by_name = {category.name: category for category in guild.categories}
     hub_categories: list[discord.CategoryChannel] = []

@@ -7,6 +7,7 @@ from context_helpers import make_test_context
 
 from bot.app.bot import NetworkRelayBot
 from bot.app.features import build_recipe_registry
+from bot.app.widgets import render_view
 from bot.app.widgets.engine import DeclarativeView
 
 
@@ -49,6 +50,7 @@ async def test_register_persistent_views_registers_expected_view_types(db) -> No
     bot.bot_context = context
     added: list[object] = []
     bot.add_view = MagicMock(side_effect=lambda view: added.append(view))
+    bot.render_view = lambda name, **params: render_view(name, bot, **params)
 
     await build_recipe_registry(bot).run("app.register_persistent_views")
 

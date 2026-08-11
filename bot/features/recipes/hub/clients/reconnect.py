@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import discord
 
-from bot.app.layout.loader import load_layout
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.core.clients.resources import resolve_client_category
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
 from bot.core.views import ViewRegistry
+from bot.features.channels.layout.loader import load_layout
 from bot.features.channels.stickies.subscription import sync_subscription_setup
 from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
 from bot.features.recipes.hub.clients.rectification import rectify_client_permissions
@@ -24,10 +22,6 @@ from bot.features.recipes.hub.clients.subscription import (
 )
 from bot.features.recipes.hub.result import GuildInitResult
 
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
-
 logger = logging.getLogger(__name__)
 
 
@@ -37,8 +31,8 @@ async def _run_reconnect_step(name: str, action: Callable[[], Awaitable[object]]
 
 async def _finish_client_reconnect(
     guild: discord.Guild,
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     bot_member: discord.Member,
     client: Client,
     *,
@@ -115,7 +109,7 @@ async def _finish_client_reconnect(
 
 async def _client_category_position(
     guild: discord.Guild,
-    context: BotContext,
+    context: Any,
     client: Client,
 ) -> int:
     from bot.core.channels.order import next_trailing_position
@@ -135,8 +129,8 @@ async def _client_category_position(
 
 async def rectify_client_on_init(
     guild: discord.Guild,
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     bot_member: discord.Member,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
@@ -193,8 +187,8 @@ async def rectify_client_on_init(
 
 async def resync_networks_on_init(
     guild: discord.Guild,
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     *,
     result: GuildInitResult,
     access_role_name: str | None = None,
@@ -218,8 +212,8 @@ async def resync_networks_on_init(
 
 async def reconnect_clients_on_init(
     guild: discord.Guild,
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     bot_member: discord.Member,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
@@ -268,52 +262,3 @@ async def reconnect_clients_on_init(
             f"Verified and refreshed {reconnected} client profile card(s)."
         )
 
-
-@recipe("clients.rectify")
-async def rectify_client(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    access_role: discord.Role,
-    human_moderator_role: discord.Role | None,
-    client: Client,
-    result: GuildInitResult,
-    view_registry: ViewRegistry | Any,
-) -> bool:
-    return await rectify_client_on_init(
-        guild,
-        recipe_context.bot,
-        recipe_context.core,
-        bot_member,
-        access_role,
-        human_moderator_role,
-        client,
-        result=result,
-        view_registry=view_registry,
-    )
-
-
-@recipe("clients.reconnect")
-async def reconnect_clients(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    access_role: discord.Role,
-    human_moderator_role: discord.Role | None,
-    clients: list[Client],
-    result: GuildInitResult,
-    view_registry: ViewRegistry | Any,
-) -> None:
-    await reconnect_clients_on_init(
-        guild,
-        recipe_context.bot,
-        recipe_context.core,
-        bot_member,
-        access_role,
-        human_moderator_role,
-        clients,
-        result=result,
-        view_registry=view_registry,
-    )

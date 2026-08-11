@@ -152,12 +152,12 @@ async def verify_provision_permissions_live(
     """
     from dataclasses import replace
 
-    from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_client
     from bot.core.clients.names import build_client_role_name
     from bot.core.networks.roles import (
         resolve_operator_role_by_name,
         validate_provision_permissions,
     )
+    from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
     from bot.features.channels.resolve import resolve_human_moderator_role
 
     _ = access_role_name

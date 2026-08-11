@@ -1,4 +1,6 @@
-from bot.app.templates.engine import (
+"""Generic message/embed/modal template rendering."""
+
+from bot.core.templates.engine import (
     MessageTemplateError,
     clear_template_cache,
     load_template,

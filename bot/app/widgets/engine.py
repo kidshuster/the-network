@@ -7,7 +7,6 @@ import discord
 
 from bot.app.discord.errors import respond_to_error, respond_with_error
 from bot.app.discord.responses import defer_ephemeral
-from bot.app.templates import modal_spec, render_embed, render_text
 from bot.app.widgets.fields import add_modal_fields, collect_modal_values
 from bot.app.widgets.ids import encode_component, format_custom_id
 from bot.app.widgets.loader import (
@@ -20,6 +19,7 @@ from bot.app.widgets.loader import (
 )
 from bot.app.widgets.policies import check_requires
 from bot.app.widgets.schema import ActionSpec, ComponentSpec, ReplySpec, ViewTemplateSpec
+from bot.core.templates import modal_spec, render_embed, render_text
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot

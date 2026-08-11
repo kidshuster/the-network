@@ -2,21 +2,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.core.media.image import normalize_image_bytes, read_profile_image_attachment
 from bot.core.models.client import Client
 from bot.core.models.errors import ProfileValidationError
 from bot.core.views import ViewRegistry
 from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -29,30 +23,9 @@ class ClientProfileUpdateResult:
     warnings: tuple[str, ...] = ()
 
 
-@recipe("client.edit_profile")
-async def edit_client_profile(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    client_id: int,
-    display_name: str,
-    profile_image: discord.Attachment | None = None,
-    view_registry: ViewRegistry,
-) -> ClientProfileUpdateResult:
-    return await apply_client_profile_edit(
-        recipe_context.bot,
-        recipe_context.core,
-        guild,
-        client_id=client_id,
-        display_name=display_name,
-        profile_image=profile_image,
-        view_registry=view_registry,
-    )
-
-
 async def apply_client_profile_edit(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     client_id: int,

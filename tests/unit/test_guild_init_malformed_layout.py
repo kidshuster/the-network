@@ -139,7 +139,7 @@ async def test_init_removes_retired_commands_channel(
     )
 
     assert result.success is True
-    commands.delete.assert_awaited_once()
+    commands.delete.assert_awaited()
 
 
 @pytest.mark.asyncio

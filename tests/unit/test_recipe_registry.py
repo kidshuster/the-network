@@ -15,7 +15,7 @@ from bot.app.recipes.runtime import RecipeContext
 def test_registry_indexes_recipe_metadata() -> None:
     registry = RecipeRegistry(SimpleNamespace())
 
-    @recipe("test.operation", interactions=("test:button",))
+    @recipe("test.operation")
     async def operation(context: RecipeContext) -> str:
         del context
         return "ok"
@@ -23,7 +23,6 @@ def test_registry_indexes_recipe_metadata() -> None:
     registry.register(operation)
 
     assert registry.spec("test.operation").name == "test.operation"
-    assert registry.recipe_for_interaction("test:button") == "test.operation"
 
 
 def test_recipe_required_for_registration() -> None:
@@ -37,31 +36,23 @@ def test_recipe_required_for_registration() -> None:
         registry.register(operation)
 
 
-def test_registry_rejects_duplicate_names_and_interactions() -> None:
+def test_registry_rejects_duplicate_names() -> None:
     registry = RecipeRegistry(SimpleNamespace())
 
-    @recipe("test.first", interactions=("test:button",))
+    @recipe("test.first")
     async def first(context: RecipeContext) -> None:
-        del context
-
-    @recipe("test.second", interactions=("test:button",))
-    async def second(context: RecipeContext) -> None:
         del context
 
     registry.register(first)
     with pytest.raises(RecipeRegistryError, match="Duplicate recipe"):
         registry.register(first)
-    with pytest.raises(RecipeRegistryError, match="Interaction.*already registered"):
-        registry.register(second)
 
 
-def test_registry_rejects_unknown_recipe_and_interaction() -> None:
+def test_registry_rejects_unknown_recipe() -> None:
     registry = RecipeRegistry(SimpleNamespace())
 
     with pytest.raises(RecipeRegistryError, match="Unknown recipe"):
         registry.spec("missing")
-    with pytest.raises(RecipeRegistryError, match="Unknown interaction"):
-        registry.recipe_for_interaction("missing")
 
 
 async def test_registry_binds_inputs() -> None:

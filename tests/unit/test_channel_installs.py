@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.app.layout.loader import clear_layout_cache
+from bot.features.channels.layout.loader import clear_layout_cache
 from bot.features.recipes.hub import installs as installs_mod
 from bot.features.recipes.hub.installs import (
     build_hub_install_plan,

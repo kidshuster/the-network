@@ -1,3 +1,5 @@
+"""Relay event recipes."""
+
 from __future__ import annotations
 
 import logging
@@ -5,8 +7,7 @@ from typing import Any
 
 import discord
 
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
+from bot.contracts.recipes import RecipeContext, recipe
 
 logger = logging.getLogger(__name__)
 
@@ -31,3 +32,10 @@ async def deliver_relay_message(
             },
         )
     return result
+
+
+@recipe("relay.on_message")
+async def on_message(recipe_context: RecipeContext, *, message: discord.Message) -> Any:
+    await recipe_context.run("hub.handle_announcement", message=message)
+    return await recipe_context.run("relay.deliver", message=message)
+

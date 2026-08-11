@@ -129,3 +129,9 @@ docker run --env-file .env -v "$(pwd)/data:/app/data" --restart unless-stopped -
 
 Design archives, Cursor rules, and agent notes live under untracked `cursor/`
 (symlinked as `.cursor` for IDE discovery). They are not part of the published repo.
+
+Architecture contract and active refactor correction plan (agents):
+
+- `cursor/CURSOR_ARCHITECTURE_GOALS.md`
+- `cursor/docs/refactor-correction-plan.md`
+- summary via `AGENTS.md` (symlink into `cursor/`)

@@ -8,7 +8,7 @@ import discord
 import yaml
 from pydantic import ValidationError
 
-from bot.app.templates.schema import (
+from bot.core.templates.schema import (
     EmbedTemplateSpec,
     ModalTemplateSpec,
     RelayEmbedSpec,

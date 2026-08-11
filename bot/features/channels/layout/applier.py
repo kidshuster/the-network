@@ -7,15 +7,15 @@ from enum import Enum
 
 import discord
 
-from bot.app.layout.compiler import DesiredResource, ResourceKind
-from bot.app.layout.roles import LayoutContext, resolve_targets
-from bot.core.channels.order import align_categories_hub_first, align_positions
 from bot.core.channels.finder import find_channel
+from bot.core.channels.order import align_categories_hub_first, align_positions
 from bot.core.permissions.service import (
     PermissionContext,
     build_context,
     permission_service,
 )
+from bot.features.channels.layout.compiler import DesiredResource, ResourceKind
+from bot.features.channels.layout.roles import LayoutContext, resolve_targets
 
 logger = logging.getLogger(__name__)
 
@@ -579,8 +579,8 @@ async def apply_layout(
     await _align_batch_positions(context, resources, batch, categories)
 
     if not reconcile_only and any(resource.managed == "hub" for resource in resources):
-        from bot.app.layout.loader import load_layout
         from bot.core.discord.cleanup import delete_channel
+        from bot.features.channels.layout.loader import load_layout
 
         desired_names = {
             resource.name.casefold()

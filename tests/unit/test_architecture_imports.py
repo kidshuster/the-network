@@ -57,6 +57,43 @@ def test_core_does_not_import_adapters_or_workflows() -> None:
     assert offenders == [], "core dependency violations:\n" + "\n".join(offenders)
 
 
+def test_features_do_not_import_app_runtime() -> None:
+    package = Path(bot.__file__).resolve().parent / "features"
+    offenders: list[str] = []
+    for path in package.rglob("*.py"):
+        rel = path.relative_to(Path(bot.__file__).resolve().parent.parent)
+        imports = _imports_forbidden_layer(
+            path.read_text(encoding="utf-8"),
+            ("bot.app",),
+        )
+        if imports:
+            offenders.append(f"{rel}: {', '.join(imports)}")
+    assert offenders == [], "features -> app violations:\n" + "\n".join(offenders)
+
+
+def test_permission_mutations_only_in_core_permissions_service() -> None:
+    package = Path(bot.__file__).resolve().parent
+    allowed = package / "core" / "permissions" / "service.py"
+    offenders: list[str] = []
+    for path in package.rglob("*.py"):
+        if path.resolve() == allowed.resolve():
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "set_permissions(" in source or ".edit(overwrites=" in source:
+            offenders.append(str(path.relative_to(package.parent)))
+    assert offenders == [], "direct permission mutations:\n" + "\n".join(offenders)
+
+
+def test_feature_layout_lives_under_features_channels() -> None:
+    package = Path(bot.__file__).resolve().parent
+    assert not (package / "app" / "layout").exists()
+    layout = package / "features" / "channels" / "layout"
+    assert (layout / "layout.yaml").is_file()
+    assert (layout / "compiler.py").is_file()
+    assert (layout / "managed.py").is_file()
+    assert (layout / "loader.py").is_file()
+
+
 def test_bot_modules_import_cleanly() -> None:
     package = Path(bot.__file__).resolve().parent
     for module in pkgutil.walk_packages([str(package)], prefix="bot."):
@@ -240,16 +277,16 @@ def test_hub_initialize_uses_install_recipe_not_direct_stickies() -> None:
     initialize = (
         Path(bot.__file__).resolve().parent / "features" / "recipes" / "hub" / "initialize.py"
     ).read_text(encoding="utf-8")
-    index = (
-        Path(bot.__file__).resolve().parent / "features" / "recipes" / "recipes.py"
+    server = (
+        Path(bot.__file__).resolve().parent / "features" / "recipes" / "server.py"
     ).read_text(encoding="utf-8")
     assert "from bot.features.channels.stickies" not in initialize
     assert "clients.reconnect" in initialize
     assert "hub.ensure_installs" in initialize
     assert "hub.migrate" in initialize
     assert "_compose_lifecycle_recipe" in initialize
-    assert 'run(\n        "hub.initialize"' in index or 'run("hub.initialize"' in index
-    assert '@recipe("hub.migrate")' not in index
+    assert 'run(\n        "hub.initialize"' in server or 'run("hub.initialize"' in server
+    assert '@recipe("hub.migrate")' not in server
 
 
 def test_widget_presenters_do_not_import_hub_process_modules() -> None:

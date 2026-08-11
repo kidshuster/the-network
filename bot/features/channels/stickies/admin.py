@@ -3,26 +3,18 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.templates import render_embed
-from bot.features.channels.resolve import (
-    HUB_CATEGORY_MODERATION,
-    HUB_CHANNEL_ADMIN,
-    resolve_hub_category,
-    resolve_hub_channel,
-)
+from bot.core.templates import render_embed
+from bot.features.channels import resources
 from bot.features.channels.stickies.loader import sticky_spec
 from bot.features.channels.stickies.reconciler import (
     StoredStickyDefinition,
     StoredStickySyncResult,
     sync_stored_sticky,
 )
-
-if TYPE_CHECKING:
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +37,7 @@ def build_network_admin_footer() -> str:
     return f"{NETWORK_ADMIN_FOOTER_PREFIX} • v{NETWORK_ADMIN_VERSION}"
 
 
-async def build_network_admin_embed(context: BotContext) -> discord.Embed:
+async def build_network_admin_embed(context: Any) -> discord.Embed:
     networks = await context.store.networks.list_all()
     embed = render_embed(_SPEC.template, version=NETWORK_ADMIN_VERSION)
     if not networks:
@@ -69,7 +61,7 @@ async def build_network_admin_embed(context: BotContext) -> discord.Embed:
 
 
 async def refresh_network_admin_message(
-    context: BotContext,
+    context: Any,
     guild: discord.Guild,
     channel: discord.TextChannel,
     view: discord.ui.View,
@@ -90,14 +82,14 @@ async def refresh_network_admin_message(
 
 
 async def refresh_network_admin_sticky_from_settings(
-    context: BotContext,
+    context: Any,
     guild: discord.Guild,
     view: discord.ui.View,
 ) -> None:
-    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
-    channel = resolve_hub_channel(
+    mod_category = resources.find_category(guild, resources.MODERATION)
+    channel = resources.find_channel(
         guild,
-        HUB_CHANNEL_ADMIN,
+        resources.ADMIN,
         category_id=None if mod_category is None else mod_category.id,
     )
     if channel is None:
@@ -139,7 +131,7 @@ async def sync_network_admin_sticky(
     guild: discord.Guild,
     bot_member: discord.Member,
     channel: discord.TextChannel,
-    context: BotContext,
+    context: Any,
     view: discord.ui.View,
     *,
     get_setting: Callable[[str], Awaitable[str | None]],

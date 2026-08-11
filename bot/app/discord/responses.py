@@ -5,19 +5,21 @@ from typing import Any
 
 import discord
 
-from bot.app.templates import render_embed, render_text
+from bot.core.templates import render_embed, render_text
 
 logger = logging.getLogger(__name__)
 
 
-class DeferredEphemeralResponse:
-    """Track whether a deferred slash command sent its followup."""
+class DeferredResponse:
+    """Track whether a deferred interaction sent its followup."""
 
-    def __init__(self, interaction: discord.Interaction) -> None:
+    def __init__(self, interaction: discord.Interaction, *, ephemeral: bool = True) -> None:
         self._interaction = interaction
+        self.ephemeral = ephemeral
         self.sent = False
 
     async def send(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("ephemeral", self.ephemeral)
         await self._interaction.followup.send(*args, **kwargs)
         self.sent = True
 
@@ -25,21 +27,24 @@ class DeferredEphemeralResponse:
         self,
         key: str,
         *,
-        ephemeral: bool | None = True,
+        ephemeral: bool | None = None,
         **kwargs: Any,
     ) -> None:
-        await self.send(render_text(key, **kwargs), ephemeral=ephemeral)
+        await self.send(
+            render_text(key, **kwargs),
+            ephemeral=self.ephemeral if ephemeral is None else ephemeral,
+        )
 
     async def send_embed_message(
         self,
         key: str,
         *,
-        ephemeral: bool | None = True,
+        ephemeral: bool | None = None,
         **kwargs: Any,
     ) -> None:
         await self.send(
             embed=render_embed(key, **kwargs),
-            ephemeral=ephemeral,
+            ephemeral=self.ephemeral if ephemeral is None else ephemeral,
         )
 
     async def send_error(
@@ -77,6 +82,18 @@ class DeferredEphemeralResponse:
             logger.exception("Could not send fallback followup for deferred command")
 
 
-async def defer_ephemeral(interaction: discord.Interaction) -> DeferredEphemeralResponse:
-    await interaction.response.defer(ephemeral=True)
-    return DeferredEphemeralResponse(interaction)
+# Backward-compatible alias used by existing tests/call sites.
+DeferredEphemeralResponse = DeferredResponse
+
+
+async def defer_response(
+    interaction: discord.Interaction,
+    *,
+    ephemeral: bool = True,
+) -> DeferredResponse:
+    await interaction.response.defer(ephemeral=ephemeral)
+    return DeferredResponse(interaction, ephemeral=ephemeral)
+
+
+async def defer_ephemeral(interaction: discord.Interaction) -> DeferredResponse:
+    return await defer_response(interaction, ephemeral=True)

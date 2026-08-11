@@ -31,7 +31,6 @@ class TriggerSpec:
     slash_group_description: str = "The Network commands"
     default_permissions: tuple[str, ...] = ()
     ephemeral: bool = True
-    background: bool = False
     presenter: str | None = None
     # Events
     event: str | None = None

@@ -6,9 +6,9 @@ import discord
 import pytest
 from discord_helpers import http_50013, make_guild_with_roles
 
-from bot.app.layout import LayoutContext, compile_hub
-from bot.app.layout.applier import _ensure_channel
 from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.features.channels.layout import LayoutContext, compile_hub
+from bot.features.channels.layout.applier import _ensure_channel
 
 
 def _hub_context() -> LayoutContext:

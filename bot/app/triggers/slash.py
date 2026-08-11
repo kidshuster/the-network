@@ -14,7 +14,6 @@ TRIGGERS: tuple[TriggerSpec, ...] = (
         slash_description="Set up hub categories/channels and run permission smoke checks",
         slash_group_description=_SERVER_GROUP,
         default_permissions=("manage_guild",),
-        background=True,
         presenter="present.server.init",
     ),
     TriggerSpec(
@@ -26,7 +25,6 @@ TRIGGERS: tuple[TriggerSpec, ...] = (
         slash_description="Run read-only checks for hub permissions, layout, and community slots",
         slash_group_description=_SERVER_GROUP,
         default_permissions=("manage_guild",),
-        background=True,
         presenter="present.server.probe",
     ),
     TriggerSpec(
@@ -38,7 +36,6 @@ TRIGGERS: tuple[TriggerSpec, ...] = (
         slash_description="Remove managed hub resources while preserving community channels",
         slash_group_description=_SERVER_GROUP,
         default_permissions=("manage_guild",),
-        background=True,
         presenter="present.server.uninit",
     ),
     TriggerSpec(

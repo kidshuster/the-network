@@ -7,9 +7,9 @@ from dataclasses import dataclass
 
 import discord
 
-from bot.app.templates import relay_embed_spec, resolve_colour
 from bot.constants import DEGRADED_FALLBACK
 from bot.core.models.client import Client
+from bot.core.templates import relay_embed_spec, resolve_colour
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@ from typing import Any
 
 import discord
 
-from bot.app.templates import modal_spec
-from bot.app.templates.schema import ModalFieldSpec, ModalTemplateSpec
+from bot.core.templates import modal_spec
+from bot.core.templates.schema import ModalFieldSpec, ModalTemplateSpec
 
 
 def add_modal_fields(

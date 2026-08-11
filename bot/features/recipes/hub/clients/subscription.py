@@ -3,13 +3,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_client
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.core.clients.names import (
     build_client_profile_channel_base,
     build_client_publish_channel_base,
@@ -32,11 +29,8 @@ from bot.core.networks.roles import (
     resolve_access_role,
 )
 from bot.core.views import ViewRegistry
+from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.features.channels.resolve import resolve_human_moderator_role
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -555,8 +549,8 @@ async def reorder_client_category_channels(
 
 async def resync_subscriptions_for_network(
     guild: discord.Guild,
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     network: Network,
     *,
     access_role_name: str,
@@ -680,117 +674,3 @@ async def resync_subscriptions_for_network(
 
     return relinked
 
-
-@recipe("subscription.create")
-async def create_subscription(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    client: Client,
-    network: Network,
-    view_registry: ViewRegistry,
-) -> SubscribeResult:
-    """Subscribe a client to a network and refresh stickies/profile."""
-    from bot.features.channels.stickies.subscription import sync_subscription_setup
-    from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
-
-    result = await subscribe_client(
-        guild,
-        bot_member,
-        client=client,
-        network_id=network.id,
-        network_key=network.key,
-        client_repo=recipe_context.core.store.clients,
-        network_repo=recipe_context.core.store.networks,
-        access_role_name=recipe_context.bot.settings.network_access_role_name,
-    )
-    if not result.success or result.subscription is None:
-        return result
-
-    await recipe_context.core.refresh_projections()
-    if result.created:
-        await sync_subscription_setup(
-            recipe_context.bot,
-            recipe_context.core,
-            guild,
-            client=client,
-            subscription=result.subscription,
-            network=network,
-            view_registry=view_registry,
-        )
-    else:
-        await refresh_client_profile_message(
-            recipe_context.bot,
-            recipe_context.core,
-            guild,
-            client,
-            view_registry=view_registry,
-        )
-    return result
-
-
-@recipe("subscription.leave")
-async def leave_subscription(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    client: Client,
-    subscription: ClientSubscription,
-    network_key: str,
-    view_registry: ViewRegistry,
-) -> UnsubscribeResult:
-    """Leave a network subscription and refresh the client profile."""
-    from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
-
-    result = await unsubscribe_client(
-        guild,
-        bot_member,
-        client=client,
-        subscription=subscription,
-        network_key=network_key,
-        client_repo=recipe_context.core.store.clients,
-        network_repo=recipe_context.core.store.networks,
-    )
-    if not result.success:
-        return result
-
-    await recipe_context.core.refresh_projections()
-    await refresh_client_profile_message(
-        recipe_context.bot,
-        recipe_context.core,
-        guild,
-        client,
-        view_registry=view_registry,
-    )
-    return result
-
-
-@recipe("subscription.confirm_connected")
-async def confirm_subscription_connected(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    client: Client,
-    subscription: ClientSubscription,
-    network: Network,
-    view_registry: ViewRegistry,
-) -> ClientSubscription:
-    """Mark the subscribe channel connected and refresh setup stickies."""
-    from bot.features.channels.stickies.subscription import sync_subscription_setup
-
-    updated = await recipe_context.core.store.clients.set_subscribe_confirmed(
-        subscription.id,
-        True,
-    )
-    await sync_subscription_setup(
-        recipe_context.bot,
-        recipe_context.core,
-        guild,
-        client=client,
-        subscription=updated,
-        network=network,
-        view_registry=view_registry,
-    )
-    return updated

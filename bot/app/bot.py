@@ -60,6 +60,21 @@ class NetworkRelayBot(commands.Bot):
             **payload,
         )
 
+    def make_view_registry(self) -> Any:
+        from bot.app.widgets import PersistentViewRegistry
+
+        return PersistentViewRegistry(self)
+
+    def render_view(self, name: str, **params: Any) -> Any:
+        from bot.app.widgets import render_view
+
+        return render_view(name, self, **params)
+
+    async def present_migration_review(self, interaction: Any, plan: Any) -> Any:
+        from bot.app.widgets.migration import present_migration_review
+
+        return await present_migration_review(interaction, plan)
+
     async def setup_hook(self) -> None:
         await self.db.connect()
         self.schema_version = await migrations.run_migrations(self.db)
@@ -90,6 +105,12 @@ class NetworkRelayBot(commands.Bot):
         await self.dispatch_event("app.services")
         register_recipe_commands(self)
         register_recipe_events(self)
+
+        from bot.app.triggers.validate import validate_template_triggers
+        from bot.app.widgets import validate_widget_templates
+
+        validate_template_triggers()
+        validate_widget_templates()
 
         await self.dispatch_event("app.setup")
 

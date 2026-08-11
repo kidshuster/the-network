@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import discord
 
-from bot.app.templates import render_text
+from bot.core.templates import render_text
 
 
 async def ensure_manage_guild(interaction: discord.Interaction) -> bool:

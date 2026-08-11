@@ -6,9 +6,6 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.app.layout import LayoutContext, compile_client, compile_hub
-from bot.app.layout.compiler import ResourceKind
-from bot.app.layout.managed import hub_category_names, preserved_channel_names
 from bot.app.widgets import PersistentViewRegistry
 from bot.config import Settings
 from bot.core.clients.names import slugify_client_name
@@ -17,6 +14,9 @@ from bot.core.networks.roles import (
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.features.channels.layout import LayoutContext, compile_client, compile_hub
+from bot.features.channels.layout.compiler import ResourceKind
+from bot.features.channels.layout.managed import hub_category_names, preserved_channel_names
 from bot.features.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
@@ -295,7 +295,7 @@ async def probe_hub_layout(
         except Exception as exc:
             return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
     else:
-        from bot.app.layout.loader import load_layout
+        from bot.features.channels.layout.loader import load_layout
 
         for category in load_layout().layout.categories.values():
             for channel in category.channels.values():

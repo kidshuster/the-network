@@ -38,7 +38,7 @@ def resolve_rules_channel(guild: discord.Guild) -> discord.TextChannel | None:
 
 
 def build_rules_embed() -> discord.Embed:
-    from bot.app.templates import render_embed
+    from bot.core.templates import render_embed
 
     return render_embed(_SPEC.template, version=RULES_STICKY_VERSION)
 

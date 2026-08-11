@@ -755,7 +755,7 @@ async def run_hub_rebuild_smoke_flow(
         if not uninit.success:
             raise RuntimeError(uninit.reason or "server uninit failed")
 
-        from bot.app.layout.managed import hub_category_names, preserved_channel_names
+        from bot.features.channels.layout.managed import hub_category_names, preserved_channel_names
 
         # Client artifacts must survive hub uninit.
         if guild.get_role(state.client_role_id) is None:
@@ -880,12 +880,12 @@ async def run_hub_rebuild_smoke_flow(
             raise RuntimeError("Client category was removed during hub rebuild.")
 
         # Client layout overwrites must match YAML after re-init.
-        from bot.app.layout import LayoutContext, compile_client
         from bot.core.clients.names import slugify_client_name
         from bot.core.networks.roles import (
             resolve_access_role,
             resolve_operator_role_by_name,
         )
+        from bot.features.channels.layout import LayoutContext, compile_client
         from bot.features.channels.resolve import resolve_human_moderator_role
 
         access = resolve_access_role(

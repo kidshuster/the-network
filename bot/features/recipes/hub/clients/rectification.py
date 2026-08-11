@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.layout import (
-    ApplyMode,
-    LayoutContext,
-    SubscriptionCompileInput,
-    apply_layout,
-    compile_client,
-)
 from bot.core.clients.names import slugify_client_name
 from bot.core.clients.resources import (
     fetch_client_role,
@@ -22,10 +15,14 @@ from bot.core.clients.resources import (
 )
 from bot.core.models.client import Client
 from bot.core.networks.roles import resolve_operator_role_by_name
+from bot.features.channels.layout import (
+    ApplyMode,
+    LayoutContext,
+    SubscriptionCompileInput,
+    apply_layout,
+    compile_client,
+)
 from bot.features.recipes.hub.clients.subscription import resolve_subscription_channels_in_category
-
-if TYPE_CHECKING:
-    from bot.app.context import BotContext
 
 
 @dataclass
@@ -51,7 +48,7 @@ class ClientRectificationResult:
 async def rectify_client_permissions(
     guild: discord.Guild,
     bot_member: discord.Member,
-    context: BotContext,
+    context: Any,
     client: Client,
     *,
     access_role: discord.Role,

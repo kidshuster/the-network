@@ -8,10 +8,15 @@ from typing import Any
 
 import discord
 
-from bot.app.layout.loader import load_layout, load_roles
-from bot.app.layout.roles import LayoutContext, resolve_targets, validate_target
-from bot.app.layout.schema import CategorySpec, ChannelSpec, CommunitySlot, ManagedKind
 from bot.core.permissions.service import OverwriteMap, Target
+from bot.features.channels.layout.loader import load_layout, load_roles
+from bot.features.channels.layout.roles import LayoutContext, resolve_targets, validate_target
+from bot.features.channels.layout.schema import (
+    CategorySpec,
+    ChannelSpec,
+    CommunitySlot,
+    ManagedKind,
+)
 
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 

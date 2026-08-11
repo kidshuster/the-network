@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal
 
 import discord
 
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.core.clients.resources import (
     fetch_publish_channel,
     fetch_subscribe_channel,
@@ -21,10 +19,6 @@ from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
 from bot.core.views import ViewRegistry
 from bot.features.recipes.hub.clients.profile_post import build_client_profile_embed
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +43,8 @@ async def _network_link_status_for_subscription(
 
 
 async def refresh_client_profile_message(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     client: Client,
     *,
@@ -109,8 +103,8 @@ async def refresh_client_profile_message(
 
 
 async def refresh_all_client_profiles(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     view_registry: ViewRegistry,
@@ -154,8 +148,8 @@ def build_moderation_embed(
     publish_mention: str = "",
     subscribe_mention: str = "",
 ) -> discord.Embed:
-    from bot.app.templates import render_embed
     from bot.core.clients.names import slugify_client_name
+    from bot.core.templates import render_embed
 
     client_slug = slugify_client_name(client_server_name)
     if setup_state is not None and not setup_state.fully_configured:
@@ -191,8 +185,8 @@ def _moderation_view(
 
 
 async def post_subscription_moderation_embed(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     client: Client,
@@ -255,26 +249,3 @@ async def post_subscription_moderation_embed(
             extra={"subscription_id": subscription.id},
         )
 
-
-@recipe("client.toggle_timecode")
-async def toggle_client_timecode(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    client: Client,
-    view_registry: ViewRegistry,
-) -> Client:
-    """Flip a client's relay timecode setting and refresh the profile card."""
-    updated = await recipe_context.core.store.clients.set_timecode_enabled(
-        client.id,
-        not client.timecode_enabled,
-    )
-    await recipe_context.core.refresh_client_counts()
-    await refresh_client_profile_message(
-        recipe_context.bot,
-        recipe_context.core,
-        guild,
-        updated,
-        view_registry=view_registry,
-    )
-    return updated

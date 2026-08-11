@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
 from bot.core.models.client import Client
+from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 from bot.features.recipes.hub.clients.rectification import rectify_client_permissions
 
 

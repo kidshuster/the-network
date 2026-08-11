@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.app.recipes.registry import recipe
-from bot.app.templates import render_embed
 from bot.config import Settings
+from bot.contracts.recipes import recipe
 from bot.core.networks.roles import resolve_operator_role_by_name
+from bot.core.templates import render_embed
 from bot.features.channels.resolve import (
     HUB_CATEGORY_MODERATION,
     HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
@@ -19,9 +19,7 @@ from bot.features.channels.resolve import (
 )
 
 if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
-    from bot.app.recipes.runtime import RecipeContext
+    from bot.contracts.recipes import RecipeContext
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +115,7 @@ async def sync_announcements_guide(
 
 
 async def dispatch_system_announcement(
-    context: BotContext,
+    context: Any,
     guild: discord.Guild,
     message: discord.Message,
 ) -> DispatchResult:
@@ -151,7 +149,7 @@ async def dispatch_system_announcement(
 
 
 async def handle_network_announcements_message(
-    bot: NetworkRelayBot,
+    bot: Any,
     message: discord.Message,
 ) -> None:
     context = bot.bot_context

@@ -22,15 +22,9 @@ TRIGGERS: tuple[TriggerSpec, ...] = (
         event="app.setup",
     ),
     TriggerSpec(
-        id="app.sync_subscription_stickies",
+        id="startup.ready",
         kind=TriggerKind.APP_EVENT,
-        recipe="app.sync_subscription_stickies",
-        event="app.ready",
-    ),
-    TriggerSpec(
-        id="app.sync_changelog",
-        kind=TriggerKind.APP_EVENT,
-        recipe="app.sync_changelog",
+        recipe="startup.ready",
         event="app.ready",
     ),
     TriggerSpec(

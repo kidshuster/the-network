@@ -8,13 +8,13 @@ from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
 from bot.app.discord.responses import defer_ephemeral
-from bot.app.templates import render_text
 from bot.app.widgets.policies import (
     MembershipPolicy,
     ensure_client_access,
     validate_hub_modal_context,
 )
 from bot.core.models.client import Client
+from bot.core.templates import render_text
 from bot.features.channels.stickies.reconciler import (
     embed_content_signature,
     sticky_channel_embed_permission_error,

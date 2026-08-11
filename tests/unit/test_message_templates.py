@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bot.app.templates import (
+from bot.core.templates import (
     MessageTemplateError,
     clear_template_cache,
     modal_spec,

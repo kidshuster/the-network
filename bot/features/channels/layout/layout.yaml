@@ -34,7 +34,6 @@ layout:
           topic: Moderator commands, administration, and bot error reports
           community_slot: public_updates
           lifecycle: preserve
-          legacy_names: [commands, moderator-only, mod-only, staff-only]
           overrides:
             moderator: {use_application_commands: true}
           position: 0
@@ -79,7 +78,6 @@ layout:
           name: leaders-channel
           topic: Private channel for participating server leaders
           lifecycle: preserve
-          legacy_names: [leaders]
           position: 0
           overrides:
             client_roles: {send_messages: true, embed_links: true, attach_files: true, add_reactions: true}

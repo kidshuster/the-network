@@ -61,7 +61,7 @@ async def test_provision_client_creates_role_category_profile(
         "bot.features.recipes.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
-    from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     batch = BatchApplyResult(
         results=[

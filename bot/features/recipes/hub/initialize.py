@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_hub
-from bot.app.layout.compiler import ResourceKind
-from bot.app.layout.managed import hub_channel_name
-from bot.app.recipes.registry import RecipeRegistry, recipe
+from bot.contracts.recipes import recipe
 from bot.core.models.client import Client
 from bot.core.models.errors import NetworkValidationError
 from bot.core.networks.roles import (
@@ -18,6 +16,9 @@ from bot.core.networks.roles import (
     validate_hub_permissions,
 )
 from bot.core.views import ViewRegistry
+from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_hub
+from bot.features.channels.layout.compiler import ResourceKind
+from bot.features.channels.layout.managed import hub_channel_name
 from bot.features.channels.resolve import (
     HUB_CHANNEL_ADMIN,
     resolve_human_moderator_role,
@@ -30,9 +31,7 @@ from bot.features.recipes.hub.reconcilers import (
 from bot.features.recipes.hub.result import GuildInitResult
 
 if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
-    from bot.app.recipes.runtime import RecipeContext
+    from bot.contracts.recipes import RecipeContext
 
 logger = logging.getLogger(__name__)
 
@@ -68,26 +67,29 @@ def _layout_context(
 
 async def _compose_lifecycle_recipe(
     recipe_context: RecipeContext | None,
-    bot: NetworkRelayBot | None,
+    bot: Any | None,
     name: str,
     *,
-    core: BotContext | None = None,
+    core: Any | None = None,
     **inputs: Any,
 ) -> Any:
     """Prefer ``run()``; body helpers only when no recipe context/registry exists."""
     if recipe_context is not None:
         return await recipe_context.run(name, **inputs)
     registry = getattr(bot, "recipe_registry", None) if bot is not None else None
-    if isinstance(registry, RecipeRegistry):
-        return await registry.run(name, **inputs)
+    run = getattr(registry, "run", None)
+    if callable(run):
+        outcome = run(name, **inputs)
+        if inspect.isawaitable(outcome):
+            return await outcome
     return await _lifecycle_body(name, core=core, bot=bot, **inputs)
 
 
 async def _lifecycle_body(
     name: str,
     *,
-    core: BotContext | None,
-    bot: NetworkRelayBot | None,
+    core: Any | None,
+    bot: Any | None,
     **inputs: Any,
 ) -> Any:
     """Direct-call fallback for unit/live callers that bypass the recipe registry."""
@@ -98,6 +100,7 @@ async def _lifecycle_body(
             inputs["guild"],
             inputs["layout_context"],
             context=core,
+            bot=bot,
             clients=inputs.get("clients"),
             interaction=inputs.get("interaction"),
         )
@@ -148,9 +151,8 @@ async def initialize_guild_recipe(
     interaction: discord.Interaction | None = None,
     view_registry: ViewRegistry | None = None,
 ) -> GuildInitResult:
-    from bot.app.widgets import PersistentViewRegistry
 
-    registry = view_registry or PersistentViewRegistry(recipe_context.bot)
+    registry = view_registry or recipe_context.bot.make_view_registry()
     return await initialize_guild(
         guild,
         bot_member,
@@ -172,8 +174,8 @@ async def initialize_guild(
     access_role_name: str,
     operator_role_name: str,
     clients: list[Client] | None = None,
-    bot: NetworkRelayBot | None = None,
-    context: BotContext | None = None,
+    bot: Any | None = None,
+    context: Any | None = None,
     view_registry: ViewRegistry | None = None,
     interaction: discord.Interaction | None = None,
     recipe_context: RecipeContext | None = None,

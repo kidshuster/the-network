@@ -5,12 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.app.layout.applier import ApplyMode, apply_layout
-from bot.app.layout.compiler import DesiredResource, ResourceKind
-from bot.app.layout.inventory import gather_guild_inventory
-from bot.app.layout.loader import clear_layout_cache
-from bot.app.layout.managed import hub_channel_aliases, hub_channel_name
-from bot.app.layout.roles import LayoutContext
 from bot.app.widgets.migration import MigrationReviewDecision
 from bot.core.channels.migration import (
     DesiredMigrationResource,
@@ -20,6 +14,12 @@ from bot.core.channels.migration import (
     apply_manual_resolutions,
     build_migration_plan,
 )
+from bot.features.channels.layout.applier import ApplyMode, apply_layout
+from bot.features.channels.layout.compiler import DesiredResource, ResourceKind
+from bot.features.channels.layout.inventory import gather_guild_inventory
+from bot.features.channels.layout.loader import clear_layout_cache
+from bot.features.channels.layout.managed import hub_channel_aliases, hub_channel_name
+from bot.features.channels.layout.roles import LayoutContext
 from bot.features.channels.resolve import HUB_CHANNEL_ADMIN
 from bot.features.recipes.hub.migrate import HubMigrationResult, desired_hub_migration_resources
 
@@ -31,11 +31,12 @@ def _clear_caches() -> None:
     clear_layout_cache()
 
 
-def test_hub_channel_aliases_include_legacy_names() -> None:
+def test_hub_channel_aliases_are_current_name_only() -> None:
+    """Retired names are cleanup targets, not normal resource aliases."""
     aliases = hub_channel_aliases(HUB_CHANNEL_ADMIN)
-    assert aliases[0] == hub_channel_name(HUB_CHANNEL_ADMIN)
-    assert "commands" in aliases
-    assert "moderator-only" in aliases
+    assert aliases == (hub_channel_name(HUB_CHANNEL_ADMIN),)
+    assert "commands" not in aliases
+    assert "moderator-only" not in aliases
 
 
 def test_build_migration_plan_binds_managed_id() -> None:
@@ -124,7 +125,7 @@ def test_build_migration_plan_retired_delete_and_client_preserve() -> None:
     assert [item.discord_id for item in plan.delete_candidates] == [21]
     preserved_ids = {item.discord_id for item in plan.preserve_client}
     assert preserved_ids == {31, 32, 33}
-    assert plan.needs_review
+    assert plan.needs_review is False
 
 
 def test_apply_manual_resolutions_filters_deletes_and_binds() -> None:
@@ -209,7 +210,7 @@ async def test_apply_layout_prefers_bound_ids(monkeypatch: pytest.MonkeyPatch) -
         )
     )
     monkeypatch.setattr(
-        "bot.app.layout.applier.permission_service.ensure_category",
+        "bot.features.channels.layout.applier.permission_service.ensure_category",
         ensure,
     )
 
@@ -276,7 +277,9 @@ async def test_migrate_hub_layout_skips_review_on_clean_plan(
 
 
 @pytest.mark.asyncio
-async def test_migrate_hub_layout_requires_review_without_interaction() -> None:
+async def test_migrate_hub_layout_auto_deletes_retired_without_interaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from bot.features.recipes.hub import migrate as migrate_mod
 
     guild = MagicMock(spec=discord.Guild)
@@ -288,6 +291,44 @@ async def test_migrate_hub_layout_requires_review_without_interaction() -> None:
     channel.is_news = MagicMock(return_value=False)
     guild.categories = []
     guild.text_channels = [channel]
+    guild.get_channel = MagicMock(return_value=channel)
+    guild.rules_channel = None
+    guild.public_updates_channel = None
+    layout_context = MagicMock(spec=LayoutContext)
+    layout_context.guild = guild
+    layout_context.reason = "test"
+    delete = AsyncMock(return_value=True)
+    monkeypatch.setattr("bot.features.channels.layout.bindings.delete_channel", delete)
+
+    result = await migrate_mod.migrate_hub_layout(
+        guild,
+        layout_context,
+        context=None,
+        interaction=None,
+    )
+    assert result.success is True
+    assert result.plan.needs_review is False
+    delete.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_migrate_hub_layout_requires_review_for_ambiguous_without_interaction() -> None:
+    from bot.features.recipes.hub import migrate as migrate_mod
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    left = MagicMock(spec=discord.TextChannel)
+    left.id = 21
+    left.name = "admin"
+    left.category_id = None
+    left.is_news = MagicMock(return_value=False)
+    right = MagicMock(spec=discord.TextChannel)
+    right.id = 22
+    right.name = "admin"
+    right.category_id = None
+    right.is_news = MagicMock(return_value=False)
+    guild.categories = []
+    guild.text_channels = [left, right]
     guild.rules_channel = None
     guild.public_updates_channel = None
     layout_context = MagicMock(spec=LayoutContext)
@@ -312,35 +353,47 @@ async def test_migrate_hub_layout_uses_review_decision(
 
     guild = MagicMock(spec=discord.Guild)
     guild.id = 100
-    channel = MagicMock(spec=discord.TextChannel)
-    channel.id = 21
-    channel.name = "welcome-sink"
-    channel.category_id = None
-    channel.is_news = MagicMock(return_value=False)
+    left = MagicMock(spec=discord.TextChannel)
+    left.id = 21
+    left.name = "admin"
+    left.category_id = None
+    left.is_news = MagicMock(return_value=False)
+    right = MagicMock(spec=discord.TextChannel)
+    right.id = 22
+    right.name = "admin"
+    right.category_id = None
+    right.is_news = MagicMock(return_value=False)
     guild.categories = []
-    guild.text_channels = [channel]
-    guild.get_channel = MagicMock(return_value=channel)
+    guild.text_channels = [left, right]
+    guild.get_channel = MagicMock(side_effect=lambda cid: left if cid == 21 else right)
     guild.rules_channel = None
     guild.public_updates_channel = None
     layout_context = MagicMock(spec=LayoutContext)
     layout_context.guild = guild
     layout_context.reason = "test"
     interaction = MagicMock(spec=discord.Interaction)
-
-    monkeypatch.setattr(
-        "bot.app.widgets.migration.present_migration_review",
-        AsyncMock(
-            return_value=MigrationReviewDecision(resolutions={}, confirm_deletes=True)
-        ),
+    bot = MagicMock()
+    bot.present_migration_review = AsyncMock(
+        return_value=MigrationReviewDecision(
+            resolutions={"admin": 21},
+            confirm_deletes=True,
+        )
     )
-    delete = AsyncMock(return_value=True)
-    monkeypatch.setattr("bot.app.layout.bindings.delete_channel", delete)
+    interaction.client = bot
+    monkeypatch.setattr(
+        "bot.features.channels.layout.bindings.delete_channel",
+        AsyncMock(return_value=True),
+    )
+    apply_bindings = AsyncMock(return_value=[])
+    monkeypatch.setattr(migrate_mod, "apply_migration_bindings", apply_bindings)
 
     result = await migrate_mod.migrate_hub_layout(
         guild,
         layout_context,
         context=None,
+        bot=bot,
         interaction=interaction,
     )
     assert result.success is True
-    delete.assert_awaited()
+    assert result.plan.bound_ids().get("admin") == 21
+    apply_bindings.assert_awaited()

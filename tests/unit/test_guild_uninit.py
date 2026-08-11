@@ -223,7 +223,7 @@ async def test_uninitialize_guild_deletes_hub_targets_and_preserves_rules(
 ) -> None:
     from unittest.mock import AsyncMock
 
-    from bot.app.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     guild = MagicMock(spec=discord.Guild)
     rules = MagicMock(spec=discord.TextChannel, id=99, category_id=100)

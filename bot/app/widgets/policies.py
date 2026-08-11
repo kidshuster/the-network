@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import discord
 
 from bot.app.discord.checks import ensure_manage_guild
-from bot.app.templates import render_text
+from bot.core.templates import render_text
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot

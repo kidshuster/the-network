@@ -53,9 +53,10 @@ def test_catalog_exposes_stable_public_operations() -> None:
         "subscription.create",
         "subscription.leave",
         "subscription.webhook_updated",
-        "text.parse_dates",
     }
-    assert {registry.spec(name).name for name in expected} == expected
+    names = set(registry._specs)
+    assert expected <= names
+    assert "text.parse_dates" not in names
 
 
 def test_entry_surfaces_are_owned_by_trigger_catalog() -> None:
@@ -89,8 +90,7 @@ def test_entry_surfaces_are_owned_by_trigger_catalog() -> None:
         "app.validate_features",
     }
     assert {s.recipe for s in catalog.triggers_for_event("app.ready")} == {
-        "app.sync_changelog",
-        "app.sync_subscription_stickies",
+        "startup.ready",
     }
     assert {s.recipe for s in catalog.triggers_for_event("discord.message")} == {
         "relay.on_message"
@@ -155,10 +155,12 @@ async def test_webhook_event_ignores_non_text_channels() -> None:
     ) == [None]
 
 
-async def test_date_parser_is_available_through_recipe_boundary() -> None:
-    registry = build_recipe_registry(_bot())
+def test_date_parser_is_called_directly_not_as_recipe() -> None:
+    from bot.core.parsers.date_parser import replace_dates
 
-    assert await registry.run("text.parse_dates", text="No dates here") == "No dates here"
+    registry = build_recipe_registry(_bot())
+    assert "text.parse_dates" not in registry._specs
+    assert replace_dates("No dates here") == "No dates here"
 
 
 async def test_blacklist_recipe_reconciles_only_allowed_clients() -> None:

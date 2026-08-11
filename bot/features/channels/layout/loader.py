@@ -5,9 +5,9 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from bot.app.layout.schema import LayoutSpec, RolesSpec
+from bot.features.channels.layout.schema import LayoutSpec, RolesSpec
 
-_LAYOUT_DIR = Path(__file__).resolve().parents[2] / "features" / "channels" / "layout"
+_LAYOUT_DIR = Path(__file__).resolve().parent
 _cache: dict[str, BaseModel] = {}
 
 
@@ -28,7 +28,7 @@ def _load[Spec: BaseModel](path: Path, model: type[Spec]) -> Spec:
 
 def clear_layout_cache() -> None:
     _cache.clear()
-    from bot.app.layout.managed import _hub_category_by_id, _hub_channel_by_id
+    from bot.features.channels.layout.managed import _hub_category_by_id, _hub_channel_by_id
 
     _hub_category_by_id.cache_clear()
     _hub_channel_by_id.cache_clear()

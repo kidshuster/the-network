@@ -3,17 +3,11 @@ from __future__ import annotations
 import inspect
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 
-from bot.app.layout import (
-    LayoutContext,
-    apply_migration_bindings,
-    gather_guild_inventory,
-)
-from bot.app.layout.loader import load_layout
-from bot.app.recipes.registry import recipe
+from bot.contracts.recipes import recipe
 from bot.core.channels.migration import (
     DesiredMigrationResource,
     MigrationPlan,
@@ -24,14 +18,19 @@ from bot.core.channels.migration import (
 )
 from bot.core.database.store import ManagedResource
 from bot.core.models.client import Client
+from bot.features.channels.layout import (
+    LayoutContext,
+    apply_migration_bindings,
+    gather_guild_inventory,
+)
+from bot.features.channels.layout.loader import load_layout
 from bot.features.recipes.hub.leaders import (
     CHANGELOG_CHANNEL_SETTINGS_KEY,
     LEADERS_CHANNEL_SETTINGS_KEY,
 )
 
 if TYPE_CHECKING:
-    from bot.app.context import BotContext
-    from bot.app.recipes.runtime import RecipeContext
+    from bot.contracts.recipes import RecipeContext
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +89,7 @@ def _client_resource_ids(
     return frozenset(discord_ids), frozenset(category_ids)
 
 
-async def _subscription_channel_ids(context: BotContext, client_ids: set[int]) -> frozenset[int]:
+async def _subscription_channel_ids(context: Any, client_ids: set[int]) -> frozenset[int]:
     ids: set[int] = set()
     for client_id in client_ids:
         listed = context.store.clients.list_subscriptions_by_client(client_id)
@@ -114,6 +113,7 @@ async def migrate_hub_layout_recipe(
         guild,
         layout_context,
         context=recipe_context.core,
+        bot=recipe_context.bot,
         clients=clients,
         interaction=interaction,
     )
@@ -123,7 +123,8 @@ async def migrate_hub_layout(
     guild: discord.Guild,
     layout_context: LayoutContext,
     *,
-    context: BotContext | None,
+    context: Any | None,
+    bot: Any | None = None,
     clients: list[Client] | None = None,
     interaction: discord.Interaction | None = None,
 ) -> HubMigrationResult:
@@ -173,9 +174,15 @@ async def migrate_hub_layout(
                     "channel deletes), but no interaction is available."
                 ),
             )
-        from bot.app.widgets.migration import present_migration_review
 
-        reviewed = await present_migration_review(interaction, plan)
+        presenter = bot if bot is not None else getattr(interaction, "client", None)
+        if presenter is None or not hasattr(presenter, "present_migration_review"):
+            return HubMigrationResult(
+                success=False,
+                plan=plan,
+                reason="Hub migration review is unavailable in this runtime.",
+            )
+        reviewed = await presenter.present_migration_review(interaction, plan)
         if reviewed is None:
             return HubMigrationResult(
                 success=False,
@@ -227,7 +234,7 @@ async def _await_maybe(value: object) -> object:
 
 
 async def _persist_hub_bindings(
-    context: BotContext,
+    context: Any,
     guild_id: int,
     plan: MigrationPlan,
 ) -> None:

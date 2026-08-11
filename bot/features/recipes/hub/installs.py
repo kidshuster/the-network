@@ -3,22 +3,17 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import discord
 
-from bot.app.layout.loader import load_layout
-from bot.app.layout.schema import ChannelInstallSpec
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
+from bot.contracts.recipes import RecipeContext, recipe
 from bot.core.views import ViewRegistry
+from bot.features.channels.layout.loader import load_layout
+from bot.features.channels.layout.schema import ChannelInstallSpec
 from bot.features.channels.resolve import resolve_hub_channel
 from bot.features.channels.stickies.loader import sticky_spec
 from bot.features.recipes.hub.result import GuildInitResult
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +75,8 @@ async def ensure_hub_installs(
     guild: discord.Guild,
     bot_member: discord.Member,
     *,
-    context: BotContext,
-    bot: NetworkRelayBot | None = None,
+    context: Any,
+    bot: Any | None = None,
     view_registry: ViewRegistry | None = None,
     bound_ids: Mapping[str, int] | None = None,
 ) -> InstallPassResult:
@@ -126,7 +121,7 @@ async def _ensure_sticky_install(
     ref: ChannelInstallRef,
     *,
     channel: discord.TextChannel,
-    context: BotContext,
+    context: Any,
     view_registry: ViewRegistry | None,
 ) -> list[str]:
     sticky_id = ref.install.sticky
@@ -190,8 +185,8 @@ async def _ensure_one_install(
     ref: ChannelInstallRef,
     *,
     channel: discord.TextChannel | None,
-    context: BotContext,
-    bot: NetworkRelayBot | None,
+    context: Any,
+    bot: Any | None,
     view_registry: ViewRegistry | None,
 ) -> list[str]:
     del bot
@@ -250,11 +245,10 @@ async def ensure_installs_recipe(
     view_registry: Any = None,
     result: GuildInitResult | None = None,
 ) -> InstallPassResult:
-    from bot.app.widgets import PersistentViewRegistry
 
     registry = view_registry
     if registry is None:
-        registry = PersistentViewRegistry(recipe_context.bot)
+        registry = recipe_context.bot.make_view_registry()
     pass_result = await ensure_hub_installs(
         guild,
         bot_member,

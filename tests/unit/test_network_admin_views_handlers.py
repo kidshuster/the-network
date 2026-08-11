@@ -6,8 +6,8 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
-from bot.app.templates import render_text
 from bot.app.widgets import render_view
+from bot.core.templates import render_text
 
 
 @pytest.mark.asyncio

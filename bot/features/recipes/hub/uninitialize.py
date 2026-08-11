@@ -6,25 +6,24 @@ from dataclasses import dataclass, field
 
 import discord
 
-from bot.app.layout import ApplyMode, LayoutContext, apply_layout
-from bot.app.layout.managed import (
-    compile_hub_teardown_resources,
-    hub_category_names,
-    preserved_channel_names,
-)
-from bot.app.recipes.registry import recipe
-from bot.app.recipes.runtime import RecipeContext
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
+from bot.contracts.recipes import RecipeContext, recipe
 from bot.core.discord.cleanup import delete_role
 from bot.core.discord.step_runner import run_guild_step
 from bot.core.networks.roles import (
     resolve_access_role_by_name,
     resolve_operator_role_by_name,
+)
+from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout
+from bot.features.channels.layout.managed import (
+    compile_hub_teardown_resources,
+    hub_category_names,
+    preserved_channel_names,
 )
 
 logger = logging.getLogger(__name__)

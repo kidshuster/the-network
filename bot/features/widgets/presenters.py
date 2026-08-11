@@ -4,8 +4,8 @@ from typing import Any
 
 import discord
 
-from bot.app.recipes import RecipeContext, recipe
-from bot.app.templates import render_embed
+from bot.contracts.recipes import RecipeContext, recipe
+from bot.core.templates import render_embed
 from bot.errors import UserFacingError
 from bot.features.recipes.hub.probe import ServerProbeReport
 from bot.features.recipes.hub.result import GuildInitResult
@@ -37,7 +37,7 @@ def _add_field(embed: discord.Embed, name: str, items: list[str]) -> None:
 def server_init_embed(result: GuildInitResult) -> discord.Embed:
     if not result.success:
         raise UserFacingError(result.reason or "Server initialization failed.")
-    from bot.app.layout.managed import hub_channel_name
+    from bot.features.channels.layout.managed import hub_channel_name
     from bot.features.channels.resolve import HUB_CHANNEL_ADMIN
 
     embed = render_embed(

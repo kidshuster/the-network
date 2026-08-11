@@ -2,35 +2,30 @@ from __future__ import annotations
 
 import discord
 
-from bot.app.layout.managed import (
-    hub_category_aliases,
-    hub_category_name,
-    hub_channel_aliases,
-    hub_channel_name,
-)
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
 from bot.core.channels.finder import ChannelLookupError, find_channel, require_channel
+from bot.features.channels import resources
+from bot.features.channels.layout.managed import hub_category_name, hub_channel_name
 
 __all__ = ["ChannelLookupError", "find_channel", "require_channel"]
 
-# Stable feature resource IDs. Display names are resolved from YAML.
-HUB_CATEGORY_NETWORK = "network"
-HUB_CATEGORY_MODERATION = "moderation"
-HUB_CATEGORY_LEADERS = "leaders"
+# Stable feature resource IDs (owned by resources.py).
+HUB_CATEGORY_NETWORK = resources.HUB_CATEGORY_NETWORK
+HUB_CATEGORY_MODERATION = resources.HUB_CATEGORY_MODERATION
+HUB_CATEGORY_LEADERS = resources.HUB_CATEGORY_LEADERS
+HUB_CHANNEL_RULES = resources.HUB_CHANNEL_RULES
+HUB_CHANNEL_JOIN_THE_NETWORK = resources.HUB_CHANNEL_JOIN_THE_NETWORK
+HUB_CHANNEL_LEADERS = resources.HUB_CHANNEL_LEADERS
+HUB_CHANNEL_CHANGELOG = resources.HUB_CHANNEL_CHANGELOG
+HUB_CHANNEL_JOIN_REQUESTS = resources.HUB_CHANNEL_JOIN_REQUESTS
+HUB_CHANNEL_ADMIN = resources.HUB_CHANNEL_ADMIN
+HUB_CHANNEL_NETWORK_ANNOUNCEMENTS = resources.HUB_CHANNEL_NETWORK_ANNOUNCEMENTS
 
-HUB_CHANNEL_RULES = "rules"
-HUB_CHANNEL_JOIN_THE_NETWORK = "join_the_network"
-HUB_CHANNEL_LEADERS = "leaders_channel"
-HUB_CHANNEL_CHANGELOG = "changelog"
-HUB_CHANNEL_JOIN_REQUESTS = "join_requests"
-HUB_CHANNEL_ADMIN = "admin"
-HUB_CHANNEL_NETWORK_ANNOUNCEMENTS = "network_announcements"
-
-# Display-name compatibility exports; feature behavior should use resource IDs.
+# Display-name compatibility exports; prefer resources.name(resource_id).
 CATEGORY_NETWORK = hub_category_name(HUB_CATEGORY_NETWORK)
 CATEGORY_MODERATION = hub_category_name(HUB_CATEGORY_MODERATION)
 CATEGORY_LEADERS = hub_category_name(HUB_CATEGORY_LEADERS)
@@ -47,11 +42,7 @@ def resolve_hub_category(
     guild: discord.Guild,
     resource_id: str,
 ) -> discord.CategoryChannel | None:
-    return find_channel(
-        guild,
-        hub_category_aliases(resource_id),
-        channel_type=discord.CategoryChannel,
-    )
+    return resources.find_category(guild, resource_id)
 
 
 def resolve_hub_channel(
@@ -61,17 +52,11 @@ def resolve_hub_channel(
     category_id: int | None = None,
     include_announcement: bool = True,
 ) -> discord.TextChannel | None:
-    return find_channel(
+    return resources.find_channel(
         guild,
-        hub_channel_aliases(resource_id),
-        channel_type=discord.TextChannel,
+        resource_id,
         category_id=category_id,
-        predicate=(
-            None
-            if include_announcement
-            else lambda channel: isinstance(channel, discord.TextChannel)
-            and not channel.is_news()
-        ),
+        include_announcement=include_announcement,
     )
 
 def resolve_category(guild: discord.Guild, display_name: str) -> discord.CategoryChannel | None:

@@ -6,23 +6,23 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.app.layout import (
+from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.features.channels.layout import (
     LayoutContext,
     SubscriptionCompileInput,
     compile_client,
     compile_hub,
     managed,
 )
-from bot.app.layout.compiler import ResourceKind
-from bot.app.layout.loader import (
+from bot.features.channels.layout.compiler import ResourceKind
+from bot.features.channels.layout.loader import (
     clear_layout_cache,
     load_layout,
     load_roles,
     validate_all_layouts,
 )
-from bot.app.layout.roles import resolve_targets
-from bot.app.layout.schema import RoleDefaultsSpec
-from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.features.channels.layout.roles import resolve_targets
+from bot.features.channels.layout.schema import RoleDefaultsSpec
 
 
 def test_resolve_bot_access_from_sequence_proxy_guild_roles() -> None:

@@ -1,16 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from bot.contracts.recipes import RecipeSpec
 
-
-@dataclass(frozen=True)
-class RecipeSpec:
-    name: str
-    interactions: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class RecipeCallResult:
-    recipe: str
-    value: object = None
-    warnings: tuple[str, ...] = field(default_factory=tuple)
+__all__ = ["RecipeSpec"]

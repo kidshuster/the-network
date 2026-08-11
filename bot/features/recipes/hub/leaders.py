@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
+from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
 from bot.features.channels.resolve import (
     HUB_CATEGORY_LEADERS,
     HUB_CHANNEL_CHANGELOG,
@@ -14,9 +14,6 @@ from bot.features.channels.resolve import (
     resolve_hub_category,
     resolve_hub_channel,
 )
-
-if TYPE_CHECKING:
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +55,7 @@ class LeadersSyncResult:
 
 async def _list_client_roles(
     guild: discord.Guild,
-    context: BotContext,
+    context: Any,
     *,
     extra_role: discord.Role | None = None,
 ) -> tuple[list[discord.Role], list[str]]:
@@ -80,7 +77,7 @@ async def _list_client_roles(
 async def ensure_leaders_channels(
     guild: discord.Guild,
     bot_member: discord.Member,
-    context: BotContext,
+    context: Any,
     *,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
@@ -161,7 +158,7 @@ async def ensure_leaders_channels(
 async def grant_leaders_channel_access(
     guild: discord.Guild,
     bot_member: discord.Member,
-    context: BotContext,
+    context: Any,
     client_role: discord.Role,
     *,
     access_role_name: str,

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 
-from bot.app.layout import LayoutContext, compile_hub
-from bot.app.layout.compiler import ResourceKind
-from bot.app.layout.managed import hub_category_name, hub_channel_name
 from bot.config import Settings
 from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
 from bot.core.networks.roles import (
@@ -15,6 +12,9 @@ from bot.core.networks.roles import (
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.features.channels.layout import LayoutContext, compile_hub
+from bot.features.channels.layout.compiler import ResourceKind
+from bot.features.channels.layout.managed import hub_category_name, hub_channel_name
 from bot.features.channels.resolve import (
     HUB_CATEGORY_LEADERS,
     HUB_CATEGORY_MODERATION,
@@ -30,9 +30,6 @@ from bot.features.channels.resolve import (
     resolve_hub_channel,
     resolve_human_moderator_role,
 )
-
-if TYPE_CHECKING:
-    from bot.app.context import BotContext
 
 
 @dataclass(frozen=True)
@@ -362,7 +359,7 @@ def _check_announcements_channel(guild: discord.Guild) -> ProbeCheck:
     )
 
 
-async def _check_leaders_access(guild: discord.Guild, context: BotContext) -> ProbeCheck:
+async def _check_leaders_access(guild: discord.Guild, context: Any) -> ProbeCheck:
     category = resolve_hub_category(guild, HUB_CATEGORY_LEADERS)
     leaders_cat_id = None if category is None else category.id
     leaders = resolve_hub_channel(
@@ -419,7 +416,7 @@ async def run_server_probe(
     bot_member: discord.Member,
     *,
     settings: Settings,
-    context: BotContext,
+    context: Any,
 ) -> ServerProbeReport:
     """Run read-only hub health checks (safe on production)."""
     report = ServerProbeReport(

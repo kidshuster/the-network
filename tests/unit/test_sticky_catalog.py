@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.app.templates import load_template
+from bot.core.templates import load_template
 from bot.features.channels.stickies import load_sticky_catalog, validate_sticky_catalog
 
 

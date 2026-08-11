@@ -1,4 +1,4 @@
-from bot.app.recipes.metadata import RecipeCallResult, RecipeSpec
+from bot.app.recipes.metadata import RecipeSpec
 from bot.app.recipes.registry import (
     RecipeRegistry,
     RecipeRegistryError,
@@ -7,7 +7,6 @@ from bot.app.recipes.registry import (
 from bot.app.recipes.runtime import RecipeContext
 
 __all__ = [
-    "RecipeCallResult",
     "RecipeContext",
     "RecipeRegistry",
     "RecipeRegistryError",

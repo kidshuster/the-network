@@ -6,20 +6,33 @@ import secrets
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, TypeVar, cast
 
-from bot.app.recipes.metadata import RecipeSpec
-from bot.app.recipes.runtime import RecipeContext
+from bot.contracts.recipes import (
+    RecipeBoundaryError,
+    RecipeContext,
+    RecipeSpec,
+    recipe,
+    recipe_spec,
+)
 from bot.errors import UserFacingError
 
 RecipeFunction = Callable[..., Awaitable[Any]]
 F = TypeVar("F", bound=RecipeFunction)
-_SPEC_ATTRIBUTE = "__network_recipe_spec__"
 _call_stack: contextvars.ContextVar[tuple[str, ...]] = contextvars.ContextVar(
     "recipe_call_stack",
     default=(),
 )
 
+__all__ = [
+    "RecipeFunction",
+    "RecipeRegistry",
+    "RecipeRegistryError",
+    "RecipeSpec",
+    "collect_recipes",
+    "recipe",
+]
 
-class RecipeRegistryError(RuntimeError):
+
+class RecipeRegistryError(RecipeBoundaryError):
     def __init__(
         self,
         message: str,
@@ -27,23 +40,11 @@ class RecipeRegistryError(RuntimeError):
         recipe: str | None = None,
         reference: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.recipe = recipe
-        self.reference = reference or secrets.token_hex(4)
-
-
-def recipe(
-    name: str,
-    *,
-    interactions: tuple[str, ...] = (),
-) -> Callable[[F], F]:
-    """Mark a features callable as invokable via the recipe registry."""
-
-    def decorate(function: F) -> F:
-        setattr(function, _SPEC_ATTRIBUTE, RecipeSpec(name, interactions))
-        return function
-
-    return decorate
+        super().__init__(
+            message,
+            recipe=recipe,
+            reference=reference or secrets.token_hex(4),
+        )
 
 
 class RecipeRegistry:
@@ -51,24 +52,15 @@ class RecipeRegistry:
         self._bot = bot
         self._recipes: dict[str, RecipeFunction] = {}
         self._specs: dict[str, RecipeSpec] = {}
-        self._interactions: dict[str, str] = {}
 
     def register(self, function: RecipeFunction) -> None:
-        spec = getattr(function, _SPEC_ATTRIBUTE, None)
-        if not isinstance(spec, RecipeSpec):
+        spec = recipe_spec(function)
+        if spec is None:
             raise RecipeRegistryError(f"{function.__name__} is not decorated with @recipe")
         if spec.name in self._recipes:
             raise RecipeRegistryError(f"Duplicate recipe {spec.name!r}")
-        for interaction in spec.interactions:
-            if interaction in self._interactions:
-                owner = self._interactions[interaction]
-                raise RecipeRegistryError(
-                    f"Interaction {interaction!r} is already registered by {owner!r}"
-                )
         self._recipes[spec.name] = function
         self._specs[spec.name] = spec
-        for interaction in spec.interactions:
-            self._interactions[interaction] = spec.name
 
     def register_many(self, functions: Iterable[RecipeFunction]) -> None:
         for function in functions:
@@ -79,12 +71,6 @@ class RecipeRegistry:
             return self._specs[name]
         except KeyError as exc:
             raise RecipeRegistryError(f"Unknown recipe {name!r}") from exc
-
-    def recipe_for_interaction(self, interaction: str) -> str:
-        try:
-            return self._interactions[interaction]
-        except KeyError as exc:
-            raise RecipeRegistryError(f"Unknown interaction {interaction!r}") from exc
 
     async def run(self, name: str, **inputs: Any) -> Any:
         try:
@@ -125,6 +111,6 @@ def collect_recipes(module: object) -> list[RecipeFunction]:
     return [
         cast(RecipeFunction, value)
         for _, value in inspect.getmembers(module, inspect.iscoroutinefunction)
-        if isinstance(getattr(value, _SPEC_ATTRIBUTE, None), RecipeSpec)
+        if recipe_spec(value) is not None
         and getattr(value, "__module__", None) == getattr(module, "__name__", None)
     ]

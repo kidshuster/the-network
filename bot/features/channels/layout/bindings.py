@@ -4,9 +4,9 @@ import logging
 
 import discord
 
-from bot.app.layout.roles import LayoutContext
 from bot.core.channels.migration import MigrationBinding, MigrationPlan
 from bot.core.discord.cleanup import delete_channel
+from bot.features.channels.layout.roles import LayoutContext
 
 logger = logging.getLogger(__name__)
 

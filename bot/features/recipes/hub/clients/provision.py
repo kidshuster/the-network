@@ -4,9 +4,6 @@ from dataclasses import dataclass, replace
 
 import discord
 
-from bot.app.layout import ApplyMode, LayoutContext, apply_layout, compile_client
-from bot.app.layout.loader import load_layout
-from bot.app.layout.managed import hub_category_names
 from bot.core.channels.order import next_trailing_position
 from bot.core.clients.names import (
     build_client_profile_channel_base,
@@ -21,6 +18,9 @@ from bot.core.networks.roles import (
     resolve_operator_role_by_name,
     validate_provision_permissions,
 )
+from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
+from bot.features.channels.layout.loader import load_layout
+from bot.features.channels.layout.managed import hub_category_names
 from bot.features.channels.resolve import resolve_human_moderator_role
 
 

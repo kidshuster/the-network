@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import Any, Literal, cast
 
 import discord
 
-from bot.app.templates import render_embed
 from bot.core.clients.resources import fetch_publish_channel, fetch_subscribe_channel
 from bot.core.clients.setup_state import SubscriptionSetupState, resolve_setup_state
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
+from bot.core.templates import render_embed
 from bot.core.views import ViewRegistry
 from bot.features.channels.resolve import (
     HUB_CATEGORY_MODERATION,
@@ -26,10 +26,6 @@ from bot.features.channels.stickies.reconciler import (
     sync_footer_marker_embed_sticky,
 )
 
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
-
 logger = logging.getLogger(__name__)
 
 SetupMode = Literal["create", "reconcile"]
@@ -41,7 +37,7 @@ _SUBSCRIBE_SETUP_FOOTER = _SUBSCRIBE_SPEC.footer_marker
 _SETUP_HISTORY_LIMIT = SETUP_STICKY_HISTORY_LIMIT
 
 
-def _bot_author_icon_url(bot: NetworkRelayBot) -> str:
+def _bot_author_icon_url(bot: Any) -> str:
     user = bot.user
     if user is None:
         return ""
@@ -62,8 +58,8 @@ async def _publish_announcement(message: discord.Message) -> None:
 
 
 async def _post_network_member_welcome(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     client: Client,
@@ -137,7 +133,7 @@ async def _sync_publish_setup_sticky(
     subscription: ClientSubscription,
     *,
     publish_channel: discord.TextChannel,
-    context: BotContext,
+    context: Any,
     bot_user_id: int,
     configured: bool,
     allow_create: bool,
@@ -156,17 +152,23 @@ async def _sync_publish_setup_sticky(
     )
     if result.removed:
         if subscription.publish_setup_message_id is not None:
-            return await context.store.clients.update_publish_setup_message_id(
-                subscription.id,
-                None,
+            return cast(
+                ClientSubscription,
+                await context.store.clients.update_publish_setup_message_id(
+                    subscription.id,
+                    None,
+                ),
             )
         return subscription
     if result.message is None:
         return subscription
     if subscription.publish_setup_message_id != result.message.id:
-        return await context.store.clients.update_publish_setup_message_id(
-            subscription.id,
-            result.message.id,
+        return cast(
+            ClientSubscription,
+            await context.store.clients.update_publish_setup_message_id(
+                subscription.id,
+                result.message.id,
+            ),
         )
     return subscription
 
@@ -176,7 +178,7 @@ async def _sync_subscribe_setup_sticky(
     subscription: ClientSubscription,
     *,
     subscribe_channel: discord.abc.GuildChannel,
-    context: BotContext,
+    context: Any,
     network: Network,
     bot_user_id: int,
     confirmed: bool,
@@ -194,9 +196,12 @@ async def _sync_subscribe_setup_sticky(
             remove=True,
         )
         if result.removed and subscription.subscribe_setup_message_id is not None:
-            return await context.store.clients.update_subscribe_setup_message_id(
-                subscription.id,
-                None,
+            return cast(
+                ClientSubscription,
+                await context.store.clients.update_subscribe_setup_message_id(
+                    subscription.id,
+                    None,
+                ),
             )
         return subscription
 
@@ -222,19 +227,22 @@ async def _sync_subscribe_setup_sticky(
     if result.message is None:
         return subscription
     if subscription.subscribe_setup_message_id != result.message.id:
-        return await context.store.clients.update_subscribe_setup_message_id(
-            subscription.id,
-            result.message.id,
+        return cast(
+            ClientSubscription,
+            await context.store.clients.update_subscribe_setup_message_id(
+                subscription.id,
+                result.message.id,
+            ),
         )
     return subscription
 
 
 async def _maybe_post_activation_welcome(
-    bot: NetworkRelayBot,
+    bot: Any,
     subscription: ClientSubscription,
     *,
     subscribe_channel: discord.abc.GuildChannel,
-    context: BotContext,
+    context: Any,
     guild: discord.Guild,
     network: Network,
     client: Client,
@@ -249,7 +257,7 @@ async def _maybe_post_activation_welcome(
     fresh = await context.store.clients.get_subscription_by_id(subscription.id)
     if fresh is None:
         return subscription
-    subscription = fresh
+    subscription = cast(ClientSubscription, fresh)
     if subscription.activation_welcome_message_id is not None:
         return subscription
 
@@ -274,9 +282,12 @@ async def _maybe_post_activation_welcome(
 
     await _publish_announcement(message)
 
-    updated = await context.store.clients.update_activation_welcome_message_id(
-        subscription.id,
-        message.id,
+    updated = cast(
+        ClientSubscription,
+        await context.store.clients.update_activation_welcome_message_id(
+            subscription.id,
+            message.id,
+        ),
     )
     await _post_network_member_welcome(
         bot,
@@ -289,8 +300,8 @@ async def _maybe_post_activation_welcome(
 
 
 async def sync_subscription_setup(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     client: Client,
@@ -383,8 +394,8 @@ async def sync_subscription_setup(
 
 
 async def sync_all_subscription_setups(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     *,
     view_registry: ViewRegistry,
@@ -416,8 +427,8 @@ async def sync_all_subscription_setups(
 
 
 async def sync_subscription_setup_by_publish_channel(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
     publish_channel_id: int,
     *,

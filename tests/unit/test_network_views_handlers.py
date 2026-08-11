@@ -8,10 +8,10 @@ from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 from subscription_helpers import make_client_subscription
 
-from bot.app.templates import render_text
 from bot.app.widgets import render_view
 from bot.core.models.client import Client
 from bot.core.models.network import Network
+from bot.core.templates import render_text
 
 
 def _client() -> Client:

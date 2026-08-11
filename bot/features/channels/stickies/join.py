@@ -60,7 +60,7 @@ def build_how_to_join_footer() -> str:
 
 
 def build_how_to_join_embed() -> discord.Embed:
-    from bot.app.templates import render_embed
+    from bot.core.templates import render_embed
 
     return render_embed(_SPEC.template, version=HOW_TO_JOIN_VERSION)
 

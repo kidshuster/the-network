@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from bot.app.layout.compiler import DesiredResource, ResourceKind, compile_hub
-from bot.app.layout.roles import LayoutContext
+from bot.features.channels.layout.compiler import DesiredResource, ResourceKind, compile_hub
+from bot.features.channels.layout.roles import LayoutContext
 
 
 @lru_cache(maxsize=1)
 def _hub_category_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
-    from bot.app.layout.loader import load_layout
+    from bot.features.channels.layout.loader import load_layout
 
     return {
         key: (value.name, tuple(value.legacy_names))
@@ -18,7 +18,7 @@ def _hub_category_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
 
 @lru_cache(maxsize=1)
 def _hub_channel_by_id() -> dict[str, tuple[str, tuple[str, ...]]]:
-    from bot.app.layout.loader import load_layout
+    from bot.features.channels.layout.loader import load_layout
 
     return {
         key: (channel.name, tuple(channel.legacy_names))
@@ -50,7 +50,7 @@ def hub_category_names() -> frozenset[str]:
 
 
 def preserved_channel_names() -> frozenset[str]:
-    from bot.app.layout.loader import load_layout
+    from bot.features.channels.layout.loader import load_layout
 
     names: set[str] = set()
     for category in load_layout().layout.categories.values():

@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 
 from bot.app.discord.errors import respond_to_error
-from bot.app.discord.responses import defer_ephemeral
+from bot.app.discord.responses import defer_response
 from bot.core.triggers import TriggerKind, TriggerSpec
 from bot.errors import UserFacingError
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 def _callback(bot: NetworkRelayBot, spec: TriggerSpec) -> Callable[..., Any]:
     async def invoke(interaction: discord.Interaction) -> None:
-        response = await defer_ephemeral(interaction)
+        response = await defer_response(interaction, ephemeral=spec.ephemeral)
         try:
             guild = interaction.guild
             if guild is None or guild.id != bot.settings.guild_id:
@@ -37,7 +37,7 @@ def _callback(bot: NetworkRelayBot, spec: TriggerSpec) -> Callable[..., Any]:
                 )
             value = await bot.dispatch_trigger(spec.id, interaction=interaction)
             if spec.presenter is None:
-                await response.send(content="Operation completed.", ephemeral=True)
+                await response.send(content="Operation completed.")
             else:
                 await bot.recipe_registry.run(
                     spec.presenter,

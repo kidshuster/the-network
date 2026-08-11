@@ -4,16 +4,12 @@ import logging
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 import discord
 import yaml
 
-from bot.app.templates import render_embed
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
+from bot.core.templates import render_embed
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +132,7 @@ def build_changelog_embed(notes: ReleaseNotes) -> discord.Embed:
 
 
 async def sync_changelog_releases(
-    context: BotContext,
+    context: Any,
     channel: discord.TextChannel,
 ) -> int:
     """Post missing release notes in version order up to the installed package version."""
@@ -190,7 +186,7 @@ async def sync_changelog_releases(
 async def sync_changelog_for_guild(
     guild: discord.Guild,
     bot_member: discord.Member,
-    context: BotContext,
+    context: Any,
     *,
     access_role: discord.Role,
     human_moderator_role: discord.Role | None,
@@ -215,8 +211,8 @@ async def sync_changelog_for_guild(
 
 
 async def sync_changelog_on_ready(
-    bot: NetworkRelayBot,
-    context: BotContext,
+    bot: Any,
+    context: Any,
     guild: discord.Guild,
 ) -> None:
     """Ensure the Leaders changelog channel exists and post notes for new versions."""

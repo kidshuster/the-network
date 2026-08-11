@@ -3,11 +3,11 @@ from __future__ import annotations
 import io
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import Any, cast
 
 import discord
 
-from bot.app.recipes import RecipeContext, recipe
+from bot.contracts.recipes import RecipeBoundaryError
 from bot.core.media.image import (
     download_profile_image_from_url,
     normalize_image_bytes,
@@ -23,10 +23,6 @@ from bot.features.channels.resolve import (
     resolve_hub_category,
     resolve_hub_channel,
 )
-
-if TYPE_CHECKING:
-    from bot.app.bot import NetworkRelayBot
-    from bot.app.context import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +48,7 @@ def build_moderator_request_embed(
     server_name: str,
     request_id: int,
 ) -> discord.Embed:
-    from bot.app.templates import render_embed
+    from bot.core.templates import render_embed
 
     return render_embed(
         "join_request_moderator",
@@ -98,8 +94,8 @@ class _ProvisionOutcome:
 class ServerRequestService:
     def __init__(
         self,
-        context: BotContext,
-        bot: NetworkRelayBot,
+        context: Any,
+        bot: Any,
         *,
         view_registry: ViewRegistry,
     ) -> None:
@@ -312,7 +308,6 @@ class ServerRequestService:
         request: ServerRequest,
         image: ProfileImage,
     ) -> _ProvisionOutcome:
-        from bot.app.recipes import RecipeRegistryError
 
         try:
             outcome = await self._bot.recipe_registry.run(
@@ -324,7 +319,7 @@ class ServerRequestService:
                 image=image,
             )
             return cast(_ProvisionOutcome, outcome)
-        except RecipeRegistryError as exc:
+        except RecipeBoundaryError as exc:
             cause = exc.__cause__
             if isinstance(cause, ProfileValidationError):
                 return _ProvisionOutcome(success=False, error=str(cause))
@@ -448,67 +443,3 @@ class ServerRequestService:
                 extra={"user_id": requester.id, "approved": approved},
             )
 
-
-@recipe("request.submit")
-async def submit_request(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild,
-    requester: discord.abc.User,
-    server_name: str,
-    profile_image: ProfileImageAttachment,
-    view_registry: ViewRegistry,
-    display_name: str | None = None,
-) -> SubmitRequestResult:
-    """Submit a hub join request and post it for moderator review."""
-    return await ServerRequestService(
-        recipe_context.core,
-        recipe_context.bot,
-        view_registry=view_registry,
-    ).submit_request(
-        guild,
-        requester=requester,
-        server_name=server_name,
-        profile_image=profile_image,
-        display_name=display_name,
-    )
-
-
-@recipe("request.approve")
-async def approve_request(
-    recipe_context: RecipeContext,
-    *,
-    guild: discord.Guild | None,
-    request_id: int,
-    moderator: discord.Member,
-    view_registry: ViewRegistry,
-) -> ReviewRequestResult:
-    """Approve a pending join request and provision the client."""
-    return await ServerRequestService(
-        recipe_context.core,
-        recipe_context.bot,
-        view_registry=view_registry,
-    ).approve_request(
-        guild,
-        request_id=request_id,
-        moderator=moderator,
-    )
-
-
-@recipe("request.deny")
-async def deny_request(
-    recipe_context: RecipeContext,
-    *,
-    request_id: int,
-    moderator: discord.Member,
-    view_registry: ViewRegistry,
-) -> ReviewRequestResult:
-    """Deny a pending join request."""
-    return await ServerRequestService(
-        recipe_context.core,
-        recipe_context.bot,
-        view_registry=view_registry,
-    ).deny_request(
-        request_id=request_id,
-        moderator=moderator,
-    )

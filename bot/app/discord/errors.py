@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 import discord
 
 from bot.app.recipes import RecipeRegistryError
-from bot.app.templates import render_embed
+from bot.core.templates import render_embed
 from bot.errors import UserFacingError
 
 if TYPE_CHECKING:

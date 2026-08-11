@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import discord
 
-from bot.app.layout.schema import TargetKind
 from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.features.channels.layout.schema import TargetKind
 
 
 @dataclass(frozen=True)

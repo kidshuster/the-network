@@ -77,7 +77,9 @@ class MigrationPlan:
 
     @property
     def needs_review(self) -> bool:
-        return bool(self.ambiguous or self.delete_candidates)
+        # Exact retired-name deletes apply automatically. Only ambiguous maps
+        # require operator review (Architecture Contract / Phase 2).
+        return bool(self.ambiguous)
 
     def bound_ids(self) -> dict[str, int]:
         return {item.resource_key: item.discord_id for item in self.bindings}

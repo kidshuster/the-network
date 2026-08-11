@@ -7,8 +7,8 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.app.layout.managed import hub_category_name, hub_channel_name
 from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.features.channels.layout.managed import hub_category_name, hub_channel_name
 from bot.features.channels.resolve import (
     HUB_CATEGORY_LEADERS,
     HUB_CATEGORY_MODERATION,

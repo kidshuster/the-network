@@ -6,7 +6,7 @@ import discord
 import pytest
 
 from bot.app.discord.responses import DeferredEphemeralResponse
-from bot.app.templates import render_embed
+from bot.core.templates import render_embed
 
 
 @pytest.mark.asyncio
