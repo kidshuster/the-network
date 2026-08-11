@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from tests.live.mock_backend import MockContext, MockDiscordState, load_mock_context
 from tests.live.probes import PROBES, ProbeOutcome
 from tests.live.recipes import Recipe, RecipeRunner, RecipeStep, load_recipes
 
@@ -39,7 +40,10 @@ async def test_runner_composes_recipes_and_runs_finally(
         calls.append("probe")
         return ProbeOutcome("probe", "ok")
 
-    monkeypatch.setattr("tests.live.recipes.get_probe", lambda _name: fake_probe)
+    async def fake_mock_probe(_name: str, context: MockContext) -> ProbeOutcome:
+        return await fake_probe(context)
+
+    monkeypatch.setattr("tests.live.recipes.run_mock_probe", fake_mock_probe)
     monkeypatch.setattr(
         "tests.live.recipes.assert_protected_clients_unchanged",
         _noop_guard,
@@ -55,7 +59,9 @@ async def test_runner_composes_recipes_and_runs_finally(
             (RecipeStep(probe="cleanup", protect_clients=False),),
         ),
     }
-    runner = RecipeRunner(object(), recipes)  # type: ignore[arg-type]
+    runner = RecipeRunner(
+        MockContext(MockDiscordState()), recipes, backend="mock"
+    )
     await runner.run("parent")
     assert calls == ["probe", "probe"]
 
@@ -66,10 +72,37 @@ async def test_runner_rejects_recipe_cycles() -> None:
         "a": Recipe("a", "", (RecipeStep(recipe="b"),)),
         "b": Recipe("b", "", (RecipeStep(recipe="a"),)),
     }
-    runner = RecipeRunner(object(), recipes)  # type: ignore[arg-type]
+    runner = RecipeRunner(
+        MockContext(MockDiscordState()), recipes, backend="mock"
+    )
     with pytest.raises(ValueError, match="a -> b -> a"):
         await runner.run("a")
 
 
 async def _noop_guard(*_args: Any, **_kwargs: Any) -> None:
     return None
+
+
+@pytest.mark.asyncio
+async def test_full_mock_recipe_preserves_real_clients_and_cleans_smoke_state() -> None:
+    context = load_mock_context("healthy")
+    await RecipeRunner(context, load_recipes(), backend="mock").run("full")
+    context.state.assert_protected()
+    assert not context.state.artifacts
+    assert all(not client.smoke for client in context.state.clients.values())
+    assert "hub.rebuild" in context.state.operations
+
+
+@pytest.mark.asyncio
+async def test_mock_functional_recipe_rectifies_stale_permissions() -> None:
+    context = load_mock_context("stale_permissions")
+    assert not context.state.leaders_access
+    await RecipeRunner(context, load_recipes(), backend="mock").run("functional")
+    assert context.state.leaders_access
+
+
+@pytest.mark.asyncio
+async def test_mock_audit_exposes_missing_layout() -> None:
+    context = load_mock_context("missing_layout")
+    with pytest.raises(RuntimeError, match="moderator-only channel is missing"):
+        await RecipeRunner(context, load_recipes(), backend="mock").run("audit")

@@ -10,6 +10,7 @@ import discord
 from bot.config import Settings
 from tests.live.client_guard import snapshot_protected_clients
 from tests.live.discord_client import create_smoke_discord_client
+from tests.live.mock_backend import SCENARIO_DIR, load_mock_context
 from tests.live.probes import PROBES, LiveContext
 from tests.live.provision_flow import create_smoke_context
 from tests.live.recipes import RecipeRunner, load_recipes
@@ -41,8 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     recipe = subparsers.add_parser("recipe", help="run a YAML smoke recipe")
     recipe.add_argument("name", choices=sorted(recipes))
+    recipe.add_argument("--backend", choices=("mock", "live"), default="live")
+    recipe.add_argument("--scenario", default="healthy")
     probe = subparsers.add_parser("probe", help="run one probe directly")
     probe.add_argument("name", choices=sorted(PROBES))
+    probe.add_argument("--backend", choices=("mock", "live"), default="live")
+    probe.add_argument("--scenario", default="healthy")
     subparsers.add_parser("list", help="list probes and recipes")
     return parser
 
@@ -98,6 +103,15 @@ async def run_live(command: str, name: str) -> None:
         raise failures[0]
 
 
+async def run_mock(command: str, name: str, scenario: str) -> None:
+    context = load_mock_context(scenario)
+    runner = RecipeRunner(context, load_recipes(), backend="mock")
+    if command == "recipe":
+        await runner.run(name)
+    else:
+        await runner.run_probe(name)
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if args.command == "list":
@@ -107,9 +121,15 @@ def main() -> None:
         print("Recipes:")
         for recipe in load_recipes().values():
             print(f"  {recipe.name}: {recipe.description}")
+        print("Mock scenarios:")
+        for path in sorted(SCENARIO_DIR.glob("*.yaml")):
+            print(f"  {path.stem}")
         return
     try:
-        asyncio.run(run_live(args.command, args.name))
+        if args.backend == "mock":
+            asyncio.run(run_mock(args.command, args.name, args.scenario))
+        else:
+            asyncio.run(run_live(args.command, args.name))
     except BaseException as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

@@ -13,7 +13,7 @@ usage() {
 Usage: ./test [--dev | --full] [--smoke-restart] [--check-quota]
 
 Modes:
-  --dev           Local only — ruff, mypy, pytest (default; ~1 minute)
+  --dev           Local only — ruff, mypy, pytest, mock smoke (default; ~1 minute)
   --full          --dev, then live Testwork smoke suite (~15–30 minutes)
 
 Options:
@@ -37,6 +37,10 @@ Examples:
   ./test --full
   ./test --full --check-quota
   SMOKE_PHASE_DELAY_SEC=12 ./test --full
+
+Targeted mock smoke:
+  python -m tests.live.runner probe hub.layout --backend mock
+  python -m tests.live.runner recipe functional --backend mock --scenario stale_permissions
 EOF
 }
 
@@ -84,7 +88,11 @@ run_dev() {
   pytest -q
 
   echo ""
-  echo "OK: dev gate passed (ruff, mypy, pytest)"
+  echo "==> mock smoke recipe"
+  python -m tests.live.runner recipe full --backend mock
+
+  echo ""
+  echo "OK: dev gate passed (ruff, mypy, pytest, mock smoke)"
 }
 
 run_full_smoke() {

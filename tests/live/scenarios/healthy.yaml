@@ -1,0 +1,10 @@
+layout_present: true
+permissions_valid: true
+leaders_access: true
+announcement_channel_regular: true
+artifacts:
+  - stale-smoke-channel
+clients:
+  - name: Existing Client
+    subscriptions: [general]
+

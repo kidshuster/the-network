@@ -4,11 +4,12 @@ import asyncio
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
 from tests.live.client_guard import assert_protected_clients_unchanged
+from tests.live.mock_backend import MockContext, run_mock_probe
 from tests.live.probes import LiveContext, ProbeOutcome, get_probe
 
 RECIPE_DIR = Path(__file__).with_name("recipes")
@@ -67,10 +68,20 @@ def load_recipes(directory: Path = RECIPE_DIR) -> dict[str, Recipe]:
     return recipes
 
 
+Backend = Literal["live", "mock"]
+
+
 class RecipeRunner:
-    def __init__(self, context: LiveContext, recipes: dict[str, Recipe]) -> None:
+    def __init__(
+        self,
+        context: LiveContext | MockContext,
+        recipes: dict[str, Recipe],
+        *,
+        backend: Backend = "live",
+    ) -> None:
         self.context = context
         self.recipes = recipes
+        self.backend = backend
         self.outcomes: list[ProbeOutcome] = []
 
     async def run(self, name: str) -> list[ProbeOutcome]:
@@ -110,19 +121,30 @@ class RecipeRunner:
         self, name: str, *, protect_clients: bool, pause: bool
     ) -> ProbeOutcome:
         print(f"  RUN  {name}", flush=True)
-        outcome = await get_probe(name)(self.context)
+        if self.backend == "mock":
+            if not isinstance(self.context, MockContext):
+                raise TypeError("mock backend requires MockContext")
+            outcome = await run_mock_probe(name, self.context)
+        else:
+            if not isinstance(self.context, LiveContext):
+                raise TypeError("live backend requires LiveContext")
+            outcome = await get_probe(name)(self.context)
         self.outcomes.append(outcome)
         print(f"  OK   {name}: {outcome.detail}", flush=True)
-        if protect_clients and name not in {"clients.protected", "artifacts.teardown"}:
+        if (
+            self.backend == "live"
+            and protect_clients
+            and name not in {"clients.protected", "artifacts.teardown"}
+        ):
+            assert isinstance(self.context, LiveContext)
             await assert_protected_clients_unchanged(
                 self.context.guild,
                 self.context.runtime,
                 self.context.protected_clients,
                 phase=name,
             )
-        if pause:
+        if pause and self.backend == "live":
             delay = max(0.0, float(os.getenv("SMOKE_PHASE_DELAY_SEC", "2")))
             if delay:
                 await asyncio.sleep(delay)
         return outcome
-

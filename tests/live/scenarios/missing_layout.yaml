@@ -1,0 +1,7 @@
+layout_present: false
+permissions_valid: true
+leaders_access: false
+announcement_channel_regular: true
+clients:
+  - name: Existing Client
+    subscriptions: [general]
