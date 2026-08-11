@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from bot.adapters.discord.commands import register_recipe_commands
-from bot.widgets.recipes.metadata import CommandSpec, RecipeSpec
+from bot.core.adapters.discord.commands import register_recipe_commands
+from bot.core.widgets.recipes.metadata import CommandSpec, RecipeSpec
 
 
 def _bot() -> MagicMock:
@@ -56,7 +56,7 @@ async def test_generated_command_runs_recipe_and_presenter(
     result = SimpleNamespace(success=True)
     bot.recipe_registry.run = AsyncMock(return_value=result)
     presented = AsyncMock()
-    monkeypatch.setattr("bot.adapters.discord.commands.present_result", presented)
+    monkeypatch.setattr("bot.core.adapters.discord.commands.present_result", presented)
     register_recipe_commands(bot)
     group = bot.tree.add_command.call_args.args[0]
     command = group.get_command("init")

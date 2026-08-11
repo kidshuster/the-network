@@ -3,8 +3,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import discord
+import pytest
 
-from bot.channels.resolve import (
+from bot.core.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
@@ -12,7 +13,10 @@ from bot.channels.resolve import (
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_NETWORK_ANNOUNCEMENTS,
     CHANNEL_WELCOME_SINK,
+    ChannelLookupError,
+    find_channel,
     join_channel_name,
+    require_channel,
     resolve_announcement_channel_in_category,
     resolve_bot_role,
     resolve_changelog_channel,
@@ -27,6 +31,48 @@ from bot.channels.resolve import (
 
 def test_join_channel_name() -> None:
     assert join_channel_name("Stingers") == "join-stingers"
+
+
+def test_find_channel_prefers_canonical_name_and_respects_category() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    legacy = MagicMock(spec=discord.TextChannel)
+    legacy.name = "leaders"
+    legacy.category_id = 10
+    canonical = MagicMock(spec=discord.TextChannel)
+    canonical.name = "leaders-channel"
+    canonical.category_id = 10
+    elsewhere = MagicMock(spec=discord.TextChannel)
+    elsewhere.name = "leaders-channel"
+    elsewhere.category_id = 20
+    guild.text_channels = [legacy, elsewhere, canonical]
+
+    assert (
+        find_channel(
+            guild,
+            ("leaders-channel", "leaders"),
+            channel_type=discord.TextChannel,
+            category_id=10,
+        )
+        is canonical
+    )
+
+
+def test_find_channel_returns_none_when_configuration_is_absent() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.text_channels = []
+    assert (
+        find_channel(guild, "removed-channel", channel_type=discord.TextChannel)
+        is None
+    )
+
+
+def test_require_channel_raises_user_facing_lookup_error() -> None:
+    guild = MagicMock(spec=discord.Guild)
+    guild.text_channels = []
+    with pytest.raises(ChannelLookupError) as caught:
+        require_channel(guild, "join-requests", channel_type=discord.TextChannel)
+    assert caught.value.code == "channel_not_found"
+    assert "/server init" in caught.value.message
 
 
 def test_resolve_network_hub_category() -> None:
@@ -103,11 +149,11 @@ def test_resolve_network_announcement_channel() -> None:
     guild = MagicMock(spec=discord.Guild)
     category = MagicMock(spec=discord.CategoryChannel)
     category.id = 10
-    match = MagicMock()
+    match = MagicMock(spec=discord.TextChannel)
     match.name = "stingers-announcements"
     match.category_id = 10
     match.type = discord.ChannelType.news
-    other = MagicMock()
+    other = MagicMock(spec=discord.TextChannel)
     other.name = "other-announcements"
     other.category_id = 11
     other.type = discord.ChannelType.news

@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from context_helpers import make_test_context
 
-from bot.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
-from bot.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
+from bot.core.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
+from bot.core.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
 from bot.core.hub.data_reset import reset_hub_layout_data
 
 

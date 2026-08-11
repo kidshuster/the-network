@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from bot.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
-from bot.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
-from bot.channels.stickies.rules import RULES_STICKY_SETTINGS_KEY
+from bot.core.channels.stickies.admin import NETWORK_ADMIN_SETTINGS_KEY
+from bot.core.channels.stickies.join import HOW_TO_JOIN_SETTINGS_KEY
+from bot.core.channels.stickies.rules import RULES_STICKY_SETTINGS_KEY
 from bot.core.runtime import BotContext
 
 logger = logging.getLogger(__name__)

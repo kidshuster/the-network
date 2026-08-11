@@ -6,9 +6,9 @@ import pytest
 from context_helpers import make_test_context
 
 from bot.client import NetworkRelayBot
-from bot.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
-from bot.widgets.views.network_admin_views import NetworkAdminView
-from bot.widgets.views.network_views import (
+from bot.core.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
+from bot.core.widgets.views.network_admin_views import NetworkAdminView
+from bot.core.widgets.views.network_views import (
     NetworkProfileView,
     SubscribeSetupView,
     SubscriptionModerationView,

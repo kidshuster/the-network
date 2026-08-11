@@ -18,15 +18,11 @@ def _imports_outer_workflows(source: str) -> list[str]:
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith(
-                ("bot.widgets", "bot.adapters", "tests.core")
-            ):
+            if node.module and node.module.startswith("tests.core"):
                 violations.append(f"from {node.module}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith(
-                    ("bot.widgets", "bot.adapters", "tests.core")
-                ):
+                if alias.name.startswith("tests.core"):
                     violations.append(f"import {alias.name}")
     return violations
 
@@ -76,7 +72,11 @@ def test_retired_yaml_recipe_runtime_does_not_return() -> None:
 
 def test_discord_event_adapters_dispatch_through_recipe_registry() -> None:
     event_adapter = (
-        Path(bot.__file__).resolve().parent / "adapters" / "discord" / "events.py"
+        Path(bot.__file__).resolve().parent
+        / "core"
+        / "adapters"
+        / "discord"
+        / "events.py"
     ).read_text(encoding="utf-8")
     assert 'recipe_registry.dispatch("discord.message"' in event_adapter
     assert 'recipe_registry.dispatch("discord.webhooks_update"' in event_adapter
@@ -115,7 +115,7 @@ def test_client_deletion_is_reachable_only_from_delete_button_view() -> None:
             or "clients.delete_with_relations(" in source
         ):
             repository_callers.append(relative)
-    assert deletion_callers == ["bot/widgets/views/profile_views.py"]
+    assert deletion_callers == ["bot/core/widgets/views/profile_views.py"]
     assert repository_callers == ["bot/core/clients/deletion.py"]
 
 
@@ -137,3 +137,14 @@ def test_live_orchestration_is_recipe_driven() -> None:
     launcher = (live_root / "smoke_server_init.sh").read_text(encoding="utf-8")
     assert "tests.core.runner recipe" in launcher
     assert "discord" not in launcher.casefold()
+
+
+def test_widgets_are_declarative_and_legacy_config_roots_are_removed() -> None:
+    package = Path(bot.__file__).resolve().parent
+    widgets = package / "widgets"
+    assert list(widgets.rglob("*.yaml"))
+    assert not list(widgets.rglob("*.py"))
+    assert not list((package / "channels").rglob("*.py"))
+    assert not list((package / "channels").rglob("*.yaml"))
+    assert not list((package / "changelog").rglob("*.yaml"))
+    assert not list((package / "adapters").rglob("*.py"))

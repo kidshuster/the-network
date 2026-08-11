@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from bot.widgets.presenters import _bullet_list, server_rectification_embeds
-from bot.widgets.recipes.hub.initialize import GuildInitResult
+from bot.core.widgets.presenters import _bullet_list, server_rectification_embeds
+from bot.core.widgets.recipes.hub.initialize import GuildInitResult
 
 
 def test_server_init_rectification_embed_lists_work_done() -> None:

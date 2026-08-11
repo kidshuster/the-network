@@ -21,7 +21,7 @@ _TEMPLATES_DIR = _WIDGETS_DIR / "templates"
 _EMBEDS_DIR = _TEMPLATES_DIR / "embeds"
 _POPUPS_DIR = _TEMPLATES_DIR / "popups"
 _MODALS_DIR = _TEMPLATES_DIR / "modals"
-_CHANNEL_TEMPLATES_DIR = _BOT_DIR / "channels" / "templates"
+_CHANNEL_TEMPLATES_DIR = _WIDGETS_DIR / "channels" / "templates"
 
 _COLOUR_MAP: dict[str, discord.Colour] = {
     "blurple": discord.Colour.blurple(),

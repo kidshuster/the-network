@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.channels.stickies.join import (
+from bot.core.channels.stickies.join import (
     build_how_to_join_embed,
     build_how_to_join_footer,
     format_how_to_join_sticky_location,

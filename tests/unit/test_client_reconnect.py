@@ -9,7 +9,7 @@ from view_registry_helpers import make_test_view_registry
 
 from bot.core.clients.reconnect import reconnect_clients_on_init
 from bot.core.models.client import Client
-from bot.widgets.recipes.hub.initialize import GuildInitResult
+from bot.core.widgets.recipes.hub.initialize import GuildInitResult
 
 
 def _stored_client(*, guild_id: int = 100, client_id: int = 1) -> Client:

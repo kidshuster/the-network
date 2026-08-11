@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 _MAX_EMBED_FIELD_CHARS = 1024
 
-_CHANGELOG_PATH = Path(__file__).resolve().parents[2] / "changelog" / "releases.yaml"
+_CHANGELOG_PATH = (
+    Path(__file__).resolve().parents[2] / "widgets" / "changelog" / "releases.yaml"
+)
 LAST_CHANGELOG_VERSION_KEY = "hub_changelog_last_version"
 PACKAGE_NAME = "the-network"
 
@@ -231,7 +233,7 @@ async def sync_changelog_on_ready(
     if access_role is None:
         return
 
-    from bot.channels.resolve import resolve_human_moderator_role
+    from bot.core.channels.resolve import resolve_human_moderator_role
     from bot.core.networks.roles import resolve_operator_role_by_name
 
     human_moderator_role = resolve_human_moderator_role(guild)

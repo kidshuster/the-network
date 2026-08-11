@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.widgets.recipes.hub.initialize import (
+from bot.core.widgets.recipes.hub.initialize import (
     GuildInitResult,
     _reorder_guild_categories,
     _reorder_hub_categories,

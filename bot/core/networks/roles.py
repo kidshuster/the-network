@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import discord
 
-from bot.channels.resolve import (
+from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.core.channels.resolve import (
     resolve_access_role as layout_resolve_access_role,
 )
-from bot.channels.resolve import (
+from bot.core.channels.resolve import (
     resolve_operator_role as layout_resolve_operator_role,
 )
-from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
 from bot.core.models.errors import NetworkValidationError
 
 _REQUIRED_OPERATOR_PERMISSIONS: tuple[tuple[str, str], ...] = (

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.channels.stickies.subscription import sync_subscription_setup
+from bot.core.channels.stickies.subscription import sync_subscription_setup
 from bot.core.clients.profile_sync import refresh_client_profile_message
 from bot.core.clients.rectification import rectify_client_permissions
 from bot.core.clients.resources import resolve_client_category

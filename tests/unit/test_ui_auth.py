@@ -7,14 +7,14 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
-from bot.adapters.discord.responses import defer_ephemeral
-from bot.channels.stickies.reconciler import (
+from bot.core.adapters.discord.responses import defer_ephemeral
+from bot.core.channels.stickies.reconciler import (
     embed_content_signature,
     sticky_channel_embed_permission_error,
 )
 from bot.core.models.client import Client
-from bot.widgets import render_text
-from bot.widgets.views._auth import (
+from bot.core.widgets import render_text
+from bot.core.widgets.views._auth import (
     MembershipPolicy,
     ensure_client_access,
     validate_hub_modal_context,
@@ -102,7 +102,7 @@ async def test_validate_client_modal_context_rejects_missing_guild() -> None:
     interaction = MagicMock()
     interaction.guild = None
 
-    from bot.widgets.views._auth import validate_client_modal_context
+    from bot.core.widgets.views._auth import validate_client_modal_context
 
     result = validate_client_modal_context(bot, interaction)
 

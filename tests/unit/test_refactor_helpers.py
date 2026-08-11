@@ -76,7 +76,7 @@ def test_resolve_subscription_channels_falls_back_to_category_names() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_stored_embed_sticky_skips_when_current() -> None:
-    from bot.channels.stickies.reconciler import sync_stored_embed_sticky
+    from bot.core.channels.stickies.reconciler import sync_stored_embed_sticky
 
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 10

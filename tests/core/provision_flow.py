@@ -14,9 +14,9 @@ from bot.core.networks.roles import (
     resolve_access_role,
 )
 from bot.core.runtime import BotContext
+from bot.core.widgets.recipes.onboarding.service import ServerRequestService
+from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 from bot.testing.context_factory import create_bot_context
-from bot.widgets.recipes.onboarding.service import ServerRequestService
-from bot.widgets.views.persistent_views import PersistentViewRegistry
 from tests.core.constants import SMOKE_CLEANUP_REASON
 from tests.core.permission_probe import (
     PROBE_PNG,
@@ -285,7 +285,7 @@ async def cleanup_smoke_join_request_messages(
     if not request_ids:
         return
 
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.core.channels.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     for request_id in request_ids:
@@ -315,7 +315,7 @@ async def cleanup_join_requests_smoke_artifacts(
     bot_member: discord.Member,
 ) -> None:
     """Remove smoke join-request messages and DB rows from `#join-requests`."""
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.core.channels.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     if channel is not None:
@@ -550,8 +550,8 @@ async def ensure_smoke_network_key(
     if explicit:
         existing = await context.store.networks.get_by_key(explicit)
         if existing is None:
-            from bot.widgets.recipes.network.service import create_network
-            from bot.widgets.views.persistent_views import PersistentViewRegistry
+            from bot.core.widgets.recipes.network.service import create_network
+            from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 
             created = await create_network(
                 context,
@@ -569,8 +569,8 @@ async def ensure_smoke_network_key(
     if existing is not None:
         return existing.key
 
-    from bot.widgets.recipes.network.service import create_network
-    from bot.widgets.views.persistent_views import PersistentViewRegistry
+    from bot.core.widgets.recipes.network.service import create_network
+    from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 
     created = await create_network(
         context,
@@ -703,12 +703,12 @@ async def run_hub_rebuild_smoke_flow(
     skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
-    from bot.channels.resolve import resolve_join_requests_channel
+    from bot.core.channels.resolve import resolve_join_requests_channel
     from bot.core.hub.data_reset import reset_hub_layout_data
-    from bot.widgets.recipes.hub.initialize import initialize_guild
-    from bot.widgets.recipes.hub.uninitialize import uninitialize_guild
-    from bot.widgets.recipes.network.service import create_network
-    from bot.widgets.views.persistent_views import PersistentViewRegistry
+    from bot.core.widgets.recipes.hub.initialize import initialize_guild
+    from bot.core.widgets.recipes.hub.uninitialize import uninitialize_guild
+    from bot.core.widgets.recipes.network.service import create_network
+    from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 
     view_registry = PersistentViewRegistry(bot)
 
@@ -755,7 +755,7 @@ async def run_hub_rebuild_smoke_flow(
         if not uninit.success:
             raise RuntimeError(uninit.reason or "server uninit failed")
 
-        from bot.channels.layout.managed import hub_category_names, preserved_channel_names
+        from bot.core.channels.layout.managed import hub_category_names, preserved_channel_names
 
         # Client artifacts must survive hub uninit.
         if guild.get_role(state.client_role_id) is None:
@@ -880,8 +880,8 @@ async def run_hub_rebuild_smoke_flow(
             raise RuntimeError("Client category was removed during hub rebuild.")
 
         # Client layout overwrites must match YAML after re-init.
-        from bot.channels.layout import LayoutContext, compile_client
-        from bot.channels.resolve import resolve_human_moderator_role
+        from bot.core.channels.layout import LayoutContext, compile_client
+        from bot.core.channels.resolve import resolve_human_moderator_role
         from bot.core.clients.names import slugify_client_name
         from bot.core.networks.roles import (
             resolve_access_role,

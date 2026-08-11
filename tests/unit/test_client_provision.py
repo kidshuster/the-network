@@ -49,14 +49,14 @@ async def test_provision_client_creates_role_category_profile(
         MagicMock(),
     )
     monkeypatch.setattr(
-        "bot.channels.resolve.resolve_human_moderator_role",
+        "bot.core.channels.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
         "bot.core.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
-    from bot.channels.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.core.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     batch = BatchApplyResult(
         results=[

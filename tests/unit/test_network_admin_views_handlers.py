@@ -6,8 +6,8 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 
-from bot.widgets import render_text
-from bot.widgets.views.network_admin_views import NetworkAdminView
+from bot.core.widgets import render_text
+from bot.core.widgets.views.network_admin_views import NetworkAdminView
 
 
 @pytest.mark.asyncio

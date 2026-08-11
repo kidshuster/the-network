@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.channels.stickies.admin import sync_network_admin_sticky
+from bot.core.channels.stickies.admin import sync_network_admin_sticky
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
+from bot.core.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.core.clients.names import slugify_client_name
 from bot.core.clients.resources import (
     fetch_client_role,

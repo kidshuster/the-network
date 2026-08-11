@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.channels.stickies.subscription import (
+from bot.core.channels.stickies.subscription import (
     _maybe_post_activation_welcome,
     sync_subscription_setup,
 )
@@ -15,8 +15,8 @@ from bot.core.clients.setup_state import SubscriptionSetupState
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
-from bot.widgets.recipes.onboarding.service import ServerRequestService
-from bot.widgets.views.persistent_views import PersistentViewRegistry
+from bot.core.widgets.recipes.onboarding.service import ServerRequestService
+from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 from tests.core.permission_probe import PROBE_PNG
 from tests.core.provision_flow import (
     _SmokeProfileAttachment,

@@ -10,7 +10,7 @@ from bot.core.clients.deletion import ClientDeletionService
 from bot.core.database.store import Store
 from bot.core.networks.routing import RoutingService
 from bot.core.runtime import BotContext
-from bot.widgets.views.network_views import NetworkProfileView
+from bot.core.widgets.views.network_views import NetworkProfileView
 
 
 def _make_context(db) -> BotContext:

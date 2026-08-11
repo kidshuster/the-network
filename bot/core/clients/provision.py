@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 
 import discord
 
-from bot.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
-from bot.channels.resolve import resolve_human_moderator_role
+from bot.core.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
+from bot.core.channels.resolve import resolve_human_moderator_role
 from bot.core.clients.names import (
     build_client_profile_channel_base,
     build_client_role_name,

@@ -6,15 +6,15 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.channels.layout import LayoutContext, compile_client, compile_hub
-from bot.channels.layout.compiler import ResourceKind
-from bot.channels.layout.loader import (
+from bot.core.channels.layout import LayoutContext, compile_client, compile_hub, managed
+from bot.core.channels.layout.compiler import ResourceKind
+from bot.core.channels.layout.loader import (
     clear_layout_cache,
     load_layout,
     load_roles,
     validate_all_layouts,
 )
-from bot.channels.layout.schema import RoleDefaultsSpec
+from bot.core.channels.layout.schema import RoleDefaultsSpec
 
 
 def _context(*, clients: int = 1, network_key: str | None = "stingers") -> LayoutContext:
@@ -51,6 +51,15 @@ def test_configuration_loads_and_cross_references() -> None:
     validate_all_layouts()
     assert load_roles().roles["bot_access"].target == "bot_access"
     assert set(load_layout().layout.categories) == {"moderation", "network", "leaders"}
+
+
+def test_removed_yaml_resource_uses_non_crashing_lookup_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(managed, "_hub_channel_by_id", lambda: {})
+    monkeypatch.setattr(managed, "_hub_category_by_id", lambda: {})
+    assert managed.hub_channel_name("removed", fallback="legacy-name") == "legacy-name"
+    assert managed.hub_category_name("removed", fallback="Legacy") == "Legacy"
 
 
 def test_role_defaults_reject_unknown_discord_permission() -> None:

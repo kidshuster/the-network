@@ -9,7 +9,7 @@ from test_guild_init import _patch_init_roles
 from view_registry_helpers import make_test_view_registry
 
 from bot.core.models.client import Client
-from bot.widgets.recipes.hub.initialize import initialize_guild
+from bot.core.widgets.recipes.hub.initialize import initialize_guild
 
 
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:

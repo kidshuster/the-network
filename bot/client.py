@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from bot.adapters.discord import register_recipe_commands, register_recipe_events
+from bot.core.adapters.discord import register_recipe_commands, register_recipe_events
 from bot.core.clients.cache import ClientCache
 from bot.core.database import migrations
 from bot.core.database.connection import Database
@@ -16,7 +16,7 @@ from bot.core.networks.routing import RoutingService
 from bot.core.relay.service import RelayService
 from bot.core.runtime import BotContext
 from bot.core.settings import BotSettingsService
-from bot.widgets.recipes import RecipeRegistry, build_recipe_registry
+from bot.core.widgets.recipes import RecipeRegistry, build_recipe_registry
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -79,9 +79,9 @@ class NetworkRelayBot(commands.Bot):
         register_recipe_commands(self)
         register_recipe_events(self)
 
-        from bot.channels.layout import validate_all_layouts
-        from bot.channels.stickies import validate_sticky_catalog
-        from bot.widgets import validate_all_templates
+        from bot.core.channels.layout import validate_all_layouts
+        from bot.core.channels.stickies import validate_sticky_catalog
+        from bot.core.widgets import validate_all_templates
 
         validate_all_templates()
         validate_all_layouts()
@@ -141,8 +141,8 @@ class NetworkRelayBot(commands.Bot):
         )
 
         if context is not None and not self._subscription_setup_synced:
-            from bot.channels.stickies.subscription import sync_all_subscription_setups
-            from bot.widgets.views.persistent_views import PersistentViewRegistry
+            from bot.core.channels.stickies.subscription import sync_all_subscription_setups
+            from bot.core.widgets.views.persistent_views import PersistentViewRegistry
 
             try:
                 synced = await sync_all_subscription_setups(
@@ -174,9 +174,9 @@ class NetworkRelayBot(commands.Bot):
         if context is None:
             return
 
-        from bot.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
-        from bot.widgets.views.network_admin_views import NetworkAdminView
-        from bot.widgets.views.network_views import (
+        from bot.core.widgets.views.join_views import JoinNetworkView, ModeratorReviewView
+        from bot.core.widgets.views.network_admin_views import NetworkAdminView
+        from bot.core.widgets.views.network_views import (
             NetworkProfileView,
             SubscribeSetupView,
             SubscriptionModerationView,

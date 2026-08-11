@@ -1,18 +1,18 @@
-# Widgets
+# Widget configuration
 
-Recipes, views, and user-facing Discord presentation live here. Edit YAML templates to change
-embeds, popups, and modal labels without touching recipes or core APIs. All failure embeds use
-the single dynamic `templates/embeds/error.yaml` template.
+This directory is declarative: YAML controls layout, permissions, sticky content,
+changelog releases, embeds, popups, and modals. Executable loaders, recipes,
+views, and APIs live under `bot/core/`.
 
 ## Layout
 
-- `recipes/` — registered application operations
-- `views/` — Discord buttons, dropdowns, and modals
+- `channels/layout/` — channel layout and permission profiles
+- `channels/stickies/` — sticky metadata and versions
+- `channels/templates/` — content installed into managed channels
+- `changelog/` — release-note data
 - `templates/embeds/` — interaction and command embeds
 - `templates/popups/` — plain ephemeral responses
 - `templates/modals/` — modal titles and fields
-
-Content installed into managed channels belongs in `bot/channels/templates/` instead.
 
 ## Placeholders
 
@@ -30,4 +30,4 @@ Named colours: `blurple`, `green`, `red`, `gold`, `orange`, `dark_grey`. Pass `c
 
 ## Sticky versions
 
-Sticky metadata and versions live in `bot/channels/stickies/stickies.yaml`.
+Sticky metadata and versions live in `bot/widgets/channels/stickies/stickies.yaml`.
