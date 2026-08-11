@@ -112,7 +112,7 @@ async def ensure_leaders_channels(
         compile_hub_slice(
             layout_ctx,
             category_ids={"leaders"},
-            channel_ids={"leaders", "changelog"},
+            channel_ids={"leaders_channel", "changelog"},
         ),
         mode=ApplyMode.ENSURE,
     )
@@ -122,7 +122,7 @@ async def ensure_leaders_channels(
         if not item.success
     ]
 
-    leaders = batch.resource("leaders")
+    leaders = batch.resource("leaders_channel")
     changelog = batch.resource("changelog")
     sync_result.leaders_channel = (
         leaders if isinstance(leaders, discord.TextChannel) else None

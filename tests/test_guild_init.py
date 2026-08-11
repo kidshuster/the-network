@@ -34,11 +34,23 @@ def _guild_with_roles(
     access_role = MagicMock(
         spec=discord.Role, name="The Network", id=40, position=access_position
     )
+    access_role.name = "The Network"
     access_role.is_default.return_value = False
+    access_role.managed = False
+    bot_access_role = MagicMock(
+        spec=discord.Role,
+        id=45,
+        position=min(access_position + 1, operator_position - 1),
+    )
+    bot_access_role.name = "The Network Bot Access"
+    bot_access_role.is_default.return_value = False
+    bot_access_role.managed = False
     operator_role = MagicMock(
         spec=discord.Role, name="The Network+", id=50, position=operator_position
     )
     operator_role.is_default.return_value = False
+    operator_role.name = "The Network+"
+    operator_role.managed = False
     operator_role.permissions.manage_channels = True
     operator_role.permissions.manage_roles = True
     operator_role.permissions.manage_webhooks = True
@@ -49,7 +61,11 @@ def _guild_with_roles(
     operator_role.permissions.manage_messages = True
     operator_role.permissions.manage_emojis_and_stickers = True
 
-    bot = MagicMock(spec=discord.Member, id=999, roles=[access_role, operator_role])
+    bot = MagicMock(
+        spec=discord.Member,
+        id=999,
+        roles=[access_role, bot_access_role, operator_role],
+    )
     bot.top_role = operator_role
     perms = MagicMock()
     perms.manage_channels = True
@@ -58,7 +74,7 @@ def _guild_with_roles(
     perms.administrator = False
     type(bot).guild_permissions = PropertyMock(return_value=perms)
 
-    guild.roles = [everyone, human_mod, access_role, operator_role]
+    guild.roles = [everyone, human_mod, access_role, bot_access_role, operator_role]
     guild.me = bot
     return guild, bot, human_mod, access_role, operator_role
 
@@ -403,108 +419,3 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
 
     assert result.success is True
     assert any("moderator" in step.casefold() for step in result.failed_steps)
-
-
-@pytest.mark.asyncio
-async def test_reconcile_map_falls_back_when_bulk_channel_edit_fails() -> None:
-    from bot.permissions.service import build_context, permission_service
-
-    channel = MagicMock(spec=discord.TextChannel)
-    channel.id = 1
-    channel.category_id = 100
-    channel.overwrites = {}
-    channel.edit = AsyncMock(
-        side_effect=[
-            http_50013(),
-            None,
-            None,
-        ]
-    )
-    channel.set_permissions = AsyncMock()
-
-    bot_member = MagicMock(spec=discord.Member)
-    bot_member.guild_permissions.manage_channels = True
-    bot_member.top_role = MagicMock(position=10, id=50)
-
-    client_role = MagicMock(spec=discord.Role, id=101, position=1)
-    client_role.is_default.return_value = False
-    overwrite = discord.PermissionOverwrite(view_channel=True)
-
-    sync = await permission_service.reconcile_map(
-        channel,
-        build_context(
-            MagicMock(spec=discord.Guild),
-            bot_member,
-            access_role=None,
-            moderator_role=None,
-        ),
-        {client_role: overwrite},
-        reason="The Network guild init",
-    )
-
-    assert sync.success is True
-    assert channel.edit.await_count == 3
-    channel.set_permissions.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_reconcile_map_falls_back_to_incremental_set_permissions() -> None:
-    from bot.permissions.service import build_context, permission_service
-
-    channel = MagicMock(spec=discord.TextChannel)
-    channel.id = 1
-    channel.category_id = 100
-    channel.overwrites = {}
-    channel.edit = AsyncMock(
-        side_effect=[
-            http_50013(),
-            None,
-            http_50013(),
-        ]
-    )
-    channel.set_permissions = AsyncMock()
-
-    bot_member = MagicMock(spec=discord.Member)
-    bot_member.guild_permissions.manage_channels = True
-    bot_member.top_role = MagicMock(position=10, id=50)
-
-    client_role = MagicMock(spec=discord.Role, id=101, position=1)
-    client_role.is_default.return_value = False
-    overwrite = discord.PermissionOverwrite(view_channel=True)
-
-    sync = await permission_service.reconcile_map(
-        channel,
-        build_context(
-            MagicMock(spec=discord.Guild),
-            bot_member,
-            access_role=None,
-            moderator_role=None,
-        ),
-        {client_role: overwrite},
-        reason="The Network guild init",
-    )
-
-    assert sync.success is True
-    channel.set_permissions.assert_awaited_once_with(
-        client_role,
-        overwrite=overwrite,
-        reason="The Network guild init",
-    )
-
-
-def test_moderator_category_overwrite_has_no_thread_flags() -> None:
-    from bot.layout import preset_overwrite
-
-    category = preset_overwrite("moderator_staff_category")
-    channel = preset_overwrite("moderator_staff")
-    assert category.create_public_threads is not True
-    assert channel.create_public_threads is True
-
-
-def test_everyone_readonly_category_overwrite_has_no_thread_flags() -> None:
-    from bot.layout import preset_overwrite
-
-    category = preset_overwrite("everyone_readonly_category")
-    channel = preset_overwrite("everyone_readonly")
-    assert category.create_public_threads is not True
-    assert channel.create_public_threads is False

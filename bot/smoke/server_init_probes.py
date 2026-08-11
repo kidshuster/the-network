@@ -300,10 +300,11 @@ async def probe_hub_layout(
         except Exception as exc:
             return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
     else:
-        from bot.layout.loader import load_hub_layout
+        from bot.layout.loader import load_layout
 
-        for channel in load_hub_layout().channels:
-            channel_names.add(channel.name.casefold())
+        for category in load_layout().layout.categories.values():
+            for channel in category.channels.values():
+                channel_names.add(channel.name.casefold())
 
     missing_channels = [
         name for name in sorted(channel_names) if _channel_by_name(guild, name) is None

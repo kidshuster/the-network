@@ -41,6 +41,12 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     bot_member.top_role = MagicMock()
     bot_member.top_role.position = 10
     bot_member.top_role.id = 50
+    bot_access = MagicMock(spec=discord.Role)
+    bot_access.id = 45
+    bot_access.name = "The Network Bot Access"
+    bot_access.position = 9
+    bot_access.managed = False
+    bot_access.is_default.return_value = False
 
     category = MagicMock(spec=discord.CategoryChannel)
     category.id = 100
@@ -51,10 +57,17 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     ):
         await permission_service.ensure_text_channel(
             guild,
-            build_context(guild, bot_member, access_role=None, moderator_role=None),
+            build_context(
+                guild,
+                bot_member,
+                access_role=None,
+                moderator_role=None,
+                operator_role=bot_access,
+            ),
             existing=None,
             name="network-profile-probe",
             category=category,
             overwrites={everyone: discord.PermissionOverwrite(view_channel=False)},
+            managed_targets={everyone, bot_access},
             reason="test",
         )

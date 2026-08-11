@@ -6,7 +6,6 @@ from bot.layout.compiler import (
     compile_client,
     compile_hub,
     compile_hub_slice,
-    preset_overwrite,
 )
 from bot.layout.loader import validate_all_layouts
 from bot.layout.managed import hub_category_names, preserved_channel_names
@@ -22,7 +21,6 @@ __all__ = [
     "compile_hub",
     "compile_hub_slice",
     "hub_category_names",
-    "preset_overwrite",
     "preserved_channel_names",
     "validate_all_layouts",
 ]

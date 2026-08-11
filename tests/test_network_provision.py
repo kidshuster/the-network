@@ -46,18 +46,6 @@ def test_format_operator_setup_instructions_lists_permissions() -> None:
     assert "Manage Roles" in text
 
 
-def test_base_overwrites_include_access_role() -> None:
-    from bot.networks.roles import build_base_overwrites
-
-    guild = MagicMock(spec=discord.Guild)
-    guild.default_role = MagicMock(spec=discord.Role)
-    access = MagicMock(spec=discord.Role)
-    bot = MagicMock(spec=discord.Member)
-    overwrites = dict(build_base_overwrites(guild, bot, access))
-    assert overwrites[access].view_channel is True
-    assert overwrites[bot].manage_channels is True
-
-
 def _dual_role_bot() -> tuple[MagicMock, MagicMock, MagicMock]:
     access = MagicMock(spec=discord.Role, name="The Network", position=5, id=42)
     access.is_default.return_value = False

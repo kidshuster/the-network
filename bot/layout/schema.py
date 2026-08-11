@@ -1,109 +1,134 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+import discord
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-RoleKey = Literal["everyone", "access", "operator", "moderator", "bot", "client"]
-ClientScope = Literal["this_client", "all_clients"]
-CommunitySlot = Literal["rules", "moderators"]
+CommunitySlot = Literal["rules", "public_updates"]
 ManagedKind = Literal["hub", "client"]
 ChannelType = Literal["text", "announcement"]
-ApplyWhen = Literal["always", "subscribed"]
+InstanceKind = Literal["static", "per_client", "per_subscription"]
+TargetKind = Literal[
+    "everyone",
+    "network_access",
+    "moderator",
+    "bot_access",
+    "current_client_role",
+    "client_roles",
+]
 
 
-class OverwriteBindingSpec(BaseModel):
-    role: RoleKey
-    preset: str
-    scope: ClientScope | None = None
-    extras: dict[str, bool | None] = Field(default_factory=dict)
+def _validate_overrides(
+    overrides: dict[str, dict[str, bool | None] | None],
+) -> None:
+    valid = set(discord.Permissions.VALID_FLAGS)
+    unknown = {
+        permission
+        for fields in overrides.values()
+        if fields is not None
+        for permission in fields
+        if permission not in valid
+    }
+    if unknown:
+        raise ValueError(f"unknown Discord permissions: {sorted(unknown)}")
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class RoleDefaultsSpec(StrictModel):
+    target: TargetKind
+    permissions: dict[str, bool | None] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _client_scope_required(self) -> OverwriteBindingSpec:
-        if self.role == "client" and self.scope is None:
-            raise ValueError("client role bindings require scope: this_client|all_clients")
-        if self.role != "client" and self.scope is not None:
-            raise ValueError("scope is only valid for role: client")
+    def _valid_permissions(self) -> RoleDefaultsSpec:
+        unknown = set(self.permissions) - set(discord.Permissions.VALID_FLAGS)
+        if unknown:
+            raise ValueError(f"unknown Discord permissions: {sorted(unknown)}")
         return self
 
 
-class CategorySpec(BaseModel):
-    id: str
-    name: str
-    position: int = 0
-    managed: ManagedKind = "hub"
-    overwrites: list[OverwriteBindingSpec] = Field(default_factory=list)
+class RolesSpec(StrictModel):
+    version: Literal[1]
+    roles: dict[str, RoleDefaultsSpec]
 
 
-class ChannelSpec(BaseModel):
-    id: str
+class ProfileSpec(StrictModel):
+    roles: list[str]
+    overrides: dict[str, dict[str, bool | None] | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _valid_overrides(self) -> ProfileSpec:
+        _validate_overrides(self.overrides)
+        return self
+
+
+class ChannelSpec(StrictModel):
     name: str
-    category: str
     type: ChannelType = "text"
     topic: str | None = None
-    inherit: bool = False
-    managed: ManagedKind = "hub"
-    preserve_on_uninit: bool = False
+    profile: str | None = None
+    overrides: dict[str, dict[str, bool | None] | None] = Field(default_factory=dict)
     community_slot: CommunitySlot | None = None
+    lifecycle: Literal["managed", "preserve"] = "managed"
     legacy_names: list[str] = Field(default_factory=list)
-    overwrites: list[OverwriteBindingSpec] = Field(default_factory=list)
-    when: ApplyWhen = "always"
     position: int | None = None
+    instances: InstanceKind = "static"
 
     @model_validator(mode="after")
-    def _community_implies_preserve(self) -> ChannelSpec:
+    def _community_is_preserved(self) -> ChannelSpec:
+        _validate_overrides(self.overrides)
         if self.community_slot is not None:
-            self.preserve_on_uninit = True
+            self.lifecycle = "preserve"
         return self
 
 
-class HubLayoutSpec(BaseModel):
-    kind: Literal["hub_layout"] = "hub_layout"
-    categories: list[CategorySpec]
-    channels: list[ChannelSpec] = Field(default_factory=list)
+class CategorySpec(StrictModel):
+    name: str
+    position: int = 0
+    profile: str
+    overrides: dict[str, dict[str, bool | None] | None] = Field(default_factory=dict)
+    channels: dict[str, ChannelSpec] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _unique_ids_and_slots(self) -> HubLayoutSpec:
-        cat_ids = [c.id for c in self.categories]
-        if len(cat_ids) != len(set(cat_ids)):
-            raise ValueError("duplicate category id in hub_layout")
-        ch_ids = [c.id for c in self.channels]
-        if len(ch_ids) != len(set(ch_ids)):
-            raise ValueError("duplicate channel id in hub_layout")
-        slots = [c.community_slot for c in self.channels if c.community_slot is not None]
+    def _valid_overrides(self) -> CategorySpec:
+        _validate_overrides(self.overrides)
+        return self
+
+
+class LayoutResourcesSpec(StrictModel):
+    categories: dict[str, CategorySpec]
+    client_category: CategorySpec
+
+
+class LayoutSpec(StrictModel):
+    version: Literal[1]
+    permission_profiles: dict[str, ProfileSpec]
+    layout: LayoutResourcesSpec
+
+    @model_validator(mode="after")
+    def _references_exist(self) -> LayoutSpec:
+        profiles = set(self.permission_profiles)
+        categories = [
+            *self.layout.categories.items(),
+            ("client_category", self.layout.client_category),
+        ]
+        for category_id, category in categories:
+            if category.profile not in profiles:
+                raise ValueError(f"{category_id}: unknown profile {category.profile!r}")
+            for channel_id, channel in category.channels.items():
+                if channel.profile is not None and channel.profile not in profiles:
+                    raise ValueError(
+                        f"{category_id}.{channel_id}: unknown profile {channel.profile!r}",
+                    )
+        slots = [
+            channel.community_slot
+            for category in self.layout.categories.values()
+            for channel in category.channels.values()
+            if channel.community_slot is not None
+        ]
         if len(slots) != len(set(slots)):
             raise ValueError("each community_slot may appear at most once")
-        known = set(cat_ids)
-        for channel in self.channels:
-            if channel.category not in known:
-                raise ValueError(f"channel {channel.id} references unknown category")
         return self
-
-
-class ClientCategorySpec(BaseModel):
-    name: str
-    overwrites: list[OverwriteBindingSpec] = Field(default_factory=list)
-
-
-class ClientLayoutSpec(BaseModel):
-    kind: Literal["client_layout"] = "client_layout"
-    managed: ManagedKind = "client"
-    category: ClientCategorySpec
-    channels: list[ChannelSpec] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _client_channels(self) -> ClientLayoutSpec:
-        for channel in self.channels:
-            channel.managed = "client"
-            if channel.category != "client":
-                # allow shorthand: treat missing/other as client category
-                channel.category = "client"
-        return self
-
-
-class PermissionPresetsSpec(BaseModel):
-    kind: Literal["permission_presets"] = "permission_presets"
-    presets: dict[str, dict[str, Any]]
-
-
-LayoutSpec = HubLayoutSpec | ClientLayoutSpec | PermissionPresetsSpec

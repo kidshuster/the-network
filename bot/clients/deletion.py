@@ -27,19 +27,8 @@ class DeleteClientResult:
 async def _delete_client_channel(
     channel: discord.abc.GuildChannel,
     *,
-    bot_member: discord.Member | None,
     reason: str = _DELETE_REASON,
 ) -> None:
-    if (
-        bot_member is not None
-        and channel.category is not None
-        and not channel.permissions_for(bot_member).manage_channels
-    ):
-        try:
-            await channel.edit(sync_permissions=True, reason=reason)  # type: ignore[attr-defined]
-        except discord.HTTPException:
-            pass
-
     if isinstance(channel, discord.TextChannel) and not channel.is_news():
         try:
             webhooks = await channel.webhooks()
@@ -69,7 +58,6 @@ async def _delete_client_channel_by_id(
     guild: discord.Guild,
     channel_id: int,
     *,
-    bot_member: discord.Member | None,
     reason: str = _DELETE_REASON,
 ) -> None:
     channel_obj: discord.abc.GuildChannel | None = guild.get_channel(channel_id)
@@ -81,7 +69,7 @@ async def _delete_client_channel_by_id(
         if not isinstance(fetched, discord.abc.GuildChannel):
             return
         channel_obj = fetched
-    await _delete_client_channel(channel_obj, bot_member=bot_member, reason=reason)
+    await _delete_client_channel(channel_obj, reason=reason)
 
 
 class ClientDeletionService:
@@ -150,7 +138,6 @@ class ClientDeletionService:
                 channel_ids.add(channel.id)
                 await _delete_client_channel(
                     channel,
-                    bot_member=bot_member,
                     reason=_DELETE_REASON,
                 )
             if not category.channels:
@@ -171,7 +158,6 @@ class ClientDeletionService:
             await _delete_client_channel_by_id(
                 guild,
                 channel_id,
-                bot_member=bot_member,
                 reason=_DELETE_REASON,
             )
 

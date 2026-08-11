@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import cast
-
 import discord
 
+from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
 from bot.domain.errors import NetworkValidationError
 from bot.hub.resolve import (
     resolve_access_role as layout_resolve_access_role,
@@ -12,11 +10,6 @@ from bot.hub.resolve import (
 from bot.hub.resolve import (
     resolve_operator_role as layout_resolve_operator_role,
 )
-
-OverwriteMap = Mapping[
-    discord.Role | discord.Member | discord.Object,
-    discord.PermissionOverwrite,
-]
 
 _REQUIRED_OPERATOR_PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("manage_channels", "Manage Channels"),
@@ -30,6 +23,37 @@ _REQUIRED_OPERATOR_PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("manage_emojis_and_stickers", "Manage Emojis and Stickers"),
     ("create_expressions", "Create Expressions"),
 )
+
+
+async def ensure_bot_access_role(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    *,
+    reason: str,
+) -> discord.Role:
+    """Ensure the sole configurable role used in channel overwrites exists."""
+    role = discord.utils.get(guild.roles, name=DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME)
+    if role is None:
+        role = await guild.create_role(
+            name=DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME,
+            permissions=discord.Permissions.none(),
+            mentionable=False,
+            hoist=False,
+            reason=reason,
+        )
+    hierarchy_invalid = (
+        isinstance(role.position, int)
+        and isinstance(bot_member.top_role.position, int)
+        and role.position >= bot_member.top_role.position
+    )
+    if role.managed is True or hierarchy_invalid:
+        raise NetworkValidationError(
+            f"**{DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME}** must be an unmanaged role "
+            "below the bot's highest role."
+        )
+    if role not in bot_member.roles:
+        await bot_member.add_roles(role, reason=reason)
+    return role
 
 
 def format_operator_setup_instructions(
@@ -236,33 +260,3 @@ def validate_hub_permissions(
             f"Expected order: **{operator_role_name}** → **{access_role.name}** → "
             "**Moderator** → **Partner:** → @everyone"
         )
-
-
-def _bot_text_overwrite() -> discord.PermissionOverwrite:
-    return discord.PermissionOverwrite(
-        view_channel=True,
-        read_message_history=True,
-        send_messages=True,
-        embed_links=True,
-        attach_files=True,
-        manage_channels=True,
-        manage_webhooks=True,
-    )
-
-
-def build_base_overwrites(
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    access_role: discord.Role,
-) -> OverwriteMap:
-    return cast(
-        OverwriteMap,
-        {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            access_role: discord.PermissionOverwrite(
-                view_channel=True,
-                read_message_history=True,
-            ),
-            bot_member: _bot_text_overwrite(),
-        },
-    )

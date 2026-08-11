@@ -22,6 +22,7 @@ from bot.hub.resolve import (
 from bot.hub.result import GuildInitResult
 from bot.layout import ApplyMode, LayoutContext, apply_layout, compile_client, compile_hub
 from bot.networks.roles import (
+    ensure_bot_access_role,
     resolve_access_role_by_name,
     resolve_operator_role_by_name,
     validate_hub_permissions,
@@ -51,6 +52,7 @@ def _layout_context(
     *,
     access_role: discord.Role,
     operator_role: discord.Role,
+    bot_access_role: discord.Role,
     human_moderator_role: discord.Role | None,
     client_roles: tuple[discord.Role, ...] = (),
 ) -> LayoutContext:
@@ -60,6 +62,7 @@ def _layout_context(
         access_role=access_role,
         moderator_role=human_moderator_role,
         operator_role=operator_role,
+        bot_access_role=bot_access_role,
         client_roles=client_roles,
         reason="The Network guild init",
     )
@@ -83,6 +86,20 @@ async def initialize_guild(
         access_role = resolve_access_role_by_name(guild, role_name=access_role_name)
         operator_role = resolve_operator_role_by_name(
             guild, role_name=operator_role_name
+        )
+        if operator_role is None:
+            validate_hub_permissions(
+                bot_member,
+                access_role,
+                operator_role=None,
+                operator_role_name=operator_role_name,
+                human_moderator_role=None,
+            )
+            raise AssertionError("unreachable")
+        bot_access_role = await ensure_bot_access_role(
+            guild,
+            bot_member,
+            reason="The Network guild init",
         )
         human_moderator_role = resolve_human_moderator_role(guild)
 
@@ -137,6 +154,7 @@ async def initialize_guild(
             bot_member,
             access_role=access_role,
             operator_role=operator_role,
+            bot_access_role=bot_access_role,
             human_moderator_role=human_moderator_role,
             client_roles=tuple(client_roles),
         )
@@ -168,7 +186,7 @@ async def initialize_guild(
             )
             return result
 
-        leaders_channel = hub_batch.resource("leaders")
+        leaders_channel = hub_batch.resource("leaders_channel")
         changelog_channel = hub_batch.resource("changelog")
         if isinstance(leaders_channel, discord.TextChannel):
             result.notes.append(f"Leaders channel synced at {leaders_channel.mention}.")

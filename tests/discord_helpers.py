@@ -23,6 +23,7 @@ def make_role(
     managed: bool = False,
 ) -> MagicMock:
     role = MagicMock(spec=discord.Role, name=name, id=role_id, position=position)
+    role.name = name
     role.is_default.return_value = is_default
     role.managed = managed
     return role
@@ -67,6 +68,11 @@ def make_guild_with_roles(
 
     human_mod = make_role(name="Moderator", role_id=30, position=human_mod_position)
     access_role = make_role(name="The Network", role_id=40, position=access_position)
+    bot_access_role = make_role(
+        name="The Network Bot Access",
+        role_id=45,
+        position=min(access_position + 1, operator_position - 1),
+    )
     operator_role = make_role(name="The Network+", role_id=50, position=operator_position)
     operator_role.permissions.manage_channels = True
     operator_role.permissions.manage_roles = True
@@ -79,7 +85,8 @@ def make_guild_with_roles(
     operator_role.permissions.manage_emojis_and_stickers = True
 
     bot = make_bot_member(access=access_role, operator=operator_role)
-    guild.roles = [everyone, human_mod, access_role, operator_role]
+    bot.roles = [access_role, bot_access_role, operator_role]
+    guild.roles = [everyone, human_mod, access_role, bot_access_role, operator_role]
     guild.me = bot
     return guild, bot, human_mod, access_role, operator_role
 

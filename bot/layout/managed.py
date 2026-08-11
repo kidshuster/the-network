@@ -8,16 +8,20 @@ from bot.layout.roles import LayoutContext
 
 @lru_cache(maxsize=1)
 def _hub_category_by_id() -> dict[str, str]:
-    from bot.layout.loader import load_hub_layout
+    from bot.layout.loader import load_layout
 
-    return {c.id: c.name for c in load_hub_layout().categories}
+    return {key: value.name for key, value in load_layout().layout.categories.items()}
 
 
 @lru_cache(maxsize=1)
 def _hub_channel_by_id() -> dict[str, str]:
-    from bot.layout.loader import load_hub_layout
+    from bot.layout.loader import load_layout
 
-    return {c.id: c.name for c in load_hub_layout().channels}
+    return {
+        key: channel.name
+        for category in load_layout().layout.categories.values()
+        for key, channel in category.channels.items()
+    }
 
 
 def hub_category_name(category_id: str) -> str:
@@ -33,13 +37,14 @@ def hub_category_names() -> frozenset[str]:
 
 
 def preserved_channel_names() -> frozenset[str]:
-    from bot.layout.loader import load_hub_layout
+    from bot.layout.loader import load_layout
 
     names: set[str] = set()
-    for channel in load_hub_layout().channels:
-        if channel.preserve_on_uninit or channel.community_slot is not None:
-            names.add(channel.name.casefold())
-            names.update(n.casefold() for n in channel.legacy_names)
+    for category in load_layout().layout.categories.values():
+        for channel in category.channels.values():
+            if channel.lifecycle == "preserve" or channel.community_slot is not None:
+                names.add(channel.name.casefold())
+                names.update(n.casefold() for n in channel.legacy_names)
     return frozenset(names)
 
 

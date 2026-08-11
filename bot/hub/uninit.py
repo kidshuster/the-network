@@ -8,6 +8,7 @@ import discord
 
 from bot.constants import (
     DEFAULT_NETWORK_ACCESS_ROLE_NAME,
+    DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME,
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
@@ -75,6 +76,8 @@ def is_deletable_hub_role(
         return False
     if role.name.casefold() == operator_role_name.casefold():
         return False
+    if role.name == DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME:
+        return True
     if role.name == LEGACY_MODERATOR_ROLE_NAME:
         return True
     return False

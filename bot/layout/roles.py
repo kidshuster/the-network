@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 
 import discord
 
-from bot.layout.schema import ClientScope, OverwriteBindingSpec, RoleKey
-from bot.permissions.service import can_configure_role
+from bot.constants import DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+from bot.layout.schema import TargetKind
 
 
 @dataclass(frozen=True)
@@ -16,6 +15,7 @@ class LayoutContext:
     access_role: discord.Role | None = None
     moderator_role: discord.Role | None = None
     operator_role: discord.Role | None = None
+    bot_access_role: discord.Role | None = None
     client_role: discord.Role | None = None
     client_roles: tuple[discord.Role, ...] = ()
     server_name: str | None = None
@@ -24,61 +24,62 @@ class LayoutContext:
     reason: str = "The Network layout sync"
 
 
-def resolve_static_role(
-    context: LayoutContext,
-    key: RoleKey,
-) -> discord.Role | discord.Member | None:
-    if key == "everyone":
-        return context.guild.default_role
-    if key == "access":
-        return context.access_role
-    if key == "operator":
-        return context.operator_role
-    if key == "moderator":
-        return context.moderator_role
-    if key == "bot":
-        return context.bot_member
-    return None
+class LayoutRoleError(ValueError):
+    pass
 
 
-def expand_client_roles(
+def resolve_targets(
     context: LayoutContext,
-    scope: ClientScope,
+    target: TargetKind,
 ) -> tuple[discord.Role, ...]:
-    if scope == "this_client":
-        if context.client_role is None:
-            return ()
-        return (context.client_role,)
-    return context.client_roles
+    if target == "everyone":
+        return (context.guild.default_role,)
+    if target == "network_access":
+        role = context.access_role
+    elif target == "moderator":
+        role = context.moderator_role
+    elif target == "bot_access":
+        role = context.bot_access_role
+        if role is None and isinstance(context.guild.roles, (list, tuple)):
+            role = next(
+                (
+                    item
+                    for item in context.guild.roles
+                    if item.name == DEFAULT_NETWORK_BOT_ACCESS_ROLE_NAME
+                ),
+                None,
+            )
+    elif target == "current_client_role":
+        role = context.client_role
+    else:
+        return context.client_roles
+    return (role,) if role is not None else ()
 
 
-def resolve_binding_targets(
+def validate_target(
     context: LayoutContext,
-    binding: OverwriteBindingSpec,
-) -> list[discord.Role | discord.Member]:
-    if binding.role == "client":
-        assert binding.scope is not None
-        return list(expand_client_roles(context, binding.scope))
-    target = resolve_static_role(context, binding.role)
-    if target is None:
-        return []
-    return [target]
-
-
-def role_is_applicable(
-    context: LayoutContext,
-    target: discord.Role | discord.Member,
-) -> bool:
-    if isinstance(target, discord.Member):
-        return True
-    if target.is_default():
-        return True
-    if context.operator_role is not None and target.id == context.operator_role.id:
-        return True
-    if context.access_role is not None and target.id == context.access_role.id:
-        return True
-    return can_configure_role(context.bot_member, target)
-
-
-def iter_named_roles(roles: Iterable[discord.Role]) -> tuple[discord.Role, ...]:
-    return tuple(roles)
+    logical_name: str,
+    target: TargetKind,
+    roles: tuple[discord.Role, ...],
+) -> None:
+    optional = target in {
+        "moderator",
+        "bot_access",
+        "current_client_role",
+        "client_roles",
+    }
+    if not roles and not optional:
+        raise LayoutRoleError(f"{logical_name}: required role {target!r} is unavailable")
+    for role in roles:
+        if role.is_default() is True:
+            continue
+        if role.managed is True:
+            raise LayoutRoleError(f"{logical_name}: role {role.name!r} is Discord-managed")
+        if (
+            isinstance(role.position, int)
+            and isinstance(context.bot_member.top_role.position, int)
+            and role.position >= context.bot_member.top_role.position
+        ):
+            raise LayoutRoleError(
+                f"{logical_name}: role {role.name!r} is not below the bot's top role",
+            )

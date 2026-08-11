@@ -17,7 +17,7 @@ CATEGORY_LEADERS = hub_category_name("leaders")
 
 CHANNEL_RULES = hub_channel_name("rules")
 CHANNEL_JOIN_THE_NETWORK = hub_channel_name("join_the_network")
-CHANNEL_LEADERS = hub_channel_name("leaders")
+CHANNEL_LEADERS = hub_channel_name("leaders_channel")
 LEGACY_CHANNEL_LEADERS = "leaders"
 CHANNEL_CHANGELOG = hub_channel_name("changelog")
 CHANNEL_JOIN_REQUESTS = hub_channel_name("join_requests")

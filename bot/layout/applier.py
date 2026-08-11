@@ -7,7 +7,7 @@ from enum import Enum
 import discord
 
 from bot.layout.compiler import DesiredResource, ResourceKind
-from bot.layout.roles import LayoutContext
+from bot.layout.roles import LayoutContext, resolve_targets
 from bot.permissions.service import (
     PermissionContext,
     build_context,
@@ -56,12 +56,13 @@ class BatchApplyResult:
 
 
 def _permission_context(context: LayoutContext) -> PermissionContext:
+    bot_access = resolve_targets(context, "bot_access")
     return build_context(
         context.guild,
         context.bot_member,
         access_role=context.access_role,
         moderator_role=context.moderator_role,
-        operator_role=context.operator_role,
+        operator_role=bot_access[0] if bot_access else None,
     )
 
 
@@ -87,6 +88,10 @@ def _find_text_channel(
         rules = guild.rules_channel
         if isinstance(rules, discord.TextChannel):
             return rules
+    if resource.community_slot == "public_updates":
+        updates = guild.public_updates_channel
+        if isinstance(updates, discord.TextChannel):
+            return updates
 
     # Prefer in-category match
     if category is not None:
@@ -113,9 +118,10 @@ async def _ensure_category(
             existing=existing,
             name=resource.name,
             overwrites=resource.overwrites,
+            managed_targets=resource.managed_targets,
             reason=context.reason,
         )
-    except discord.HTTPException as exc:
+    except (discord.HTTPException, ValueError) as exc:
         return ResourceApplyResult(
             resource_id=resource.id,
             success=False,
@@ -160,21 +166,13 @@ async def _ensure_channel(
             if edits:
                 await existing.edit(reason=context.reason, **edits)  # type: ignore[call-overload]
 
-            if resource.inherit and category is not None:
-                sync = await permission_service.reconcile_map(
-                    existing,
-                    perm,
-                    resource.overwrites,
-                    reason=context.reason,
-                    inherit=True,
-                )
-            else:
-                sync = await permission_service.reconcile_map(
-                    existing,
-                    perm,
-                    resource.overwrites,
-                    reason=context.reason,
-                )
+            sync = await permission_service.reconcile(
+                existing,
+                perm,
+                resource.overwrites,
+                managed_targets=resource.managed_targets,
+                reason=context.reason,
+            )
             return ResourceApplyResult(
                 resource_id=resource.id,
                 success=sync.success,
@@ -199,23 +197,24 @@ async def _ensure_channel(
             name=resource.name,
             category=category,
             overwrites=resource.overwrites,
+            managed_targets=resource.managed_targets,
             topic=resource.topic,
             news=resource.kind is ResourceKind.ANNOUNCEMENT,
             reason=context.reason,
         )
-        if resource.inherit and category is not None:
-            await permission_service.reconcile_map(
-                result.resource,
-                perm,
-                resource.overwrites,
-                reason=context.reason,
-                inherit=True,
-            )
         if resource.community_slot == "rules":
             try:
                 await context.guild.edit(rules_channel=result.resource, reason=context.reason)
             except discord.HTTPException:
                 logger.warning("Could not bind guild rules_channel", exc_info=True)
+        elif resource.community_slot == "public_updates":
+            try:
+                await context.guild.edit(
+                    public_updates_channel=result.resource,
+                    reason=context.reason,
+                )
+            except discord.HTTPException:
+                logger.warning("Could not bind guild public_updates_channel", exc_info=True)
         return ResourceApplyResult(
             resource_id=resource.id,
             success=result.sync.success,
@@ -223,7 +222,7 @@ async def _ensure_channel(
             detail="; ".join(result.sync.failures) or None,
             channel=result.resource,
         )
-    except discord.HTTPException as exc:
+    except (discord.HTTPException, ValueError) as exc:
         return ResourceApplyResult(
             resource_id=resource.id,
             success=False,
@@ -256,11 +255,15 @@ async def _teardown_hub(
         category = channel.category
         if category is None or category.name.casefold() not in hub_category_names:
             continue
-        is_rules = (
-            isinstance(context.guild.rules_channel, discord.TextChannel)
-            and channel.id == context.guild.rules_channel.id
-        )
-        if is_rules or channel.name.casefold() in preserve_names:
+        community_ids = {
+            item.id
+            for item in (
+                context.guild.rules_channel,
+                context.guild.public_updates_channel,
+            )
+            if isinstance(item, discord.TextChannel)
+        }
+        if channel.id in community_ids or channel.name.casefold() in preserve_names:
             try:
                 await channel.edit(category=None, reason=context.reason)
                 batch.results.append(
@@ -285,11 +288,15 @@ async def _teardown_hub(
         category = channel.category
         if category is None or category.name.casefold() not in hub_category_names:
             continue
-        is_rules = (
-            isinstance(context.guild.rules_channel, discord.TextChannel)
-            and channel.id == context.guild.rules_channel.id
-        )
-        if is_rules or channel.name.casefold() in preserve_names:
+        community_ids = {
+            item.id
+            for item in (
+                context.guild.rules_channel,
+                context.guild.public_updates_channel,
+            )
+            if isinstance(item, discord.TextChannel)
+        }
+        if channel.id in community_ids or channel.name.casefold() in preserve_names:
             continue
         ok = await delete_channel(
             context.guild,
@@ -352,10 +359,11 @@ async def apply_layout(
                     )
                     continue
                 perm = _permission_context(context)
-                sync = await permission_service.reconcile_map(
+                sync = await permission_service.reconcile(
                     existing,
                     perm,
                     resource.overwrites,
+                    managed_targets=resource.managed_targets,
                     reason=context.reason,
                 )
                 batch.results.append(

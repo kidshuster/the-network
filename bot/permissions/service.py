@@ -1,29 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from enum import Enum
 
 import discord
 
 Target = discord.Role | discord.Member | discord.Object
-OverwriteMap = Mapping[
-    discord.Role | discord.Member | discord.Object,
-    discord.PermissionOverwrite,
-]
+OverwriteMap = Mapping[Target, discord.PermissionOverwrite]
+ReconcileTarget = discord.CategoryChannel | discord.TextChannel
 
 
 def can_configure_role(bot_member: discord.Member, role: discord.Role) -> bool:
-    if role.is_default():
-        return True
-    if bot_member.top_role.id == role.id:
-        return False
-    return bot_member.top_role.position > role.position
-
-
-class ResourceKind(Enum):
-    CATEGORY = "category"
-    TEXT = "text"
+    return role.is_default() is True or (
+        role.managed is not True
+        and role.id != bot_member.top_role.id
+        and (
+            not isinstance(role.position, int)
+            or not isinstance(bot_member.top_role.position, int)
+            or bot_member.top_role.position > role.position
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -35,10 +31,8 @@ class PermissionContext:
     operator_role: discord.Role | None = None
 
     @property
-    def bot_access_role(self) -> discord.Role:
-        if self.operator_role is not None:
-            return self.operator_role
-        return self.bot_member.top_role
+    def bot_access_role(self) -> discord.Role | None:
+        return self.operator_role
 
 
 @dataclass(frozen=True)
@@ -46,7 +40,13 @@ class PermissionSyncResult:
     success: bool
     changed: bool
     target_id: int
+    added: tuple[str, ...] = ()
+    updated: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+    preserved: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
     failures: tuple[str, ...] = ()
+    verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,103 +63,117 @@ def build_context(
     moderator_role: discord.Role | None,
     operator_role: discord.Role | None = None,
 ) -> PermissionContext:
-    return PermissionContext(
-        guild=guild,
-        bot_member=bot_member,
-        access_role=access_role,
-        moderator_role=moderator_role,
-        operator_role=operator_role,
-    )
+    return PermissionContext(guild, bot_member, access_role, moderator_role, operator_role)
 
 
-def applicable_overwrites(
-    context: PermissionContext,
-    desired: Mapping[Target, discord.PermissionOverwrite],
-    *,
-    kind: ResourceKind,
-    for_category_create: bool = False,
-) -> dict[Target, discord.PermissionOverwrite]:
-    """Single filter replacing strip/prepare/filter_configurable divergence."""
-    bot = context.bot_member
+def _identity(target: Target) -> tuple[str, int]:
+    return ("member" if isinstance(target, discord.Member) else "role", target.id)
+
+
+def _label(target: Target) -> str:
+    return str(getattr(target, "name", f"{_identity(target)[0]}:{target.id}"))
+
+
+def _same_overwrite(left: discord.PermissionOverwrite, right: discord.PermissionOverwrite) -> bool:
+    left_allow, left_deny = left.pair()
+    right_allow, right_deny = right.pair()
+    return left_allow.value == right_allow.value and left_deny.value == right_deny.value
+
+
+def _validate(context: PermissionContext, desired: OverwriteMap) -> tuple[str, ...]:
+    blockers: list[str] = []
+    if not context.bot_member.guild_permissions.manage_channels:
+        blockers.append("Bot lacks Manage Channels.")
     access = context.bot_access_role
-    filtered: dict[Target, discord.PermissionOverwrite] = {}
-    for target, overwrite in desired.items():
-        if isinstance(target, discord.Member):
-            if kind is ResourceKind.CATEGORY and not for_category_create:
-                if target.id == bot.id:
-                    filtered[target] = overwrite
+    if access is None:
+        blockers.append("The configured bot-access role is unavailable.")
+    elif not can_configure_role(context.bot_member, access):
+        blockers.append(f"Bot-access role {access.name!r} is managed or above the bot.")
+    for target in desired:
+        if isinstance(target, discord.Role) and not can_configure_role(context.bot_member, target):
+            blockers.append(f"Role {target.name!r} is managed or above the bot.")
+    return tuple(dict.fromkeys(blockers))
+
+
+def _build_final_map(
+    current: OverwriteMap,
+    desired: OverwriteMap,
+    managed_targets: Collection[Target],
+) -> tuple[dict[Target, discord.PermissionOverwrite], tuple[str, ...]]:
+    owned = {_identity(target) for target in managed_targets}
+    final: dict[Target, discord.PermissionOverwrite] = {}
+    preserved: list[str] = []
+    for target, overwrite in current.items():
+        if _identity(target) in owned:
             continue
-        if not isinstance(target, discord.Role):
-            filtered[target] = overwrite
-            continue
-        if for_category_create and (target.id == bot.id or target.id == access.id):
-            continue
-        if kind is not ResourceKind.CATEGORY and target.id == bot.id:
-            continue
-        if can_configure_role(bot, target) or target.id == access.id:
-            filtered[target] = overwrite
-        elif target.is_default():
-            filtered[target] = overwrite
-    return filtered
+        final[target] = overwrite
+        preserved.append(_label(target))
+    final.update(desired)
+    return final, tuple(sorted(preserved))
+
+
+def _diff(
+    current: OverwriteMap,
+    desired: OverwriteMap,
+    managed_targets: Collection[Target],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    current_by_id = {
+        _identity(target): (target, overwrite) for target, overwrite in current.items()
+    }
+    desired_by_id = {
+        _identity(target): (target, overwrite) for target, overwrite in desired.items()
+    }
+    owned = {_identity(target) for target in managed_targets}
+    added: list[str] = []
+    updated: list[str] = []
+    removed: list[str] = []
+    for identity, (target, overwrite) in desired_by_id.items():
+        previous = current_by_id.get(identity)
+        if previous is None:
+            added.append(_label(target))
+        elif not _same_overwrite(previous[1], overwrite):
+            updated.append(_label(target))
+    for identity, (target, _) in current_by_id.items():
+        if identity in owned and identity not in desired_by_id:
+            removed.append(_label(target))
+    return tuple(sorted(added)), tuple(sorted(updated)), tuple(sorted(removed))
 
 
 class PermissionService:
-    async def reconcile_map(
+    """The sole production boundary for Discord permission mutation."""
+
+    async def reconcile(
         self,
-        target: discord.abc.GuildChannel,
+        target: ReconcileTarget,
         context: PermissionContext,
-        overwrites: OverwriteMap,
+        desired: OverwriteMap,
         *,
+        managed_targets: Collection[Target],
         reason: str,
-        inherit: bool = False,
     ) -> PermissionSyncResult:
-        if not context.bot_member.guild_permissions.manage_channels:
+        blockers = _validate(context, desired)
+        if blockers:
             return PermissionSyncResult(
-                success=False,
-                changed=False,
-                target_id=target.id,
-                failures=("Bot lacks Manage Channels.",),
+                False,
+                False,
+                target.id,
+                blockers=blockers,
+                failures=blockers,
             )
-
-        kind = (
-            ResourceKind.CATEGORY
-            if isinstance(target, discord.CategoryChannel)
-            else ResourceKind.TEXT
-        )
-        if inherit and isinstance(target, discord.TextChannel):
-            await target.edit(sync_permissions=True, reason=reason)
-            return PermissionSyncResult(success=True, changed=True, target_id=target.id)
-
-        applicable = applicable_overwrites(context, overwrites, kind=kind)
-        if _matches(target, applicable):
-            return PermissionSyncResult(success=True, changed=False, target_id=target.id)
-
-        failures: list[str] = []
-        changed = False
-        if isinstance(target, discord.CategoryChannel):
-            try:
-                await target.edit(overwrites=applicable, reason=reason)
-                changed = True
-            except discord.HTTPException as exc:
-                failures.extend(
-                    await _apply_incremental(target, applicable, context, reason=reason),
-                )
-                if not failures:
-                    failures.append(str(exc))
-        else:
-            changed, channel_failures = await _sync_text_channel(
-                target,
-                applicable,
-                context,
-                reason=reason,
+        current_value = target.overwrites
+        current: OverwriteMap = current_value if isinstance(current_value, Mapping) else {}
+        final, preserved = _build_final_map(current, desired, managed_targets)
+        added, updated, removed = _diff(current, desired, managed_targets)
+        if not (added or updated or removed):
+            return PermissionSyncResult(True, False, target.id, preserved=preserved, verified=True)
+        try:
+            await target.edit(overwrites=final, reason=reason)
+        except discord.HTTPException as exc:
+            return PermissionSyncResult(
+                False, False, target.id, added, updated, removed, preserved, failures=(str(exc),)
             )
-            failures.extend(channel_failures)
-
         return PermissionSyncResult(
-            success=not failures,
-            changed=changed,
-            target_id=target.id,
-            failures=tuple(failures),
+            True, True, target.id, added, updated, removed, preserved, verified=True
         )
 
     async def ensure_category(
@@ -170,25 +184,23 @@ class PermissionService:
         existing: discord.CategoryChannel | None,
         name: str,
         overwrites: OverwriteMap,
+        managed_targets: Collection[Target],
         reason: str,
     ) -> PermissionResourceResult[discord.CategoryChannel]:
-        if existing is not None:
-            sync = await self.reconcile_map(existing, context, overwrites, reason=reason)
-            return PermissionResourceResult(resource=existing, sync=sync)
-
-        create_map = applicable_overwrites(
-            context,
-            overwrites,
-            kind=ResourceKind.CATEGORY,
-            for_category_create=True,
+        category = existing
+        if category is None:
+            blockers = _validate(context, overwrites)
+            if blockers:
+                raise ValueError("; ".join(blockers))
+            category = await guild.create_category(
+                name=name,
+                overwrites=dict(overwrites),
+                reason=reason,
+            )
+        sync = await self.reconcile(
+            category, context, overwrites, managed_targets=managed_targets, reason=reason
         )
-        category = await guild.create_category(
-            name=name,
-            overwrites=create_map,
-            reason=reason,
-        )
-        sync = await self.reconcile_map(category, context, overwrites, reason=reason)
-        return PermissionResourceResult(resource=category, sync=sync)
+        return PermissionResourceResult(category, sync)
 
     async def ensure_text_channel(
         self,
@@ -199,21 +211,24 @@ class PermissionService:
         name: str,
         category: discord.CategoryChannel | None,
         overwrites: OverwriteMap,
+        managed_targets: Collection[Target],
         reason: str,
         topic: str | None = None,
         news: bool = False,
     ) -> PermissionResourceResult[discord.TextChannel]:
         from bot.hub.notifications import ensure_guild_only_mention_notifications
 
-        await ensure_guild_only_mention_notifications(
-            guild,
-            context.bot_member,
-            reason=reason,
-        )
-
+        await ensure_guild_only_mention_notifications(guild, context.bot_member, reason=reason)
         channel = existing
         if channel is None:
-            kwargs: dict[str, object] = {"name": name, "reason": reason}
+            blockers = _validate(context, overwrites)
+            if blockers:
+                raise ValueError("; ".join(blockers))
+            kwargs: dict[str, object] = {
+                "name": name,
+                "reason": reason,
+                "overwrites": dict(overwrites),
+            }
             if category is not None:
                 kwargs["category"] = category
             if topic is not None:
@@ -221,93 +236,10 @@ class PermissionService:
             if news:
                 kwargs["news"] = True
             channel = await guild.create_text_channel(**kwargs)  # type: ignore[arg-type]
-        else:
-            if category is not None and channel.category_id != category.id:
-                await channel.edit(category=category, reason=reason)
-            if channel.name != name:
-                await channel.edit(name=name, reason=reason)
-
-        sync = await self.reconcile_map(channel, context, overwrites, reason=reason)
-        return PermissionResourceResult(resource=channel, sync=sync)
-
-
-def _matches(
-    target: discord.abc.GuildChannel,
-    desired: Mapping[Target, discord.PermissionOverwrite],
-) -> bool:
-    current = target.overwrites
-    for key, overwrite in desired.items():
-        if key not in current:
-            return False
-        if current[key].pair()[0].value != overwrite.pair()[0].value:
-            return False
-        if current[key].pair()[1].value != overwrite.pair()[1].value:
-            return False
-    return True
-
-
-async def _sync_text_channel(
-    channel: discord.abc.GuildChannel,
-    applicable: Mapping[Target, discord.PermissionOverwrite],
-    context: PermissionContext,
-    *,
-    reason: str,
-) -> tuple[bool, list[str]]:
-    if not isinstance(channel, discord.TextChannel):
-        return False, ["Target is not a text channel."]
-    if (
-        channel.category_id is not None
-        and not getattr(channel, "sync_permissions", True)
-    ):
-        try:
-            await channel.edit(sync_permissions=True, reason=reason)
-        except discord.HTTPException:
-            pass
-
-    async def _bulk() -> None:
-        await channel.edit(overwrites=dict(applicable), sync_permissions=False, reason=reason)
-
-    try:
-        await _bulk()
-        return True, []
-    except discord.HTTPException as bulk_exc:
-        if channel.category_id is None:
-            return False, [str(bulk_exc)]
-        try:
-            await channel.edit(sync_permissions=True, reason=reason)
-            await _bulk()
-            return True, []
-        except discord.HTTPException:
-            failures = await _apply_incremental(
-                channel,
-                applicable,
-                context,
-                reason=reason,
-            )
-            return not failures, failures
-
-
-async def _apply_incremental(
-    target: discord.abc.GuildChannel,
-    applicable: Mapping[Target, discord.PermissionOverwrite],
-    context: PermissionContext,
-    *,
-    reason: str,
-) -> list[str]:
-    failures: list[str] = []
-    access = context.bot_access_role
-    for subject, overwrite in applicable.items():
-        if isinstance(subject, discord.Object):
-            continue
-        if isinstance(subject, discord.Role) and subject.id == access.id:
-            if subject.id == context.bot_member.top_role.id:
-                continue
-        try:
-            await target.set_permissions(subject, overwrite=overwrite, reason=reason)
-        except discord.HTTPException as exc:
-            name = getattr(subject, "name", str(subject))
-            failures.append(f"{name}: {exc}")
-    return failures
+        sync = await self.reconcile(
+            channel, context, overwrites, managed_targets=managed_targets, reason=reason
+        )
+        return PermissionResourceResult(channel, sync)
 
 
 permission_service = PermissionService()
