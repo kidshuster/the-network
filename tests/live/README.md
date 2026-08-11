@@ -41,6 +41,11 @@ They do not replace live validation of Discord permission resolution, API errors
 webhooks, or rate limits. The normal `./test` gate runs the mock `full` recipe;
 `./test --full` additionally runs it against Discord.
 
+Recipe steps may request `pause: true`. The live backend owns that behavior and
+waits for `SMOKE_PHASE_DELAY_SEC` after the probe; the mock backend implements
+the same interface without sleeping. Backend-specific rate-limit behavior must
+not be added to the recipe runner.
+
 `full` is the normal smoke gate. `audit` avoids intentional permission drift.
 `stress` is destructive burn-in and should use a staging guild. Recipes verify
 that non-smoke clients still exist after every probe by default. Cleanup runs

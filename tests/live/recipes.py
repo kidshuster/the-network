@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -9,8 +7,9 @@ from typing import Any, Literal
 import yaml
 
 from tests.live.client_guard import assert_protected_clients_unchanged
+from tests.live.live_backend import run_live_probe
 from tests.live.mock_backend import MockContext, run_mock_probe
-from tests.live.probes import LiveContext, ProbeOutcome, get_probe
+from tests.live.probes import LiveContext, ProbeOutcome
 
 RECIPE_DIR = Path(__file__).with_name("recipes")
 
@@ -124,11 +123,11 @@ class RecipeRunner:
         if self.backend == "mock":
             if not isinstance(self.context, MockContext):
                 raise TypeError("mock backend requires MockContext")
-            outcome = await run_mock_probe(name, self.context)
+            outcome = await run_mock_probe(name, self.context, pause_after=pause)
         else:
             if not isinstance(self.context, LiveContext):
                 raise TypeError("live backend requires LiveContext")
-            outcome = await get_probe(name)(self.context)
+            outcome = await run_live_probe(name, self.context, pause_after=pause)
         self.outcomes.append(outcome)
         print(f"  OK   {name}: {outcome.detail}", flush=True)
         if (
@@ -143,8 +142,4 @@ class RecipeRunner:
                 self.context.protected_clients,
                 phase=name,
             )
-        if pause and self.backend == "live":
-            delay = max(0.0, float(os.getenv("SMOKE_PHASE_DELAY_SEC", "2")))
-            if delay:
-                await asyncio.sleep(delay)
         return outcome

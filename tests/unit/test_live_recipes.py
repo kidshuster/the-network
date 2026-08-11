@@ -40,7 +40,13 @@ async def test_runner_composes_recipes_and_runs_finally(
         calls.append("probe")
         return ProbeOutcome("probe", "ok")
 
-    async def fake_mock_probe(_name: str, context: MockContext) -> ProbeOutcome:
+    async def fake_mock_probe(
+        _name: str,
+        context: MockContext,
+        *,
+        pause_after: bool = False,
+    ) -> ProbeOutcome:
+        _ = pause_after
         return await fake_probe(context)
 
     monkeypatch.setattr("tests.live.recipes.run_mock_probe", fake_mock_probe)

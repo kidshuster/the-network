@@ -95,7 +95,14 @@ def load_mock_context(name: str = "healthy") -> MockContext:
     return MockContext(state)
 
 
-async def run_mock_probe(name: str, context: MockContext) -> ProbeOutcome:
+async def run_mock_probe(
+    name: str,
+    context: MockContext,
+    *,
+    pause_after: bool = False,
+) -> ProbeOutcome:
+    # Mock calls share the live backend contract but never wait for Discord buckets.
+    _ = pause_after
     state = context.state
     state.operations.append(name)
 
@@ -180,4 +187,3 @@ async def run_mock_probe(name: str, context: MockContext) -> ProbeOutcome:
         state.artifacts.clear()
         return ProbeOutcome("smoke teardown", "all simulated smoke resources removed")
     raise KeyError(f"Mock backend does not implement probe {name!r}")
-
