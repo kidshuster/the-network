@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.domain.errors import NetworkValidationError
-from bot.networks.roles import (
+from bot.core.models.errors import NetworkValidationError
+from bot.core.networks.roles import (
     format_operator_setup_instructions,
     resolve_access_role,
     validate_hub_permissions,

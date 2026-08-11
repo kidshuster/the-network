@@ -51,8 +51,7 @@ async def test_teardown_smoke_guild_removes_registered_clients() -> None:
     context.store.clients.list_all = AsyncMock(
         return_value=[smoke_client, real_client],
     )
-    context.client_cache.load_cache = AsyncMock()
-    context.routing_service.load_cache = AsyncMock()
+    context.refresh_projections = AsyncMock()
 
     cleanup_mock = AsyncMock()
     join_cleanup = AsyncMock()

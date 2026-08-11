@@ -129,8 +129,8 @@ class NetworkProfileView(discord.ui.View):
             await response.send_text("bot_member_unavailable_brief")
             return
 
-        from bot.clients.subscription import ClientSubscriptionService
-        from bot.stickies.subscription_setup_sticky import sync_subscription_setup
+        from bot.core.clients.subscription import ClientSubscriptionService
+        from bot.core.stickies.subscription_setup_sticky import sync_subscription_setup
 
         service = ClientSubscriptionService()
         result = await service.subscribe_client(
@@ -153,8 +153,7 @@ class NetworkProfileView(discord.ui.View):
             )
             return
 
-        await context.client_cache.load_cache()
-        await context.routing_service.load_cache()
+        await context.refresh_projections()
 
         view_registry = PersistentViewRegistry(self._bot)
         if result.created:
@@ -168,7 +167,7 @@ class NetworkProfileView(discord.ui.View):
                 view_registry=view_registry,
             )
         else:
-            from bot.clients.profile_sync import refresh_client_profile_message
+            from bot.core.clients.profile_sync import refresh_client_profile_message
 
             await refresh_client_profile_message(
                 self._bot,
@@ -220,9 +219,9 @@ class NetworkProfileView(discord.ui.View):
             client.id,
             not client.timecode_enabled,
         )
-        await context.client_cache.load_cache()
+        await context.refresh_client_counts()
 
-        from bot.clients.profile_sync import refresh_client_profile_message
+        from bot.core.clients.profile_sync import refresh_client_profile_message
 
         await refresh_client_profile_message(
             self._bot,
@@ -331,7 +330,7 @@ async def handle_subscribe_connected(
         await response.send_text("network_not_found", network_key=network_key)
         return
 
-    from bot.stickies.subscription_setup_sticky import sync_subscription_setup
+    from bot.core.stickies.subscription_setup_sticky import sync_subscription_setup
 
     view_registry = PersistentViewRegistry(bot)
     subscription = await context.store.clients.set_subscribe_confirmed(
@@ -492,8 +491,8 @@ class SubscriptionModerationView(discord.ui.View):
             await response.send_text("bot_member_unavailable_brief")
             return
 
-        from bot.clients.profile_sync import refresh_client_profile_message
-        from bot.clients.subscription import ClientSubscriptionService
+        from bot.core.clients.profile_sync import refresh_client_profile_message
+        from bot.core.clients.subscription import ClientSubscriptionService
 
         service = ClientSubscriptionService()
         result = await service.unsubscribe_client(
@@ -515,8 +514,7 @@ class SubscriptionModerationView(discord.ui.View):
             )
             return
 
-        await context.client_cache.load_cache()
-        await context.routing_service.load_cache()
+        await context.refresh_projections()
         await refresh_client_profile_message(
             self._bot,
             context,
@@ -648,46 +646,19 @@ class BlacklistSelectView(discord.ui.View):
         self.add_item(select)
 
     async def _select_callback(self, interaction: discord.Interaction) -> None:
-        context = self._bot.bot_context
-        if context is None:
+        if self._bot.bot_context is None:
             await interaction.response.send_message(render_text("bot_not_ready"), ephemeral=True)
             return
 
         select = self.children[0]
         assert isinstance(select, discord.ui.Select)
-        selected = {int(value) for value in select.values}
-
-        subscription = await context.store.clients.get_subscription_by_id(self._subscription_id)
-        if subscription is None:
-            await interaction.response.send_message(
-                render_text("subscription_not_found"),
-                ephemeral=True,
-            )
-            return
-
-        network_id = subscription.network_id
-        if network_id is None:
-            await interaction.response.send_message(
-                render_text("subscription_not_found"),
-                ephemeral=True,
-            )
-            return
-
-        other_ids = {
-            sub.client_id
-            for sub in await context.store.clients.list_subscriptions_by_network(
-                network_id,
-            )
-            if sub.client_id != subscription.client_id
-        }
-
-        for other_id in other_ids:
-            if other_id in selected:
-                await context.store.clients.add_blacklist(subscription.id, other_id)
-            else:
-                await context.store.clients.remove_blacklist(subscription.id, other_id)
+        count = await self._bot.recipe_registry.run(
+            "blacklist.replace",
+            subscription_id=self._subscription_id,
+            selected_client_ids=list(select.values),
+        )
 
         await interaction.response.send_message(
-            render_text("blacklist_updated", count=len(selected)),
+            render_text("blacklist_updated", count=count),
             ephemeral=True,
         )

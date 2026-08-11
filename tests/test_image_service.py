@@ -4,7 +4,7 @@ import io
 
 from PIL import Image
 
-from bot.media.image import normalize_image_bytes
+from bot.core.media.image import normalize_image_bytes
 
 
 def _make_png(width: int, height: int, color: tuple[int, int, int]) -> bytes:

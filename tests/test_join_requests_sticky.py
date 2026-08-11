@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.stickies.join_requests_sticky import (
+from bot.core.stickies.join_requests_sticky import (
     build_how_to_join_embed,
     build_how_to_join_footer,
     format_how_to_join_sticky_location,
@@ -20,7 +20,7 @@ async def test_sync_hub_join_sticky_wipes_before_post(
 ) -> None:
     wipe = AsyncMock(return_value=(2, None))
     monkeypatch.setattr(
-        "bot.discord_util.cleanup.wipe_text_channel",
+        "bot.core.discord.cleanup.wipe_text_channel",
         wipe,
     )
 

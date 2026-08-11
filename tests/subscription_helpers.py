@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.domain.client_subscription import ClientSubscription
+from bot.core.models.client_subscription import ClientSubscription
 
 
 def make_client_subscription(**overrides: object) -> ClientSubscription:

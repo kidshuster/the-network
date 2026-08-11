@@ -9,26 +9,26 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.config import Settings
-from bot.context import BotContext
-from bot.domain.errors import NetworkValidationError
-from bot.domain.server_request import ServerRequestStatus
-from bot.networks.roles import (
+from bot.core.models.errors import NetworkValidationError
+from bot.core.models.server_request import ServerRequestStatus
+from bot.core.networks.roles import (
     resolve_access_role,
 )
-from bot.onboarding.server_requests import ServerRequestService
-from bot.permissions.probe import (
+from bot.core.runtime import BotContext
+from bot.recipes.onboarding.service import ServerRequestService
+from bot.smoke.constants import SMOKE_CLEANUP_REASON
+from bot.smoke.permission_probe import (
     PROBE_PNG,
     verify_operator_permissions_live,
     verify_provision_permissions_live,
 )
-from bot.smoke.constants import SMOKE_CLEANUP_REASON
 from bot.smoke.resource_guard import delete_guild_channel_for_cleanup, guild_test_resource_guard
 from bot.testing.context_factory import create_bot_context
 from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
-    from bot.db.connection import Database
+    from bot.core.database.connection import Database
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +217,7 @@ async def run_post_init_join_smoke(
     context: BotContext,
 ) -> str | None:
     """Submit → accept → deny smoke after hub channels exist. Returns a note or None."""
-    from bot.hub.resolve import resolve_join_requests_channel
+    from bot.core.hub.resolve import resolve_join_requests_channel
 
     if resolve_join_requests_channel(guild) is None:
         raise NetworkValidationError(
@@ -329,8 +329,7 @@ async def cleanup_smoke_client(
             logger.warning("Smoke cleanup: could not delete client role")
 
     await context.store.clients.delete_with_relations(client.id)
-    await context.refresh_client_counts()
-    await context.routing_service.load_cache()
+    await context.refresh_projections()
 
 
 async def cleanup_smoke_join_request_messages(
@@ -342,7 +341,7 @@ async def cleanup_smoke_join_request_messages(
     if not request_ids:
         return
 
-    from bot.hub.resolve import resolve_join_requests_channel
+    from bot.core.hub.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     for request_id in request_ids:
@@ -372,7 +371,7 @@ async def cleanup_join_requests_smoke_artifacts(
     bot_member: discord.Member,
 ) -> None:
     """Remove smoke join-request messages and DB rows from `#join-requests`."""
-    from bot.hub.resolve import resolve_join_requests_channel
+    from bot.core.hub.resolve import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     if channel is not None:
@@ -505,7 +504,7 @@ async def run_join_approval_smoke_flow(
 
             networks = await context.store.networks.list_all()
             if networks:
-                from bot.clients.subscription import ClientSubscriptionService
+                from bot.core.clients.subscription import ClientSubscriptionService
 
                 network = networks[0]
                 sub_service = ClientSubscriptionService()
@@ -610,7 +609,7 @@ async def ensure_smoke_network_key(
     if explicit:
         existing = await context.store.networks.get_by_key(explicit)
         if existing is None:
-            from bot.networks.admin import create_network
+            from bot.recipes.network.service import create_network
             from bot.ui.persistent_views import PersistentViewRegistry
 
             created = await create_network(
@@ -629,7 +628,7 @@ async def ensure_smoke_network_key(
     if networks:
         return networks[0].key
 
-    from bot.networks.admin import create_network
+    from bot.recipes.network.service import create_network
     from bot.ui.persistent_views import PersistentViewRegistry
 
     created = await create_network(
@@ -687,7 +686,6 @@ async def provision_smoke_client_with_subscription(
             key=network_key,
             display_name=network_display_name or network_key.title(),
         )
-        await context.routing_service.load_cache()
         await context.refresh_network_counts()
 
     suffix = secrets.token_hex(3)
@@ -727,7 +725,7 @@ async def provision_smoke_client_with_subscription(
     if client is None:
         raise RuntimeError("Smoke accept did not register a client.")
 
-    from bot.clients.subscription import ClientSubscriptionService
+    from bot.core.clients.subscription import ClientSubscriptionService
 
     sub_service = ClientSubscriptionService()
     subscribe = await sub_service.subscribe_client(
@@ -765,11 +763,11 @@ async def run_hub_rebuild_smoke_flow(
     skip_cleanup: bool = False,
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
-    from bot.hub.data_reset import reset_hub_layout_data
-    from bot.hub.init import initialize_guild
-    from bot.hub.resolve import resolve_join_requests_channel
-    from bot.hub.uninit import uninitialize_guild
-    from bot.networks.admin import create_network
+    from bot.core.hub.data_reset import reset_hub_layout_data
+    from bot.core.hub.resolve import resolve_join_requests_channel
+    from bot.recipes.hub.initialize import initialize_guild
+    from bot.recipes.hub.uninitialize import uninitialize_guild
+    from bot.recipes.network.service import create_network
     from bot.ui.persistent_views import PersistentViewRegistry
 
     view_registry = PersistentViewRegistry(bot)
@@ -815,7 +813,7 @@ async def run_hub_rebuild_smoke_flow(
         if not uninit.success:
             raise RuntimeError(uninit.reason or "server uninit failed")
 
-        from bot.layout.managed import hub_category_names, preserved_channel_names
+        from bot.core.layout.managed import hub_category_names, preserved_channel_names
 
         # Client artifacts must survive hub uninit.
         if guild.get_role(state.client_role_id) is None:
@@ -903,7 +901,7 @@ async def run_hub_rebuild_smoke_flow(
             except discord.NotFound:
                 client_role = None
         if client_role is None:
-            from bot.clients.names import build_client_role_name
+            from bot.core.clients.names import build_client_role_name
 
             refreshed = await context.store.clients.get_by_id(state.client_id)
             expected_name = (
@@ -933,10 +931,10 @@ async def run_hub_rebuild_smoke_flow(
             raise RuntimeError("Client category was removed during hub rebuild.")
 
         # Client layout overwrites must match YAML after re-init.
-        from bot.clients.names import slugify_client_name
-        from bot.hub.resolve import resolve_human_moderator_role
-        from bot.layout import LayoutContext, compile_client
-        from bot.networks.roles import (
+        from bot.core.clients.names import slugify_client_name
+        from bot.core.hub.resolve import resolve_human_moderator_role
+        from bot.core.layout import LayoutContext, compile_client
+        from bot.core.networks.roles import (
             resolve_access_role,
             resolve_operator_role_by_name,
         )

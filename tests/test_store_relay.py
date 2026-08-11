@@ -4,8 +4,8 @@ import pytest
 from store_helpers import create_test_network
 
 from bot.constants import RelayStatus
-from bot.db.store import NetworkStore, RelayStore
-from bot.domain.errors import RelayError
+from bot.core.database.store import NetworkStore, RelayStore
+from bot.core.models.errors import RelayError
 
 
 @pytest.mark.asyncio

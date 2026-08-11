@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
-from bot.permissions.service import build_context, permission_service
+from bot.core.permissions.service import build_context, permission_service
 
 
 def _create_text_channel_param_names() -> set[str]:
@@ -52,7 +52,7 @@ async def test_create_text_channel_with_overwrites_uses_only_discord_py_kwargs()
     category.id = 100
 
     with patch(
-        "bot.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.core.hub.notifications.ensure_guild_only_mention_notifications",
         new=AsyncMock(),
     ):
         await permission_service.ensure_text_channel(

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from bot.db.store import NetworkStore
-from bot.domain.errors import NetworkValidationError
+from bot.core.database.store import NetworkStore
+from bot.core.models.errors import NetworkValidationError
 
 
 @pytest.mark.asyncio

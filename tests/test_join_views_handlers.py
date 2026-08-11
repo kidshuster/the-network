@@ -120,7 +120,7 @@ async def test_join_modal_renders_failure_embed_on_service_error(
 
     submit_result = MagicMock(success=False, error="Server name already exists.")
     monkeypatch.setattr(
-        "bot.onboarding.server_requests.ServerRequestService.submit_request",
+        "bot.recipes.onboarding.service.ServerRequestService.submit_request",
         AsyncMock(return_value=submit_result),
     )
 
@@ -175,7 +175,7 @@ async def test_moderator_review_renders_failure_embed_on_service_error(
 
     deny_result = MagicMock(success=False, error="Request was already reviewed.", message=None)
     monkeypatch.setattr(
-        "bot.onboarding.server_requests.ServerRequestService.deny_request",
+        "bot.recipes.onboarding.service.ServerRequestService.deny_request",
         AsyncMock(return_value=deny_result),
     )
 
@@ -202,7 +202,7 @@ async def test_moderator_review_renders_success_embed_on_deny(
         message="The join request was denied.",
     )
     monkeypatch.setattr(
-        "bot.onboarding.server_requests.ServerRequestService.deny_request",
+        "bot.recipes.onboarding.service.ServerRequestService.deny_request",
         AsyncMock(return_value=deny_result),
     )
 

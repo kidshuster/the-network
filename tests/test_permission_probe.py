@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import discord
 import pytest
 
-from bot.domain.errors import NetworkValidationError
-from bot.permissions.probe import (
+from bot.core.models.errors import NetworkValidationError
+from bot.smoke.permission_probe import (
     cleanup_stale_probe_resources,
     verify_operator_permissions_live,
     verify_provision_permissions_live,
@@ -203,18 +203,18 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
     guild.create_text_channel = AsyncMock(side_effect=[channel, publish_channel])
 
     monkeypatch.setattr(
-        "bot.hub.resolve.resolve_human_moderator_role",
+        "bot.core.hub.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.networks.roles.resolve_operator_role_by_name",
+        "bot.core.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.networks.roles.validate_provision_permissions",
+        "bot.core.networks.roles.validate_provision_permissions",
         MagicMock(),
     )
-    from bot.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
 
     batch = BatchApplyResult(
         results=[
@@ -239,7 +239,7 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
         ]
     )
     monkeypatch.setattr(
-        "bot.layout.apply_layout",
+        "bot.core.layout.apply_layout",
         AsyncMock(return_value=batch),
     )
 
@@ -300,22 +300,22 @@ async def test_verify_provision_permissions_live_fails_at_profile_channel_50013(
     guild.create_role = AsyncMock(return_value=client_role)
     guild.create_category = AsyncMock(return_value=category)
 
-    from bot.layout.applier import BatchApplyResult, ResourceApplyResult
+    from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
 
     monkeypatch.setattr(
-        "bot.hub.resolve.resolve_human_moderator_role",
+        "bot.core.hub.resolve.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.networks.roles.resolve_operator_role_by_name",
+        "bot.core.networks.roles.resolve_operator_role_by_name",
         MagicMock(return_value=operator),
     )
     monkeypatch.setattr(
-        "bot.hub.notifications.ensure_guild_only_mention_notifications",
+        "bot.core.hub.notifications.ensure_guild_only_mention_notifications",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.layout.apply_layout",
+        "bot.core.layout.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[

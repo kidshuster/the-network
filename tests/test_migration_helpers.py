@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bot.db.connection import Database
-from bot.db.migrations import _column_not_null, run_migrations
+from bot.core.database.connection import Database
+from bot.core.database.migrations import _column_not_null, run_migrations
 
 
 @pytest.mark.asyncio

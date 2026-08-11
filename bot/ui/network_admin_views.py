@@ -7,10 +7,10 @@ import discord
 
 from bot.cogs._checks import ensure_manage_guild
 from bot.cogs._responses import defer_ephemeral
+from bot.core.stickies.network_admin_sticky import refresh_network_admin_sticky_from_settings
 from bot.messages import modal_spec, render_embed, render_text
 from bot.messages.modals_builder import add_modal_fields, modal_text_value
-from bot.networks.admin import create_network, delete_network
-from bot.stickies.network_admin_sticky import refresh_network_admin_sticky_from_settings
+from bot.recipes.network.service import create_network, delete_network
 from bot.ui._auth import validate_hub_modal_context
 from bot.ui._view_helpers import bind_item_callback
 from bot.ui.custom_ids import network_create_button, network_delete_button

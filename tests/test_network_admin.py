@@ -3,80 +3,37 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
-from view_registry_helpers import make_test_view_registry
 
-from bot.domain.errors import NetworkValidationError
-from bot.domain.network import Network
-from bot.networks.admin import create_network, delete_network
-from bot.stickies.network_admin_sticky import build_network_admin_embed
+from bot.core.models.errors import NetworkValidationError
+from bot.core.models.network import Network
+from bot.core.stickies.network_admin_sticky import build_network_admin_embed
+from bot.recipes import RecipeRegistryError
+from bot.recipes.network.service import create_network, delete_network
 
 
-def _mock_context(*, networks: list[Network] | None = None) -> MagicMock:
+def _network() -> Network:
+    return Network(
+        id=1,
+        key="stingers",
+        display_name="Stingers",
+        feed_category_id=None,
+        output_channel_id=None,
+        concat_channel_id=None,
+        profile_forum_channel_id=None,
+        join_channel_id=None,
+        enabled=True,
+    )
+
+
+async def test_network_service_maps_recipe_outputs_to_public_result() -> None:
+    network = _network()
+    registry = MagicMock()
+    registry.run = AsyncMock(return_value=(network, 2, 3))
+    bot = MagicMock()
+    bot.recipe_registry = registry
     context = MagicMock()
-    networks = networks or []
-    context.store.networks.list_all = AsyncMock(return_value=networks)
-    context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[])
-    context.store.networks.create = AsyncMock(
-        return_value=Network(
-            id=1,
-            key="stingers",
-            display_name="Stingers",
-            feed_category_id=None,
-            output_channel_id=None,
-            concat_channel_id=None,
-            profile_forum_channel_id=None,
-            join_channel_id=None,
-            enabled=True,
-        )
-    )
-    context.store.networks.get_by_key = AsyncMock(return_value=None)
-    context.store.networks.delete = AsyncMock(
-        return_value=Network(
-            id=1,
-            key="stingers",
-            display_name="Stingers",
-            feed_category_id=None,
-            output_channel_id=None,
-            concat_channel_id=None,
-            profile_forum_channel_id=None,
-            join_channel_id=None,
-            enabled=True,
-        )
-    )
-    context.store.clients.detach_subscriptions_from_network = AsyncMock()
-    context.store.relay.delete_by_network_id = AsyncMock()
-    context.store.requests.delete_by_network_id = AsyncMock()
-    context.routing_service.load_cache = AsyncMock()
-    context.client_cache.load_cache = AsyncMock()
-    context.refresh_network_counts = AsyncMock()
-    return context
-
-
-@pytest.mark.asyncio
-async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    import bot.clients.subscription as client_subscription
-
-    context = _mock_context()
-    context.store.clients.list_all = AsyncMock(return_value=[])
-    bot = MagicMock()
-    bot.settings.network_access_role_name = "The Network"
     guild = MagicMock(spec=discord.Guild)
-    guild.id = 100
-    guild.me = MagicMock()
-    monkeypatch.setattr(
-        "bot.clients.profile_sync.refresh_all_client_profiles",
-        AsyncMock(return_value=2),
-    )
-    monkeypatch.setattr(
-        client_subscription,
-        "resync_subscriptions_for_network",
-        AsyncMock(return_value=0),
-    )
-    monkeypatch.setattr(
-        "bot.hub.announcements.ensure_hub_announcements_subscription",
-        AsyncMock(return_value=False),
-    )
+    view_registry = MagicMock()
 
     result = await create_network(
         context,
@@ -84,140 +41,70 @@ async def test_create_network_success(monkeypatch: pytest.MonkeyPatch) -> None:
         guild,
         key="stingers",
         display_name="Stingers",
-        view_registry=make_test_view_registry(),
+        view_registry=view_registry,
     )
 
-    assert result.success is True
-    assert result.network is not None
-    assert result.network.key == "stingers"
+    assert result.success
+    assert result.network is network
     assert result.updated_profile_count == 2
-
-
-@pytest.mark.asyncio
-async def test_create_network_rejects_duplicate_key() -> None:
-    existing = Network(
-        id=1,
+    assert result.relinked_subscription_count == 3
+    registry.run.assert_awaited_once_with(
+        "network.create",
+        guild=guild,
         key="stingers",
         display_name="Stingers",
-        feed_category_id=None,
-        output_channel_id=None,
-        concat_channel_id=None,
-        profile_forum_channel_id=None,
-        join_channel_id=None,
-        enabled=True,
+        view_registry=view_registry,
     )
-    context = _mock_context()
-    context.store.networks.get_by_key = AsyncMock(return_value=existing)
+
+
+async def test_network_service_preserves_validation_message() -> None:
+    validation = NetworkValidationError("Network `stingers` already exists.")
+    wrapped = RecipeRegistryError("network.create failed")
+    wrapped.__cause__ = validation
+    registry = MagicMock()
+    registry.run = AsyncMock(side_effect=wrapped)
     bot = MagicMock()
-    guild = MagicMock(spec=discord.Guild)
-    guild.id = 100
+    bot.recipe_registry = registry
 
     result = await create_network(
-        context,
+        MagicMock(),
         bot,
-        guild,
+        MagicMock(spec=discord.Guild),
         key="stingers",
         display_name="Stingers",
-        view_registry=make_test_view_registry(),
+        view_registry=MagicMock(),
     )
 
-    assert result.success is False
-    assert "already exists" in (result.error or "")
-    context.store.networks.create.assert_not_called()
+    assert not result.success
+    assert result.error == "Network `stingers` already exists."
 
 
-@pytest.mark.asyncio
-async def test_delete_network_hard_deletes_and_detaches(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    network = Network(
-        id=1,
-        key="stingers",
-        display_name="Stingers",
-        feed_category_id=None,
-        output_channel_id=None,
-        concat_channel_id=None,
-        profile_forum_channel_id=None,
-        join_channel_id=None,
-        enabled=True,
-    )
-    context = _mock_context(networks=[network])
-    context.store.networks.get_by_key = AsyncMock(return_value=network)
+async def test_delete_network_maps_recipe_output() -> None:
+    network = _network()
+    registry = MagicMock()
+    registry.run = AsyncMock(return_value=network)
     bot = MagicMock()
-    guild = MagicMock(spec=discord.Guild)
-    monkeypatch.setattr(
-        "bot.clients.profile_sync.refresh_all_client_profiles",
-        AsyncMock(return_value=1),
-    )
+    bot.recipe_registry = registry
 
     result = await delete_network(
-        context, bot, guild, key="stingers", view_registry=make_test_view_registry()
-    )
-
-    assert result.success is True
-    context.store.clients.detach_subscriptions_from_network.assert_awaited_once_with(
-        1,
-        "stingers",
-    )
-    context.store.relay.delete_by_network_id.assert_awaited_once_with(1)
-    context.store.requests.delete_by_network_id.assert_awaited_once_with(1)
-    context.store.networks.delete.assert_awaited_once_with("stingers")
-
-
-@pytest.mark.asyncio
-async def test_create_network_validation_error() -> None:
-    context = _mock_context()
-    context.store.networks.create = AsyncMock(
-        side_effect=NetworkValidationError("duplicate key")
-    )
-    bot = MagicMock()
-    guild = MagicMock(spec=discord.Guild)
-    guild.id = 100
-
-    result = await create_network(
-        context,
+        MagicMock(),
         bot,
-        guild,
+        MagicMock(spec=discord.Guild),
         key="stingers",
-        display_name="Stingers",
-        view_registry=make_test_view_registry(),
+        view_registry=MagicMock(),
     )
 
-    assert result.success is False
-    assert result.error == "duplicate key"
+    assert result.success
+    assert result.network_key == "stingers"
 
 
-@pytest.mark.asyncio
-async def test_delete_network_not_found() -> None:
-    context = _mock_context()
-    bot = MagicMock()
-    guild = MagicMock(spec=discord.Guild)
-
-    result = await delete_network(
-        context, bot, guild, key="missing", view_registry=make_test_view_registry()
-    )
-
-    assert result.success is False
-    assert "not found" in (result.error or "").lower()
-
-
-@pytest.mark.asyncio
-async def test_build_network_admin_embed_lists_networks() -> None:
-    network = Network(
-        id=1,
-        key="alpha",
-        display_name="Alpha Net",
-        feed_category_id=None,
-        output_channel_id=None,
-        concat_channel_id=None,
-        profile_forum_channel_id=None,
-        join_channel_id=None,
-        enabled=True,
-    )
-    context = _mock_context(networks=[network])
+async def test_network_admin_embed_lists_networks() -> None:
+    context = MagicMock()
+    context.store.networks.list_all = AsyncMock(return_value=[_network()])
+    context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[])
 
     embed = await build_network_admin_embed(context)
 
     assert embed.title == "Network Administration"
     assert len(embed.fields) == 1
-    assert "alpha" in embed.fields[0].name
+    assert "stingers" in embed.fields[0].name

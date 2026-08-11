@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bot.domain.server_request import ServerRequest, ServerRequestStatus
+from bot.core.models.server_request import ServerRequest, ServerRequestStatus
 
 
 def make_server_request(**overrides: object) -> ServerRequest:

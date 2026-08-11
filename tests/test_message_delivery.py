@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.relay.delivery import (
+from bot.core.relay.delivery import (
     apply_silent_delivery,
     build_moderator_join_request_send_kwargs,
 )

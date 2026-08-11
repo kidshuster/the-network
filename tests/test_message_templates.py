@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from bot.core.stickies.join_requests_sticky import HOW_TO_JOIN_VERSION
+from bot.core.stickies.rules_sticky import RULES_STICKY_VERSION
 from bot.messages import (
     MessageTemplateError,
     clear_template_cache,
@@ -12,8 +14,6 @@ from bot.messages import (
     render_text,
     validate_all_templates,
 )
-from bot.stickies.join_requests_sticky import HOW_TO_JOIN_VERSION
-from bot.stickies.rules_sticky import RULES_STICKY_VERSION
 
 _MESSAGES_DIR = Path(__file__).resolve().parents[1] / "bot" / "messages"
 

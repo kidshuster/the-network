@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.domain.client import Client
-from bot.relay.formatter import (
+from bot.core.models.client import Client
+from bot.core.relay.formatter import (
     MENTION_TOKEN_RE,
     build_relay_embed_from_client,
     client_emoji_url,

@@ -7,15 +7,16 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from bot.bot_settings import BotSettingsService
-from bot.clients.cache import ClientCache
-from bot.context import BotContext
-from bot.db import migrations
-from bot.db.connection import Database
-from bot.db.store import Store
-from bot.integrations.topgg import TopggService
-from bot.networks.routing import RoutingService
-from bot.relay.service import RelayService
+from bot.core.clients.cache import ClientCache
+from bot.core.database import migrations
+from bot.core.database.connection import Database
+from bot.core.database.store import Store
+from bot.core.integrations.topgg import TopggService
+from bot.core.networks.routing import RoutingService
+from bot.core.relay.service import RelayService
+from bot.core.runtime import BotContext
+from bot.core.settings import BotSettingsService
+from bot.recipes import RecipeRegistry, build_recipe_registry
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -34,6 +35,7 @@ class NetworkRelayBot(commands.Bot):
         self.settings = settings
         self.db = Database(settings.database_path)
         self.bot_context: BotContext | None = None
+        self.recipe_registry: RecipeRegistry = build_recipe_registry(self)
         self.schema_version: int = 0
         self._topgg: TopggService | None = None
         self._slash_sync_started = False
@@ -78,9 +80,8 @@ class NetworkRelayBot(commands.Bot):
         await self.load_extension("bot.cogs.servers")
         await self.load_extension("bot.cogs.relay")
 
-        from bot.layout import validate_all_layouts
+        from bot.core.layout import validate_all_layouts
         from bot.messages import validate_all_templates
-
         validate_all_templates()
         validate_all_layouts()
 
@@ -121,7 +122,7 @@ class NetworkRelayBot(commands.Bot):
             asyncio.create_task(self._sync_slash_commands())
 
         context = self.bot_context
-        from bot.hub.changelog import installed_version
+        from bot.core.hub.changelog import installed_version
 
         logger.info(
             "Bot ready",
@@ -142,7 +143,7 @@ class NetworkRelayBot(commands.Bot):
             await self._topgg.start()
 
         if context is not None and not self._subscription_setup_synced:
-            from bot.stickies.subscription_setup_sticky import sync_all_subscription_setups
+            from bot.core.stickies.subscription_setup_sticky import sync_all_subscription_setups
             from bot.ui.persistent_views import PersistentViewRegistry
 
             try:
@@ -162,7 +163,7 @@ class NetworkRelayBot(commands.Bot):
                 logger.exception("Subscription setup sync on ready failed")
 
         if context is not None and not self._changelog_synced:
-            from bot.hub.changelog import sync_changelog_on_ready
+            from bot.core.hub.changelog import sync_changelog_on_ready
 
             try:
                 await sync_changelog_on_ready(self, context, guild)

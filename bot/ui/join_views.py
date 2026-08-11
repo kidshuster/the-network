@@ -50,7 +50,7 @@ class JoinNetworkModal(discord.ui.Modal):
             )
             return
 
-        from bot.onboarding.server_requests import ServerRequestService
+        from bot.recipes.onboarding.service import ServerRequestService
         from bot.ui.persistent_views import PersistentViewRegistry
 
         service = ServerRequestService(
@@ -140,7 +140,7 @@ class ModeratorReviewView(discord.ui.View):
 
         member = cast(discord.Member, interaction.user)
 
-        from bot.onboarding.server_requests import ServerRequestService
+        from bot.recipes.onboarding.service import ServerRequestService
         from bot.ui.persistent_views import PersistentViewRegistry
 
         service = ServerRequestService(

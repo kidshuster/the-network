@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import aiosqlite
 import pytest
 from store_helpers import create_test_client, create_test_network, create_test_subscription
 
-from bot.db.domains.resources import ManagedResource
-from bot.db.errors import StoreConflict, StoreError
-from bot.db.store import Store
+from bot.core.database.domains.resources import ManagedResource
+from bot.core.database.errors import StoreConflict, StoreError
+from bot.core.database.store import Store
 
 
 @pytest.mark.asyncio
@@ -87,6 +88,64 @@ async def test_nested_transaction_fails_immediately_instead_of_deadlocking(db) -
 
 
 @pytest.mark.asyncio
+async def test_unrelated_write_waits_for_transaction_owner(db) -> None:
+    store = Store.create(db)
+    transaction_started = asyncio.Event()
+    release_transaction = asyncio.Event()
+
+    async def owner() -> None:
+        async with db.transaction():
+            await store.settings.set("owner", "1")
+            transaction_started.set()
+            await release_transaction.wait()
+
+    async def unrelated() -> None:
+        await transaction_started.wait()
+        await store.settings.set("unrelated", "2")
+
+    owner_task = asyncio.create_task(owner())
+    unrelated_task = asyncio.create_task(unrelated())
+    await transaction_started.wait()
+    await asyncio.sleep(0)
+    assert not unrelated_task.done()
+    release_transaction.set()
+    await asyncio.gather(owner_task, unrelated_task)
+    assert await store.settings.get("owner") == "1"
+    assert await store.settings.get("unrelated") == "2"
+
+
+@pytest.mark.asyncio
+async def test_network_delete_recipe_detaches_and_deletes_relations(db) -> None:
+    store = Store.create(db)
+    network = await create_test_network(store.networks)
+    client = await create_test_client(store.clients)
+    subscription = await create_test_subscription(store.clients, client=client, network=network)
+    await store.relay.create_pending(
+        source_message_id=777,
+        source_channel_id=subscription.publish_channel_id,
+        source_webhook_id=None,
+        client_id=client.id,
+        network_id=network.id,
+        destination_channel_id=subscription.subscribe_channel_id,
+    )
+    request = await store.requests.create(
+        guild_id=100,
+        network_id=network.id,
+        requester_user_id=22,
+        server_name="Pending",
+        display_name="Pending",
+        profile_image_url="https://example.com/profile.png",
+    )
+
+    assert await store.networks.delete_with_relations(network.key) == network
+    assert await store.networks.get_by_key(network.key) is None
+    detached = await store.subscriptions.get_subscription_by_id(subscription.id)
+    assert detached is not None and detached.network_id is None
+    assert await store.relay.get_by_source_message(777) is None
+    assert await store.requests.get_by_id(request.id) is None
+
+
+@pytest.mark.asyncio
 async def test_client_delete_recipe_rolls_back_on_failure(db) -> None:
     store = Store.create(db)
     client, blocked, subscription = await _related_client_data(store)
@@ -106,9 +165,9 @@ def test_application_code_uses_store_boundary() -> None:
     root = Path(__file__).parents[1] / "bot"
     offenders = []
     for path in root.rglob("*.py"):
-        if "db" in path.relative_to(root).parts:
+        if "database" in path.relative_to(root).parts:
             continue
         source = path.read_text()
-        if "bot.db.domains" in source or "import aiosqlite" in source:
+        if "bot.core.database.domains" in source or "import aiosqlite" in source:
             offenders.append(str(path.relative_to(root)))
     assert offenders == []

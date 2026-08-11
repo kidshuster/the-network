@@ -6,10 +6,10 @@ import discord
 import pytest
 from discord_helpers import make_guild_with_roles, make_role
 
-from bot.layout import LayoutContext, compile_client, compile_hub
-from bot.layout.compiler import ResourceKind
-from bot.layout.loader import clear_layout_cache, load_layout, load_roles, validate_all_layouts
-from bot.layout.schema import RoleDefaultsSpec
+from bot.core.layout import LayoutContext, compile_client, compile_hub
+from bot.core.layout.compiler import ResourceKind
+from bot.core.layout.loader import clear_layout_cache, load_layout, load_roles, validate_all_layouts
+from bot.core.layout.schema import RoleDefaultsSpec
 
 
 def _context(*, clients: int = 1, network_key: str | None = "stingers") -> LayoutContext:
@@ -59,7 +59,7 @@ def test_hub_matches_expected_structure_and_channel_types() -> None:
     resources = compile_hub(_context())
     categories = [item.name for item in resources if item.kind is ResourceKind.CATEGORY]
     assert categories == ["Moderation", "The Network", "Leaders"]
-    assert _resource(resources, "network_announcements").kind is ResourceKind.ANNOUNCEMENT
+    assert _resource(resources, "network_announcements").kind is ResourceKind.TEXT
     assert _resource(resources, "rules").community_slot == "rules"
     assert _resource(resources, "moderator_only").community_slot == "public_updates"
     assert _resource(resources, "rules").preserve_on_uninit
@@ -141,7 +141,8 @@ def test_client_category_defaults_propagate_until_profile_replacement() -> None:
     assert _overwrite(profile, client).pair() == _overwrite(category, client).pair()
     assert _overwrite(subscribe, client).pair() == _overwrite(category, client).pair()
     assert _overwrite(publish, client).manage_webhooks is True
-    assert _overwrite(publish, ctx.access_role).send_messages is False
+    assert ctx.access_role not in publish.overwrites
+    assert ctx.access_role in publish.managed_targets
 
 
 def test_compiled_recipes_use_bot_access_role_not_bot_member_or_operator() -> None:

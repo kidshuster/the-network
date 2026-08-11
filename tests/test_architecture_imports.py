@@ -8,36 +8,38 @@ from pathlib import Path
 import bot
 
 
-def _service_python_files() -> list[Path]:
-    services_root = Path(bot.__file__).resolve().parent / "services"
-    return sorted(services_root.rglob("*.py"))
+def _core_python_files() -> list[Path]:
+    core_root = Path(bot.__file__).resolve().parent / "core"
+    return sorted(core_root.rglob("*.py"))
 
 
-def _imports_bot_ui(source: str) -> list[str]:
+def _imports_outer_workflows(source: str) -> list[str]:
     tree = ast.parse(source)
     violations: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith("bot.ui"):
+            if node.module and node.module.startswith(
+                ("bot.ui", "bot.cogs", "bot.recipes", "bot.smoke")
+            ):
                 violations.append(f"from {node.module}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("bot.ui"):
+                if alias.name.startswith(("bot.ui", "bot.cogs", "bot.recipes", "bot.smoke")):
                     violations.append(f"import {alias.name}")
     return violations
 
 
-def test_service_modules_do_not_import_bot_ui() -> None:
+def test_core_does_not_import_adapters_or_workflows() -> None:
     offenders: list[str] = []
-    for path in _service_python_files():
+    for path in _core_python_files():
         if path.name == "__init__.py":
             continue
         rel = path.relative_to(Path(bot.__file__).resolve().parent.parent)
         source = path.read_text(encoding="utf-8")
-        ui_imports = _imports_bot_ui(source)
-        if ui_imports:
-            offenders.append(f"{rel}: {', '.join(ui_imports)}")
-    assert offenders == [], "service→UI imports:\n" + "\n".join(offenders)
+        imports = _imports_outer_workflows(source)
+        if imports:
+            offenders.append(f"{rel}: {', '.join(imports)}")
+    assert offenders == [], "core dependency violations:\n" + "\n".join(offenders)
 
 
 def test_bot_modules_import_cleanly() -> None:
@@ -46,3 +48,33 @@ def test_bot_modules_import_cleanly() -> None:
         if module.name.startswith("bot.smoke."):
             continue
         importlib.import_module(module.name)
+
+
+def test_retired_yaml_recipe_runtime_does_not_return() -> None:
+    package = Path(bot.__file__).resolve().parent
+    recipes = package / "recipes"
+    assert not list(recipes.rglob("*.yaml"))
+    assert not (recipes / "engine.py").exists()
+    assert not (recipes / "loader.py").exists()
+    assert not (recipes / "schema.py").exists()
+
+    forbidden = (
+        "RecipeExecutor",
+        "RecipeRunner",
+        "RecipeEventRunner",
+        "build_recipe_executor",
+    )
+    offenders: list[str] = []
+    for path in package.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if any(name in source for name in forbidden):
+            offenders.append(str(path.relative_to(package.parent)))
+    assert offenders == []
+
+
+def test_discord_event_adapters_dispatch_through_recipe_registry() -> None:
+    relay_cog = (Path(bot.__file__).resolve().parent / "cogs" / "relay.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'recipe_registry.dispatch("discord.message"' in relay_cog
+    assert 'recipe_registry.dispatch("discord.webhooks_update"' in relay_cog

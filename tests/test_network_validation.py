@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.domain.errors import NetworkValidationError
-from bot.networks.validation import validate_network_channels
+from bot.core.models.errors import NetworkValidationError
+from bot.core.networks.validation import validate_network_channels
 
 
 def _permissions(**flags: bool) -> MagicMock:

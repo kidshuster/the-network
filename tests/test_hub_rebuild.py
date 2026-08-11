@@ -7,8 +7,8 @@ import pytest
 from context_helpers import make_test_context
 from view_registry_helpers import make_test_view_registry
 
-from bot.clients.subscription import resync_subscriptions_for_network
-from bot.hub.data_reset import reset_hub_layout_data
+from bot.core.clients.subscription import resync_subscriptions_for_network
+from bot.core.hub.data_reset import reset_hub_layout_data
 
 
 @pytest.mark.asyncio
@@ -95,11 +95,11 @@ async def test_hub_rebuild_preserves_client_and_relinks_subscription(db, monkeyp
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
-            "bot.clients.subscription.resolve_access_role",
+            "bot.core.clients.subscription.resolve_access_role",
             lambda *_args, **_kwargs: client_role,
         )
         patch.setattr(
-            "bot.clients.subscription.resolve_human_moderator_role",
+            "bot.core.clients.subscription.resolve_human_moderator_role",
             lambda *_args, **_kwargs: None,
         )
         relinked = await resync_subscriptions_for_network(

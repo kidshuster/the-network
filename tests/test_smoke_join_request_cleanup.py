@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.db.store import RequestStore
-from bot.domain.server_request import ServerRequestStatus
+from bot.core.database.store import RequestStore
+from bot.core.models.server_request import ServerRequestStatus
 from bot.smoke.provision_flow import (
     cleanup_join_requests_smoke_artifacts,
     cleanup_smoke_join_request_messages,
@@ -41,7 +41,7 @@ async def test_cleanup_smoke_join_request_messages_deletes_discord_and_db(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.hub.resolve.resolve_join_requests_channel",
+        "bot.core.hub.resolve.resolve_join_requests_channel",
         MagicMock(return_value=channel),
     )
 
@@ -95,7 +95,7 @@ async def test_cleanup_join_requests_smoke_artifacts_sweeps_channel_and_db(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.hub.resolve.resolve_join_requests_channel",
+        "bot.core.hub.resolve.resolve_join_requests_channel",
         MagicMock(return_value=channel),
     )
 
@@ -129,7 +129,7 @@ async def test_cleanup_smoke_join_request_messages_skips_missing_message(
     context.store.requests = repo
 
     monkeypatch.setattr(
-        "bot.hub.resolve.resolve_join_requests_channel",
+        "bot.core.hub.resolve.resolve_join_requests_channel",
         MagicMock(return_value=channel),
     )
 

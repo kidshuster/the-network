@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.hub.init import GuildInitResult, _ensure_human_moderator_role
+from bot.recipes.hub.initialize import GuildInitResult, _ensure_human_moderator_role
 
 
 @pytest.mark.asyncio
@@ -19,7 +19,7 @@ async def test_ensure_human_moderator_role_creates_mentionable_role(
     created_role = MagicMock(spec=discord.Role)
     guild.create_role = AsyncMock(return_value=created_role)
     monkeypatch.setattr(
-        "bot.hub.reconcilers.resolve_human_moderator_role",
+        "bot.core.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=None),
     )
 
@@ -49,7 +49,7 @@ async def test_ensure_human_moderator_role_enables_mentions_on_existing_role(
     role.edit = AsyncMock(return_value=role)
 
     monkeypatch.setattr(
-        "bot.hub.reconcilers.resolve_human_moderator_role",
+        "bot.core.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=role),
     )
 

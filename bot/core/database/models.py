@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from bot.constants import RelayStatus
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
+from bot.core.models.relay_record import RelayRecord
+from bot.core.models.server_request import ServerRequest, ServerRequestStatus
+
+
+class NetworkRow:
+    @staticmethod
+    def from_row(row: Any) -> Network:
+        return Network(
+            id=int(row["id"]),
+            key=str(row["key"]),
+            display_name=str(row["display_name"]),
+            feed_category_id=(
+                int(row["feed_category_id"]) if row["feed_category_id"] is not None else None
+            ),
+            output_channel_id=(
+                int(row["output_channel_id"]) if row["output_channel_id"] is not None else None
+            ),
+            concat_channel_id=(
+                int(row["concat_channel_id"]) if row["concat_channel_id"] is not None else None
+            ),
+            profile_forum_channel_id=(
+                int(row["profile_forum_channel_id"])
+                if "profile_forum_channel_id" in row.keys()
+                and row["profile_forum_channel_id"] is not None
+                else None
+            ),
+            join_channel_id=(
+                int(row["join_channel_id"])
+                if "join_channel_id" in row.keys() and row["join_channel_id"] is not None
+                else None
+            ),
+            enabled=bool(row["enabled"]),
+        )
+
+
+class ServerRequestRow:
+    @staticmethod
+    def from_row(row: Any) -> ServerRequest:
+        return ServerRequest(
+            id=int(row["id"]),
+            guild_id=int(row["guild_id"]),
+            network_id=(
+                int(row["network_id"]) if row["network_id"] is not None else None
+            ),
+            requester_user_id=int(row["requester_user_id"]),
+            server_name=str(row["server_name"]),
+            display_name=str(row["display_name"]),
+            profile_image_url=str(row["profile_image_url"]),
+            profile_image_data=(
+                bytes(row["profile_image_data"])
+                if "profile_image_data" in row.keys() and row["profile_image_data"] is not None
+                else None
+            ),
+            status=ServerRequestStatus(str(row["status"])),
+            moderator_message_id=(
+                int(row["moderator_message_id"])
+                if row["moderator_message_id"] is not None
+                else None
+            ),
+            resolved_by_user_id=(
+                int(row["resolved_by_user_id"])
+                if row["resolved_by_user_id"] is not None
+                else None
+            ),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+
+class RelayRecordRow:
+    @staticmethod
+    def from_row(row: Any) -> RelayRecord:
+        raw_ids = row["destination_message_ids"]
+        if isinstance(raw_ids, str):
+            parsed = json.loads(raw_ids)
+            destination_ids = tuple(int(item) for item in parsed)
+        else:
+            destination_ids = ()
+
+        return RelayRecord(
+            id=int(row["id"]),
+            source_message_id=int(row["source_message_id"]),
+            source_channel_id=int(row["source_channel_id"]),
+            source_webhook_id=(
+                int(row["source_webhook_id"]) if row["source_webhook_id"] is not None else None
+            ),
+            profile_id=(
+                int(row["profile_id"]) if row["profile_id"] is not None else None
+            ),
+            client_id=(
+                int(row["client_id"]) if row["client_id"] is not None else None
+            ),
+            network_id=int(row["network_id"]),
+            destination_channel_id=int(row["destination_channel_id"]),
+            destination_message_ids=destination_ids,
+            status=RelayStatus(str(row["status"])),
+            error_message=str(row["error_message"]) if row["error_message"] is not None else None,
+        )
+
+
+class ClientRow:
+    @staticmethod
+    def from_row(row: Any) -> Client:
+        return Client(
+            id=int(row["id"]),
+            guild_id=int(row["guild_id"]),
+            server_name=str(row["server_name"]),
+            display_name=str(row["display_name"]),
+            category_id=int(row["category_id"]),
+            client_role_id=int(row["client_role_id"]),
+            profile_channel_id=int(row["profile_channel_id"]),
+            profile_message_id=int(row["profile_message_id"]),
+            enabled=bool(row["enabled"]),
+            timecode_enabled=(
+                bool(row["timecode_enabled"])
+                if "timecode_enabled" in row.keys()
+                else True
+            ),
+            emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
+            emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,
+            image_hash=str(row["image_hash"]) if row["image_hash"] is not None else None,
+            degraded_reason=(
+                str(row["degraded_reason"]) if row["degraded_reason"] is not None else None
+            ),
+        )
+
+
+class ClientSubscriptionRow:
+    @staticmethod
+    def from_row(row: Any) -> ClientSubscription:
+        network_id_raw = row["network_id"]
+        keys = row.keys() if hasattr(row, "keys") else ()
+        subscribe_confirmed = (
+            bool(row["subscribe_confirmed"]) if "subscribe_confirmed" in keys else False
+        )
+        publish_setup_message_id = (
+            int(row["publish_setup_message_id"])
+            if "publish_setup_message_id" in keys and row["publish_setup_message_id"] is not None
+            else None
+        )
+        subscribe_setup_message_id = (
+            int(row["subscribe_setup_message_id"])
+            if (
+                "subscribe_setup_message_id" in keys
+                and row["subscribe_setup_message_id"] is not None
+            )
+            else None
+        )
+        activation_welcome_message_id = (
+            int(row["activation_welcome_message_id"])
+            if "activation_welcome_message_id" in keys
+            and row["activation_welcome_message_id"] is not None
+            else None
+        )
+        return ClientSubscription(
+            id=int(row["id"]),
+            client_id=int(row["client_id"]),
+            network_id=int(network_id_raw) if network_id_raw is not None else None,
+            network_key=str(row["network_key"]),
+            publish_channel_id=int(row["publish_channel_id"]),
+            subscribe_channel_id=int(row["subscribe_channel_id"]),
+            moderation_message_id=(
+                int(row["moderation_message_id"])
+                if row["moderation_message_id"] is not None
+                else None
+            ),
+            publish_setup_message_id=publish_setup_message_id,
+            subscribe_setup_message_id=subscribe_setup_message_id,
+            activation_welcome_message_id=activation_welcome_message_id,
+            subscribe_confirmed=subscribe_confirmed,
+            enabled=bool(row["enabled"]),
+        )

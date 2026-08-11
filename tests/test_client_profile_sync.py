@@ -6,14 +6,14 @@ import discord
 import pytest
 from view_registry_helpers import make_test_view_registry
 
-from bot.clients.profile_sync import (
+from bot.core.clients.profile_sync import (
     build_moderation_embed,
     post_subscription_moderation_embed,
 )
-from bot.domain.client import Client
-from bot.domain.client_subscription import ClientSubscription
-from bot.domain.network import Network
-from bot.stickies.subscription_setup import SubscriptionSetupState
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
+from bot.core.stickies.subscription_setup import SubscriptionSetupState
 
 
 def _client() -> Client:
@@ -258,7 +258,7 @@ async def test_deleted_network_shows_disabled_without_join_button(
 ) -> None:
     from view_registry_helpers import make_test_view_registry
 
-    from bot.clients.profile_sync import refresh_client_profile_message
+    from bot.core.clients.profile_sync import refresh_client_profile_message
 
     profile_channel = MagicMock(spec=discord.TextChannel)
     profile_channel.id = 30

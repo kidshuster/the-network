@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from discord_helpers import make_bot_member, make_role
 
-from bot.domain.errors import NetworkValidationError
-from bot.networks.roles import validate_operator_setup
+from bot.core.models.errors import NetworkValidationError
+from bot.core.networks.roles import validate_operator_setup
 
 
 def _operator_bot() -> tuple[MagicMock, MagicMock, MagicMock]:

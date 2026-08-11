@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from bot.db.store import ClientStore, NetworkStore
-from bot.domain.client import Client
-from bot.domain.client_subscription import ClientSubscription
-from bot.domain.network import Network
+from bot.core.database.store import ClientStore, NetworkStore
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
 
 
 async def create_test_network(

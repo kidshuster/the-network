@@ -6,8 +6,8 @@ import discord
 import pytest
 from discord_helpers import http_50013
 
-from bot.domain.client import Client
-from bot.hub.init import initialize_guild
+from bot.core.models.client import Client
+from bot.recipes.hub.initialize import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
 
 
@@ -86,19 +86,19 @@ def _patch_init_roles(
     human_mod: MagicMock,
 ) -> None:
     monkeypatch.setattr(
-        "bot.hub.init.resolve_access_role_by_name",
+        "bot.recipes.hub.initialize.resolve_access_role_by_name",
         MagicMock(return_value=access_role),
     )
     monkeypatch.setattr(
-        "bot.hub.init.resolve_operator_role_by_name",
+        "bot.recipes.hub.initialize.resolve_operator_role_by_name",
         MagicMock(return_value=operator_role),
     )
     monkeypatch.setattr(
-        "bot.hub.reconcilers.resolve_human_moderator_role",
+        "bot.core.hub.reconcilers.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category", "create text channel"),
@@ -111,7 +111,7 @@ def _patch_init_roles(
         ),
     )
     monkeypatch.setattr(
-        "bot.hub.reconcilers._ensure_human_moderator_role",
+        "bot.core.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
 
@@ -169,7 +169,7 @@ async def test_initialize_guild_fails_without_operator_role(
     guild, bot, human_mod, access_role, operator_role = _guild_with_roles()
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.resolve_operator_role_by_name",
+        "bot.recipes.hub.initialize.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
 
@@ -375,11 +375,11 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
 
     _patch_init_roles(monkeypatch, access_role, operator_role, human_mod)
     monkeypatch.setattr(
-        "bot.hub.reconcilers._ensure_human_moderator_role",
+        "bot.core.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     monkeypatch.setattr(
-        "bot.hub.leaders.ensure_leaders_channels",
+        "bot.core.hub.leaders.ensure_leaders_channels",
         AsyncMock(return_value=(None, None, MagicMock(
             rectification_notes=lambda: [],
             skip_notes=lambda: [],
@@ -387,11 +387,11 @@ async def test_initialize_guild_survives_hidden_moderator_only_channel(
         ))),
     )
     monkeypatch.setattr(
-        "bot.stickies.join_requests_sticky.sync_hub_join_sticky",
+        "bot.core.stickies.join_requests_sticky.sync_hub_join_sticky",
         AsyncMock(return_value=MagicMock(message=None)),
     )
     monkeypatch.setattr(
-        "bot.stickies.rules_sticky.sync_rules_sticky",
+        "bot.core.stickies.rules_sticky.sync_rules_sticky",
         AsyncMock(return_value=MagicMock(message=None)),
     )
     for cat in guild.categories:

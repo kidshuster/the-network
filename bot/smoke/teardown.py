@@ -18,7 +18,7 @@ from bot.smoke.resource_guard import (
 )
 
 if TYPE_CHECKING:
-    from bot.context import BotContext
+    from bot.core.runtime import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,5 @@ async def teardown_smoke_guild(
     except Exception as exc:
         result.errors.append(f"orphan channel cleanup: {exc}")
 
-    await context.client_cache.load_cache()
-    await context.routing_service.load_cache()
+    await context.refresh_projections()
     return result

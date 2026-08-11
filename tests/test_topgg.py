@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bot.integrations.topgg import TopggService
+from bot.core.integrations.topgg import TopggService
 
 
 @pytest.mark.asyncio

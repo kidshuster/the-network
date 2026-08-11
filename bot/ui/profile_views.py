@@ -65,7 +65,7 @@ class EditClientProfileModal(discord.ui.Modal):
         if attachments:
             profile_image = attachments[0]
 
-        from bot.clients.profile_edit import apply_client_profile_edit
+        from bot.core.clients.profile_edit import apply_client_profile_edit
         from bot.ui.persistent_views import PersistentViewRegistry
 
         result = await apply_client_profile_edit(
@@ -184,7 +184,7 @@ class DeleteClientConfirmView(discord.ui.View):
             await response.send_text("bot_member_unavailable_brief")
             return
 
-        from bot.clients.deletion import ClientDeletionService
+        from bot.core.clients.deletion import ClientDeletionService
 
         result = await ClientDeletionService().delete_client(
             guild,

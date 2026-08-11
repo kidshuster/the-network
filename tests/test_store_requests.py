@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from store_helpers import create_test_network
 
-from bot.db.store import NetworkStore, RequestStore
-from bot.domain.server_request import ServerRequestStatus
+from bot.core.database.store import NetworkStore, RequestStore
+from bot.core.models.server_request import ServerRequestStatus
 
 
 @pytest.mark.asyncio

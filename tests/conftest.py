@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from bot.db.connection import Database
-from bot.db.migrations import run_migrations
+from bot.core.database.connection import Database
+from bot.core.database.migrations import run_migrations
 
 
 @pytest.fixture

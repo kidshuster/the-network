@@ -6,22 +6,22 @@ import discord
 import pytest
 from view_registry_helpers import make_test_view_registry
 
-from bot.clients.names import (
+from bot.core.clients.names import (
     LEGACY_CLIENT_PROFILE_CHANNEL,
     build_client_profile_channel_base,
     build_client_publish_channel_base,
     build_client_subscribe_channel_base,
     slugify_client_name,
 )
-from bot.clients.subscription import (
+from bot.core.clients.subscription import (
     ClientSubscriptionService,
     build_client_category_channel_order,
     find_network_subscription_channels,
     reorder_client_category_channels,
     resync_subscriptions_for_network,
 )
-from bot.db.store import ClientStore, NetworkStore
-from bot.domain.client import Client
+from bot.core.database.store import ClientStore, NetworkStore
+from bot.core.models.client import Client
 
 
 def _client(server_name: str = "acme") -> Client:
@@ -174,8 +174,8 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
     )
     guild.get_role = MagicMock(return_value=client_role)
 
-    from bot.clients.cache import ClientCache
-    from bot.networks.routing import RoutingService
+    from bot.core.clients.cache import ClientCache
+    from bot.core.networks.routing import RoutingService
 
     routing = RoutingService(network_repo, client_repo)
     client_cache = ClientCache(client_repo)
@@ -186,6 +186,7 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
     context.store.clients = client_repo
     context.routing_service = routing
     context.client_cache = client_cache
+    context.refresh_projections = AsyncMock()
     context.store.settings = MagicMock()
     context.store.settings.get = AsyncMock(return_value=None)
     context.store.settings.set = AsyncMock()
@@ -196,11 +197,11 @@ async def test_resync_subscriptions_for_network_links_existing_channels(db) -> N
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(
-            "bot.clients.subscription.resolve_access_role",
+            "bot.core.clients.subscription.resolve_access_role",
             lambda *_args, **_kwargs: client_role,
         )
         patch.setattr(
-            "bot.clients.subscription.resolve_human_moderator_role",
+            "bot.core.clients.subscription.resolve_human_moderator_role",
             lambda *_args, **_kwargs: None,
         )
         relinked = await resync_subscriptions_for_network(

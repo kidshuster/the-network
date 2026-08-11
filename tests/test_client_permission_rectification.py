@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.clients.rectification import rectify_client_permissions
-from bot.domain.client import Client
-from bot.hub.resolve import resolve_leaders_channel
-from bot.layout.applier import BatchApplyResult, ResourceApplyResult
+from bot.core.clients.rectification import rectify_client_permissions
+from bot.core.hub.resolve import resolve_leaders_channel
+from bot.core.layout.applier import BatchApplyResult, ResourceApplyResult
+from bot.core.models.client import Client
 
 
 def test_resolve_leaders_channel_finds_legacy_name_in_leaders_category() -> None:
@@ -69,11 +69,11 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
     context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
 
     monkeypatch.setattr(
-        "bot.clients.rectification.resolve_operator_role_by_name",
+        "bot.core.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        "bot.clients.rectification.apply_layout",
+        "bot.core.clients.rectification.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[
@@ -147,11 +147,11 @@ async def test_rectify_client_permissions_records_category_http_failure(
     guild.get_role = MagicMock(return_value=client_role)
 
     monkeypatch.setattr(
-        "bot.clients.rectification.resolve_operator_role_by_name",
+        "bot.core.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(
-        "bot.clients.rectification.apply_layout",
+        "bot.core.clients.rectification.apply_layout",
         AsyncMock(
             return_value=BatchApplyResult(
                 results=[
@@ -223,7 +223,7 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
     guild.get_role = MagicMock(return_value=client_role)
 
     monkeypatch.setattr(
-        "bot.clients.rectification.resolve_operator_role_by_name",
+        "bot.core.clients.rectification.resolve_operator_role_by_name",
         MagicMock(return_value=None),
     )
 
@@ -249,13 +249,13 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
         )
 
     monkeypatch.setattr(
-        "bot.clients.rectification.apply_layout",
+        "bot.core.clients.rectification.apply_layout",
         AsyncMock(side_effect=_apply),
     )
 
     from subscription_helpers import make_client_subscription
 
-    from bot.domain.network import Network
+    from bot.core.models.network import Network
 
     subscription = make_client_subscription(
         id=1,

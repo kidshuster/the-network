@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.clients.subscription import resolve_subscription_channels_in_category
-from bot.discord_util.step_runner import run_guild_step
+from bot.core.clients.subscription import resolve_subscription_channels_in_category
+from bot.core.discord.step_runner import run_guild_step
 
 
 @dataclass
@@ -31,7 +31,7 @@ async def test_run_guild_step_records_http_exception() -> None:
 
 
 def test_resolve_subscription_channels_falls_back_to_category_names() -> None:
-    from bot.domain.client_subscription import ClientSubscription
+    from bot.core.models.client_subscription import ClientSubscription
 
     category = MagicMock(spec=discord.CategoryChannel)
     publish = MagicMock(spec=discord.TextChannel)
@@ -76,7 +76,7 @@ def test_resolve_subscription_channels_falls_back_to_category_names() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_stored_embed_sticky_skips_when_current() -> None:
-    from bot.stickies.sync import sync_stored_embed_sticky
+    from bot.core.stickies.sync import sync_stored_embed_sticky
 
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 10

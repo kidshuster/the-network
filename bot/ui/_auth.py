@@ -10,8 +10,8 @@ from bot.messages import render_text
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
-    from bot.context import BotContext
-    from bot.domain.client import Client
+    from bot.core.models.client import Client
+    from bot.core.runtime import BotContext
 
 ResponseVia = Literal["followup", "response"]
 

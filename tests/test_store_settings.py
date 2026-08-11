@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from bot.db.store import SettingsStore
+from bot.core.database.store import SettingsStore
 
 
 @pytest.mark.asyncio

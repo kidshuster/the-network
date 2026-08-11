@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.discord_util.errors import format_discord_step_error
+from bot.core.discord.errors import format_discord_step_error
 
 
 def _http_exception(*, status: int, code: int | None, message: str) -> discord.HTTPException:

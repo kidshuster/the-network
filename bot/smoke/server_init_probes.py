@@ -6,11 +6,10 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from bot.clients.names import slugify_client_name
 from bot.config import Settings
-from bot.hub.init import initialize_guild
-from bot.hub.leaders import ensure_leaders_channels
-from bot.hub.resolve import (
+from bot.core.clients.names import slugify_client_name
+from bot.core.hub.leaders import ensure_leaders_channels
+from bot.core.hub.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CHANNEL_CHANGELOG,
@@ -21,14 +20,15 @@ from bot.hub.resolve import (
     resolve_leaders_category,
     resolve_leaders_channel,
 )
-from bot.layout import LayoutContext, compile_client, compile_hub
-from bot.layout.compiler import ResourceKind
-from bot.layout.managed import hub_category_names, preserved_channel_names
-from bot.networks.roles import (
+from bot.core.layout import LayoutContext, compile_client, compile_hub
+from bot.core.layout.compiler import ResourceKind
+from bot.core.layout.managed import hub_category_names, preserved_channel_names
+from bot.core.networks.roles import (
     resolve_access_role,
     resolve_operator_role_by_name,
     validate_hub_permissions,
 )
+from bot.recipes.hub.initialize import initialize_guild
 from bot.smoke.constants import SERVER_INIT_PROBE_REASON
 from bot.smoke.provision_flow import run_pre_init_smoke_checks
 from bot.smoke.resource_guard import guild_test_resource_guard
@@ -36,7 +36,7 @@ from bot.ui.persistent_views import PersistentViewRegistry
 
 if TYPE_CHECKING:
     from bot.client import NetworkRelayBot
-    from bot.context import BotContext
+    from bot.core.runtime import BotContext
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +300,7 @@ async def probe_hub_layout(
         except Exception as exc:
             return ProbeResult("hub layout", False, f"compile_hub failed: {exc}")
     else:
-        from bot.layout.loader import load_layout
+        from bot.core.layout.loader import load_layout
 
         for category in load_layout().layout.categories.values():
             for channel in category.channels.values():
@@ -338,9 +338,8 @@ async def probe_hub_announcements(
     context: BotContext,
     settings: Settings,
 ) -> ProbeResult:
-    from bot.hub.announcements import is_hub_announcements_client
-    from bot.hub.resolve import (
-        find_network_announcements_text_channel,
+    del context, settings
+    from bot.core.hub.resolve import (
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )
@@ -348,18 +347,6 @@ async def probe_hub_announcements(
     mod_category = resolve_moderation_category(guild)
     mod_channel = resolve_network_announcements_channel(guild)
     if mod_channel is None:
-        legacy = find_network_announcements_text_channel(
-            guild,
-            category_id=mod_category.id if mod_category is not None else None,
-            include_announcement=False,
-        )
-        if legacy is not None:
-            return ProbeResult(
-                "hub announcements channel",
-                False,
-                f"{legacy.mention} is a plain text channel — run `/server init` to "
-                "recreate it as an announcement channel",
-            )
         return ProbeResult(
             "hub announcements channel",
             False,
@@ -371,56 +358,16 @@ async def probe_hub_announcements(
             False,
             "#network-announcements is outside Moderation",
         )
-    if not mod_channel.is_news():
+    if mod_channel.is_news():
         return ProbeResult(
             "hub announcements channel",
             False,
-            "#network-announcements must be an announcement channel — run `/server init`",
-        )
-
-    hub = await context.store.clients.get_by_server_name(
-        guild.id,
-        settings.hub_announcements_server_name,
-    )
-    if hub is None:
-        return ProbeResult(
-            "hub announcements client",
-            False,
-            "Hub announcements client missing — run `/server init`",
-        )
-    if not is_hub_announcements_client(hub, settings):
-        return ProbeResult(
-            "hub announcements client",
-            False,
-            "Reserved hub announcements client row has unexpected server_name",
-        )
-
-    networks = await context.store.networks.list_all()
-    if not networks:
-        return ProbeResult(
-            "hub announcements wiring",
-            True,
-            "hub client present; no networks registered yet",
-        )
-
-    missing: list[str] = []
-    for network in networks:
-        if not network.enabled:
-            continue
-        sub = await context.store.clients.get_subscription(hub.id, network.id)
-        if sub is None:
-            missing.append(network.key)
-    if missing:
-        return ProbeResult(
-            "hub announcements wiring",
-            False,
-            "missing subscriptions for: " + ", ".join(missing),
+            "#network-announcements must be a regular text channel — run `/server init`",
         )
     return ProbeResult(
         "hub announcements wiring",
         True,
-        f"{mod_channel.mention} is announcement channel; hub client subscribed to "
-        f"{len(networks)} network(s)",
+        f"{mod_channel.mention} is a regular text channel with direct relay dispatch",
     )
 
 
@@ -547,9 +494,7 @@ async def probe_client_layout_reinit(
 ) -> ProbeResult:
     """Strip client category/profile overwrites, reinit, assert compile_client match."""
     clients = [
-        client
-        for client in await context.store.clients.list_all()
-        if client.guild_id == guild.id
+        client for client in await context.store.clients.list_all() if client.guild_id == guild.id
     ]
     if not clients:
         return ProbeResult(
@@ -622,9 +567,7 @@ async def probe_client_layout_reinit(
 
         mismatches: list[str] = []
         cat_desired = desired["client"].overwrites.get(client_role)
-        if cat_desired is not None and not _overwrite_matches(
-            category, client_role, cat_desired
-        ):
+        if cat_desired is not None and not _overwrite_matches(category, client_role, cat_desired):
             mismatches.append("category client overwrite")
         profile_desired = desired["profile"].overwrites.get(client_role)
         if profile_desired is not None and not _overwrite_matches(
@@ -772,8 +715,7 @@ async def probe_leaders_delete_double_reinit(
             return ProbeResult(
                 "leaders delete reinit",
                 False,
-                "first reinit reported failures: "
-                + "; ".join(first.rectification_failures[:5]),
+                "first reinit reported failures: " + "; ".join(first.rectification_failures[:5]),
             )
 
         restored = resolve_leaders_channel(guild)
@@ -871,8 +813,7 @@ async def probe_leaders_idempotent_reinit(
                 return ProbeResult(
                     "leaders idempotent reinit",
                     False,
-                    f"{pass_label} reinit left Leaders access gaps: "
-                    + "; ".join(gaps[:5]),
+                    f"{pass_label} reinit left Leaders access gaps: " + "; ".join(gaps[:5]),
                 )
 
     return ProbeResult(

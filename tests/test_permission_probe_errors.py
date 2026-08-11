@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from discord_helpers import http_50013
 
-from bot.permissions.probe import (
+from bot.smoke.permission_probe import (
     _probe_failure_detail,
     _probe_failure_for_step,
     _provision_probe_failure,
@@ -47,7 +47,7 @@ def test_probe_failure_detail_for_http_exception() -> None:
 
 
 def test_probe_failure_for_step_lists_completed_steps() -> None:
-    from bot.domain.errors import NetworkValidationError
+    from bot.core.models.errors import NetworkValidationError
 
     error = _probe_failure_for_step(
         "create text channel",

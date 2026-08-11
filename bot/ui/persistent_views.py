@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from bot.domain.client import Client
-from bot.domain.client_subscription import ClientSubscription
-from bot.domain.network import Network
-from bot.stickies.subscription_setup import SubscriptionSetupState
+from bot.core.models.client import Client
+from bot.core.models.client_subscription import ClientSubscription
+from bot.core.models.network import Network
+from bot.core.stickies.subscription_setup import SubscriptionSetupState
 
 if TYPE_CHECKING:
     import discord

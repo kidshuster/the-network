@@ -8,7 +8,7 @@ import discord
 import pytest
 from discord_helpers import http_50013, make_guild_with_roles, make_role
 
-from bot.permissions.service import PermissionContext, PermissionService
+from bot.core.permissions.service import PermissionContext, PermissionService
 
 
 def _setup():
@@ -159,9 +159,9 @@ def test_production_permission_mutations_are_confined_to_permission_api() -> Non
     violations: list[str] = []
     for path in root.rglob("*.py"):
         relative = path.relative_to(root).as_posix()
-        if relative == "permissions/service.py" or relative.startswith("smoke/"):
+        if relative == "core/permissions/service.py" or relative.startswith("smoke/"):
             continue
-        if relative == "permissions/probe.py":
+        if relative == "core/permissions/probe.py":
             continue
         source = path.read_text(encoding="utf-8")
         for forbidden in (".set_permissions(", "sync_permissions=True", "edit(overwrites="):

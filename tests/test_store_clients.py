@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from store_helpers import create_test_client, create_test_network, create_test_subscription
 
-from bot.db.store import ClientStore, NetworkStore
-from bot.domain.errors import ProfileValidationError
+from bot.core.database.store import ClientStore, NetworkStore
+from bot.core.models.errors import ProfileValidationError
 
 
 @pytest.mark.asyncio

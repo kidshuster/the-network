@@ -7,9 +7,9 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from view_registry_helpers import make_test_view_registry
 
-from bot.clients.reconnect import reconnect_clients_on_init
-from bot.domain.client import Client
-from bot.hub.init import GuildInitResult
+from bot.core.clients.reconnect import reconnect_clients_on_init
+from bot.core.models.client import Client
+from bot.recipes.hub.initialize import GuildInitResult
 
 
 def _stored_client(*, guild_id: int = 100, client_id: int = 1) -> Client:
@@ -50,27 +50,27 @@ async def test_reconnect_clients_rectifies_and_refreshes_profiles(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.clients.reconnect.rectify_client_permissions",
+        "bot.core.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.sync_client_channel_names",
+        "bot.core.clients.reconnect.sync_client_channel_names",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.sync_subscription_setup",
+        "bot.core.clients.reconnect.sync_subscription_setup",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.reorder_client_category_channels",
+        "bot.core.clients.reconnect.reorder_client_category_channels",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.refresh_client_profile_message",
+        "bot.core.clients.reconnect.refresh_client_profile_message",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.resync_subscriptions_for_network",
+        "bot.core.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 
@@ -117,19 +117,19 @@ async def test_reconnect_skips_post_rectify_when_client_missing_in_discord(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.clients.reconnect.rectify_client_permissions",
+        "bot.core.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.sync_client_channel_names",
+        "bot.core.clients.reconnect.sync_client_channel_names",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.refresh_client_profile_message",
+        "bot.core.clients.reconnect.refresh_client_profile_message",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.resync_subscriptions_for_network",
+        "bot.core.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 
@@ -175,15 +175,15 @@ async def test_reconnect_records_failure_when_post_rectify_http_error(
     rectified.failure_notes.return_value = []
 
     monkeypatch.setattr(
-        "bot.clients.reconnect.rectify_client_permissions",
+        "bot.core.clients.reconnect.rectify_client_permissions",
         AsyncMock(return_value=rectified),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.sync_client_channel_names",
+        "bot.core.clients.reconnect.sync_client_channel_names",
         AsyncMock(side_effect=discord.HTTPException(MagicMock(), "Missing Permissions")),
     )
     monkeypatch.setattr(
-        "bot.clients.reconnect.resync_subscriptions_for_network",
+        "bot.core.clients.reconnect.resync_subscriptions_for_network",
         AsyncMock(return_value=0),
     )
 

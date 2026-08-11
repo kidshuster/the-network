@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
-from bot.clients.cache import ClientCache
-from bot.clients.deletion import ClientDeletionService
-from bot.context import BotContext
-from bot.db.store import Store
-from bot.networks.routing import RoutingService
+from bot.core.clients.cache import ClientCache
+from bot.core.clients.deletion import ClientDeletionService
+from bot.core.database.store import Store
+from bot.core.networks.routing import RoutingService
+from bot.core.runtime import BotContext
 from bot.ui.network_views import NetworkProfileView
 
 
@@ -142,8 +142,7 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
     )
     guild.get_role = MagicMock(return_value=client_role)
 
-    context.refresh_client_counts = AsyncMock()
-    context.routing_service.load_cache = AsyncMock()
+    context.refresh_projections = AsyncMock()
 
     service = ClientDeletionService()
     result = await service.delete_client(
@@ -165,8 +164,7 @@ async def test_delete_client_removes_subscriptions_blacklists_and_client(db) -> 
     assert profile.delete.await_count >= 1
     category.delete.assert_awaited_once()
     client_role.delete.assert_awaited_once()
-    context.refresh_client_counts.assert_awaited_once()
-    context.routing_service.load_cache.assert_awaited_once()
+    context.refresh_projections.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -199,7 +197,7 @@ async def test_delete_client_stops_when_unsubscribe_fails(
 
     unsubscribe_result = MagicMock(success=False, error="Missing Permissions")
     monkeypatch.setattr(
-        "bot.clients.subscription.ClientSubscriptionService.unsubscribe_client",
+        "bot.core.clients.subscription.ClientSubscriptionService.unsubscribe_client",
         AsyncMock(return_value=unsubscribe_result),
     )
 

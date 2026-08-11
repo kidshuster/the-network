@@ -1,0 +1,98 @@
+version: 1
+permission_profiles:
+  moderation:
+    roles: [everyone, moderator, bot_access]
+  network_readonly:
+    roles: [everyone, moderator, bot_access]
+    overrides:
+      everyone: {view_channel: true, read_message_history: true}
+  leaders_readonly:
+    roles: [everyone, client_roles, moderator, bot_access]
+  client_private:
+    roles: [everyone, client_owner, moderator, bot_access]
+  client_publish:
+    roles: [everyone, client_owner, moderator, bot_access]
+    overrides:
+      client_owner: {manage_webhooks: true}
+
+layout:
+  categories:
+    moderation:
+      name: Moderation
+      position: 0
+      profile: moderation
+      channels:
+        moderator_only:
+          name: moderator-only
+          topic: Moderator discussion
+          community_slot: public_updates
+          lifecycle: preserve
+          legacy_names: [mod-only, staff-only]
+          position: 0
+        join_requests:
+          name: join-requests
+          topic: Pending client join requests
+          position: 1
+        commands:
+          name: commands
+          topic: Network administration
+          position: 2
+          overrides:
+            moderator: {use_application_commands: true}
+        network_announcements:
+          name: network-announcements
+          type: text
+          position: 3
+    network:
+      name: The Network
+      position: 1
+      profile: network_readonly
+      channels:
+        rules:
+          name: rules
+          community_slot: rules
+          lifecycle: preserve
+          legacy_names: [rules]
+          position: 0
+        join_the_network:
+          name: join-the-network
+          topic: Join The Network hub as a client
+          position: 1
+    leaders:
+      name: Leaders
+      position: 2
+      profile: leaders_readonly
+      channels:
+        leaders_channel:
+          name: leaders-channel
+          topic: Private channel for participating server leaders
+          lifecycle: preserve
+          legacy_names: [leaders]
+          position: 0
+          overrides:
+            client_roles: {send_messages: true, embed_links: true, attach_files: true, add_reactions: true}
+        changelog:
+          name: changelog
+          topic: Release notes for The Network bot
+          lifecycle: preserve
+          position: 1
+  client_category:
+    name: "{server_name}"
+    profile: client_private
+    channels:
+      profile:
+        name: "{slug}-profile"
+        topic: "Profile and network subscriptions for {server_name}"
+        instances: per_client
+        position: 0
+      publish:
+        name: "{slug}-{network_key}-publish"
+        topic: "Publish channel for network {network_key}"
+        instances: per_subscription
+        profile: client_publish
+        position: 10
+      subscribe:
+        name: "{slug}-{network_key}-subscribe"
+        type: announcement
+        instances: per_subscription
+        position: 11

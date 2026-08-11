@@ -8,9 +8,9 @@ from discord_helpers import make_guild_with_roles
 from test_guild_init import _patch_init_roles
 from view_registry_helpers import make_test_view_registry
 
-from bot.domain.client import Client
-from bot.domain.errors import NetworkValidationError
-from bot.hub.init import initialize_guild
+from bot.core.models.client import Client
+from bot.core.models.errors import NetworkValidationError
+from bot.recipes.hub.initialize import initialize_guild
 from bot.smoke.provision_flow import GuildInitSmokeResult
 
 
@@ -78,7 +78,7 @@ async def test_init_moves_channel_from_wrong_category(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -87,7 +87,7 @@ async def test_init_moves_channel_from_wrong_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.hub.reconcilers._ensure_human_moderator_role",
+        "bot.core.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_category = AsyncMock()
@@ -137,7 +137,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -146,7 +146,7 @@ async def test_init_syncs_existing_channel_in_correct_category(
         ),
     )
     monkeypatch.setattr(
-        "bot.hub.reconcilers._ensure_human_moderator_role",
+        "bot.core.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     guild.create_text_channel = AsyncMock()
@@ -185,7 +185,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             return_value=GuildInitSmokeResult(
                 operator_steps=("create category",),
@@ -194,13 +194,13 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
         ),
     )
     monkeypatch.setattr(
-        "bot.hub.reconcilers._ensure_human_moderator_role",
+        "bot.core.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
     reconnect = AsyncMock()
-    monkeypatch.setattr("bot.clients.reconnect.reconnect_clients_on_init", reconnect)
+    monkeypatch.setattr("bot.core.clients.reconnect.reconnect_clients_on_init", reconnect)
     monkeypatch.setattr(
-        "bot.hub.leaders.ensure_leaders_channels",
+        "bot.core.hub.leaders.ensure_leaders_channels",
         AsyncMock(return_value=(None, None, MagicMock(
             rectification_notes=lambda: [],
             skip_notes=lambda: [],
@@ -213,6 +213,7 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
     context = MagicMock()
     context.client_cache.load_cache = AsyncMock()
     context.routing_service.load_cache = AsyncMock()
+    context.refresh_projections = AsyncMock()
     context.store.clients.list_all = AsyncMock(return_value=[])
     context.store.settings.get = AsyncMock(return_value=None)
     context.store.settings.set = AsyncMock()
@@ -241,7 +242,7 @@ async def test_init_fails_when_smoke_probe_raises_validation_error(
     guild, bot, human_mod, access, operator = make_guild_with_roles()
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(
             side_effect=NetworkValidationError("Join-approval provisioning probe failed"),
         ),
@@ -265,7 +266,7 @@ async def test_init_survives_unexpected_exception_with_typed_reason(
     guild, bot, human_mod, access, operator = make_guild_with_roles()
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
-        "bot.hub.init.run_guild_init_smoke_checks",
+        "bot.recipes.hub.initialize.run_guild_init_smoke_checks",
         AsyncMock(side_effect=RuntimeError("boom")),
     )
 

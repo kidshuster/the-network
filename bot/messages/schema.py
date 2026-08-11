@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,23 @@ class EmbedFieldSpec(BaseModel):
     when: str | None = None
 
 
+class InteractionOptionSpec(BaseModel):
+    label: str
+    value: str
+    description: str | None = None
+
+
+class InteractionSpec(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
+    kind: Literal["button", "select"]
+    recipe: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
+    label: str
+    style: Literal["primary", "secondary", "success", "danger"] = "secondary"
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    options: list[InteractionOptionSpec] = Field(default_factory=list)
+    placeholder: str | None = None
+
+
 class EmbedTemplateSpec(BaseModel):
     kind: Literal["embed"] = "embed"
     title: str | None = None
@@ -21,11 +38,13 @@ class EmbedTemplateSpec(BaseModel):
     footer: str | None = None
     author_name: str | None = None
     author_icon_url: str | None = None
+    interactions: list[InteractionSpec] = Field(default_factory=list)
 
 
 class TextTemplateSpec(BaseModel):
     kind: Literal["text"] = "text"
     content: str
+    interactions: list[InteractionSpec] = Field(default_factory=list)
 
 
 class ModalFieldSpec(BaseModel):

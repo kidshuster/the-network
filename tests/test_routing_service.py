@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from bot.clients.cache import ClientCache
-from bot.db.store import ClientStore, NetworkStore
-from bot.domain.errors import RoutingError
-from bot.networks.routing import RoutingService
+from bot.core.clients.cache import ClientCache
+from bot.core.database.store import ClientStore, NetworkStore
+from bot.core.models.errors import RoutingError
+from bot.core.networks.routing import RoutingService
 
 
 @pytest.mark.asyncio

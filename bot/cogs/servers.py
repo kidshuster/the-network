@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import discord
@@ -9,16 +8,10 @@ from discord.ext import commands
 
 from bot.client import NetworkRelayBot
 from bot.cogs._checks import require_manage_guild
-from bot.cogs._responses import DeferredEphemeralResponse
-from bot.context import BotContext
-from bot.domain.errors import NetworkValidationError
-from bot.hub.data_reset import reset_hub_layout_data
-from bot.hub.init import GuildInitResult, initialize_guild
-from bot.hub.resolve import resolve_join_the_network_channel
-from bot.hub.uninit import GuildUninitResult, uninitialize_guild
+from bot.core.hub.result import GuildInitResult
 from bot.messages import render_embed, render_text
-from bot.stickies.join_requests_sticky import sync_hub_join_sticky
-from bot.ui.persistent_views import PersistentViewRegistry
+from bot.recipes import RecipeRegistryError
+from bot.recipes.hub.uninitialize import GuildUninitResult
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +55,7 @@ def _server_init_rectification_embeds(result: GuildInitResult) -> list[discord.E
         return []
 
     has_work = bool(
-        result.rectifications
-        or result.rectification_skipped
-        or result.rectification_failures
+        result.rectifications or result.rectification_skipped or result.rectification_failures
     )
     if not has_work:
         embed = render_embed("server_init_rectification")
@@ -174,67 +165,35 @@ class ServerCog(
     def __init__(self, bot: NetworkRelayBot) -> None:
         self.bot = bot
 
+    async def _run(self, interaction: discord.Interaction, name: str) -> object | None:
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        if guild is None or guild.id != self.bot.settings.guild_id:
+            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
+            return None
+        if guild.me is None:
+            await interaction.followup.send(render_text("bot_member_unavailable"), ephemeral=True)
+            return None
+        try:
+            result: object = await self.bot.recipe_registry.run(name, interaction=interaction)
+            return result
+        except RecipeRegistryError as exc:
+            logger.exception("Command recipe failed", extra={"recipe": name})
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return None
+
     @require_manage_guild()
     @app_commands.command(
         name="init",
         description="Set up hub categories/channels and run permission smoke checks",
     )
     async def init_server(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        response = DeferredEphemeralResponse(interaction)
-        guild = interaction.guild
-        if guild is None or guild.id != self.bot.settings.guild_id:
-            await response.send(render_text("central_guild_only"), ephemeral=True)
+        result = await self._run(interaction, "server.init")
+        if not isinstance(result, GuildInitResult):
             return
-
-        bot_member = guild.me
-        if bot_member is None:
-            await response.send(render_text("bot_member_unavailable"), ephemeral=True)
-            return
-
-        async def _run() -> None:
-            try:
-                await response.send(render_text("server_init_started"), ephemeral=True)
-                clients = None
-                if self.bot.bot_context is not None:
-                    clients = await self.bot.bot_context.store.clients.list_all()
-                result = await initialize_guild(
-                    guild,
-                    bot_member,
-                    access_role_name=self.bot.settings.network_access_role_name,
-                    operator_role_name=self.bot.settings.network_operator_role_name,
-                    clients=clients,
-                    bot=self.bot,
-                    context=self.bot.bot_context,
-                    view_registry=PersistentViewRegistry(self.bot),
-                )
-                await response.send(
-                    embed=_server_init_embed(result),
-                    ephemeral=True,
-                )
-                for rectification_embed in _server_init_rectification_embeds(result):
-                    await response.send(
-                        embed=rectification_embed,
-                        ephemeral=True,
-                    )
-            except NetworkValidationError as exc:
-                await response.send(
-                    embed=render_embed("server_init_failed", description=str(exc)),
-                    ephemeral=True,
-                )
-            except Exception as exc:
-                logger.exception("Server init failed unexpectedly")
-                await response.send(
-                    embed=render_embed(
-                        "server_init_failed",
-                        description=f"Unexpected error: {type(exc).__name__}: {exc}",
-                    ),
-                    ephemeral=True,
-                )
-            finally:
-                await response.ensure_sent()
-
-        asyncio.create_task(_run())
+        await interaction.followup.send(embed=_server_init_embed(result), ephemeral=True)
+        for embed in _server_init_rectification_embeds(result):
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     @require_manage_guild()
     @app_commands.command(
@@ -242,56 +201,9 @@ class ServerCog(
         description="Remove hub categories/channels/roles (keeps #rules and #moderator-only)",
     )
     async def uninit_server(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        response = DeferredEphemeralResponse(interaction)
-        guild = interaction.guild
-        if guild is None or guild.id != self.bot.settings.guild_id:
-            await response.send(render_text("central_guild_only"), ephemeral=True)
-            return
-
-        bot_member = guild.me
-        if bot_member is None:
-            await response.send(render_text("bot_member_unavailable"), ephemeral=True)
-            return
-
-        async def _run() -> None:
-            try:
-                await response.send(render_text("server_uninit_started"), ephemeral=True)
-                result = await uninitialize_guild(
-                    guild,
-                    bot_member,
-                    access_role_name=self.bot.settings.network_access_role_name,
-                    operator_role_name=self.bot.settings.network_operator_role_name,
-                )
-                context = self.bot.bot_context
-                if context is not None:
-                    try:
-                        data_result = await reset_hub_layout_data(context, guild.id)
-                        note = data_result.summary_note()
-                        if note is not None:
-                            result.notes.append(note)
-                    except Exception:
-                        logger.exception("Hub database reset failed during server uninit")
-                        result.notes.append(
-                            "Could not clear hub database (networks/clients) — check bot logs."
-                        )
-                await response.send(
-                    embed=_server_uninit_embed(result),
-                    ephemeral=True,
-                )
-            except Exception:
-                logger.exception("Server uninit failed unexpectedly")
-                await response.send(
-                    embed=render_embed(
-                        "server_uninit_failed",
-                        description="An unexpected error occurred. Check bot logs.",
-                    ),
-                    ephemeral=True,
-                )
-            finally:
-                await response.ensure_sent()
-
-        asyncio.create_task(_run())
+        result = await self._run(interaction, "server.uninit")
+        if isinstance(result, GuildUninitResult):
+            await interaction.followup.send(embed=_server_uninit_embed(result), ephemeral=True)
 
     @require_manage_guild()
     @app_commands.command(
@@ -299,60 +211,21 @@ class ServerCog(
         description="Refresh the join guide in #join-the-network",
     )
     async def sync_join_guide(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if guild is None or guild.id != self.bot.settings.guild_id:
-            await interaction.followup.send(render_text("central_guild_only"), ephemeral=True)
+        value = await self._run(interaction, "server.sync_join_guide")
+        if not isinstance(value, tuple):
             return
-
-        bot_member = guild.me
-        if bot_member is None:
-            await interaction.followup.send(
-                render_text("bot_member_unavailable_short"), ephemeral=True
-            )
-            return
-
-        context = self._context()
-        channel = resolve_join_the_network_channel(guild)
-        if channel is None:
-            await interaction.followup.send(render_text("join_channel_missing"), ephemeral=True)
-            return
-
-        view_registry = PersistentViewRegistry(self.bot)
-        join_view = view_registry.register_join_network_view()
-        result = await sync_hub_join_sticky(
-            guild,
-            bot_member,
-            channel,
-            join_view,
-            get_setting=context.store.settings.get,
-            set_setting=context.store.settings.set,
-            wipe_channel=True,
-        )
+        result, channel = value
         if not result.success:
-            await interaction.followup.send(
-                embed=render_embed(
-                    "sync_join_guide_failed",
-                    description=result.reason or "Unknown error",
-                ),
-                ephemeral=True,
-            )
+            await interaction.followup.send(result.reason or "Unknown error", ephemeral=True)
             return
-
-        message_url = result.message.jump_url if result.message is not None else ""
         await interaction.followup.send(
             embed=render_embed(
                 "sync_join_guide_success",
                 channel_mention=channel.mention,
-                message_url=message_url,
+                message_url=result.message.jump_url if result.message is not None else "",
             ),
             ephemeral=True,
         )
-
-    def _context(self) -> BotContext:
-        if self.bot.bot_context is None:
-            raise RuntimeError("Bot context is not initialized")
-        return self.bot.bot_context
 
 
 async def setup(bot: NetworkRelayBot) -> None:

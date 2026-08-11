@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from bot.constants import SCHEMA_VERSION
-from bot.db.connection import Database
-from bot.db.migrations import count_networks, count_profiles, run_migrations
+from bot.core.database.connection import Database
+from bot.core.database.migrations import count_networks, count_profiles, run_migrations
 
 
 @pytest.mark.asyncio
