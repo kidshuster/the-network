@@ -5,7 +5,7 @@ from typing import Any
 import discord
 
 from bot.app.discord.errors import respond_to_error
-from bot.app.discord.responses import defer_ephemeral
+from bot.app.discord.responses import DeferredResponse, defer_ephemeral
 from bot.app.widgets.errors import TemplateRenderError
 from bot.contracts.widgets import (
     DismissMessage,
@@ -14,6 +14,16 @@ from bot.contracts.widgets import (
     RecipeHandler,
 )
 from bot.errors import UserFacingError
+
+# Must keep the interaction undeferred so ``response.send_modal`` can run.
+_MODAL_OPEN_RECIPES = frozenset(
+    {
+        "request.join.open",
+        "network.create.open",
+        "network.delete.open",
+        "client.edit.open",
+    }
+)
 
 
 class RenderedView(discord.ui.View):
@@ -66,11 +76,18 @@ async def handle_handler(
     *,
     submitted: dict[str, Any] | None = None,
 ) -> None:
+    response: DeferredResponse | None = None
+    if handler.recipe not in _MODAL_OPEN_RECIPES:
+        if interaction.response.is_done():
+            response = DeferredResponse(interaction, ephemeral=True)
+        else:
+            response = await defer_ephemeral(interaction)
+
     try:
         payload = _interaction_payload(interaction, handler, submitted)
         result = await bot.recipe_registry.run(handler.recipe, **payload)
     except Exception as error:
-        await _handle_error(bot, interaction, error, handler.recipe)
+        await _handle_error(bot, interaction, error, handler.recipe, response=response)
         return
 
     if isinstance(result, DismissMessage):
@@ -82,15 +99,14 @@ async def handle_handler(
     if isinstance(result, OpenEphemeralView):
         await _open_ephemeral_view(bot, interaction, result)
         return
-    if result is None and interaction.response.is_done():
+    if result is None:
         return
 
-    if interaction.response.is_done():
-        from bot.app.discord.responses import DeferredResponse
-
-        response = DeferredResponse(interaction, ephemeral=True)
-    else:
-        response = await defer_ephemeral(interaction)
+    if response is None:
+        if interaction.response.is_done():
+            response = DeferredResponse(interaction, ephemeral=True)
+        else:
+            response = await defer_ephemeral(interaction)
     try:
         await _present(bot, interaction, response, handler.recipe, result)
     except Exception as error:
@@ -99,14 +115,15 @@ async def handle_handler(
 
 async def _dismiss(interaction: discord.Interaction, content: str) -> None:
     if interaction.message is not None:
-        edit = (
-            interaction.edit_original_response
-            if interaction.response.is_done()
-            else interaction.response.edit_message
-        )
-        await edit(content=content, view=None)
-    elif not interaction.response.is_done():
+        try:
+            await interaction.message.edit(content=content, view=None)
+            return
+        except discord.HTTPException:
+            pass
+    if not interaction.response.is_done():
         await interaction.response.send_message(content, ephemeral=True)
+        return
+    await interaction.followup.send(content, ephemeral=True)
 
 
 async def _open_modal(bot: Any, interaction: discord.Interaction, spec: OpenModal) -> None:
@@ -160,11 +177,13 @@ async def _handle_error(
         if not interaction.response.is_done():
             await interaction.response.send_message(public.message, ephemeral=True)
             return
-        response = await defer_ephemeral(interaction)
-        await response.send(content=public.message)
+        await DeferredResponse(interaction, ephemeral=True).send(content=public.message)
         return
     if response is None:
-        response = await defer_ephemeral(interaction)
+        if interaction.response.is_done():
+            response = DeferredResponse(interaction, ephemeral=True)
+        else:
+            response = await defer_ephemeral(interaction)
     await respond_to_error(bot, interaction, response, error, operation=operation)
 
 
