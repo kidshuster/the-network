@@ -166,6 +166,7 @@ def test_date_parser_is_called_directly_not_as_recipe() -> None:
 async def test_blacklist_recipe_reconciles_only_allowed_clients() -> None:
     repo = MagicMock()
     repo.get_subscription_by_id = AsyncMock(return_value=SimpleNamespace(client_id=1, network_id=9))
+    repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=1, client_role_id=7))
     repo.list_subscriptions_by_network = AsyncMock(
         return_value=[
             SimpleNamespace(client_id=1),
@@ -176,13 +177,23 @@ async def test_blacklist_recipe_reconciles_only_allowed_clients() -> None:
     repo.list_blacklisted_client_ids = AsyncMock(return_value=[2])
     repo.add_blacklist = AsyncMock()
     repo.remove_blacklist = AsyncMock()
-    core = SimpleNamespace(store=SimpleNamespace(clients=repo))
+    networks = MagicMock()
+    networks.get_by_id = AsyncMock(return_value=SimpleNamespace(id=9, key="alpha"))
+    core = SimpleNamespace(store=SimpleNamespace(clients=repo, networks=networks))
     registry = build_recipe_registry(_bot(core=core))
 
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    guild.get_role = MagicMock(return_value=MagicMock())
+    member = MagicMock(spec=discord.Member)
+    member.guild_permissions = SimpleNamespace(manage_guild=True)
+    member.roles = [guild.get_role.return_value]
     count = await registry.run(
         "blacklist.replace",
         subscription_id=4,
         selected_client_ids=["3", "999"],
+        guild=guild,
+        member=member,
     )
 
     assert count == 1
@@ -196,11 +207,18 @@ async def test_blacklist_recipe_hides_missing_record_handling() -> None:
     core = SimpleNamespace(store=SimpleNamespace(clients=repo))
     registry = build_recipe_registry(_bot(core=core))
 
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 100
+    member = MagicMock(spec=discord.Member)
+    member.guild_permissions = SimpleNamespace(manage_guild=True)
+    member.roles = []
     with pytest.raises(RecipeRegistryError, match="blacklist.replace") as raised:
         await registry.run(
             "blacklist.replace",
             subscription_id=4,
             selected_client_ids=[],
+            guild=guild,
+            member=member,
         )
     from bot.errors import UserFacingError
 
@@ -247,12 +265,15 @@ async def test_network_create_recipe_owns_complete_operation(
     guild.id = 100
     views = MagicMock()
 
+    moderator = MagicMock(spec=discord.Member)
+    moderator.guild_permissions = SimpleNamespace(manage_guild=True)
     result = await registry.run(
         "network.create",
         guild=guild,
         key="alpha",
         display_name="Alpha",
         view_registry=views,
+        moderator=moderator,
     )
 
     assert result == (network, 2, 3)
@@ -272,6 +293,8 @@ async def test_network_create_recipe_stops_before_mutation_for_duplicate() -> No
 
     guild = MagicMock(spec=discord.Guild)
     guild.id = 100
+    moderator = MagicMock(spec=discord.Member)
+    moderator.guild_permissions = SimpleNamespace(manage_guild=True)
     with pytest.raises(RecipeRegistryError, match="network.create") as raised:
         await registry.run(
             "network.create",
@@ -279,6 +302,7 @@ async def test_network_create_recipe_stops_before_mutation_for_duplicate() -> No
             key="alpha",
             display_name="Alpha",
             view_registry=MagicMock(),
+            moderator=moderator,
         )
     networks.create.assert_not_awaited()
     assert raised.value.__cause__ is not None
@@ -305,11 +329,14 @@ async def test_network_delete_recipe_refreshes_state_and_profiles(
     guild = MagicMock(spec=discord.Guild)
     guild.id = 100
 
+    moderator = MagicMock(spec=discord.Member)
+    moderator.guild_permissions = SimpleNamespace(manage_guild=True)
     result = await registry.run(
         "network.delete",
         guild=guild,
         key="alpha",
         view_registry=MagicMock(),
+        moderator=moderator,
     )
 
     assert result is network

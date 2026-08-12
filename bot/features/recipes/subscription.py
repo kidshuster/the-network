@@ -10,7 +10,14 @@ from bot.contracts.recipes import RecipeContext, recipe
 from bot.contracts.widgets import OpenEphemeralView, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.templates import render_text
 from bot.errors import UserFacingError
-from bot.features.widgets.guards import require_client_member, require_hub_guild
+from bot.features.widgets.guards import (
+    interaction_actor,
+    interaction_bot_member,
+    interaction_guild,
+    interaction_view_registry,
+    require_client_member,
+    require_hub_guild,
+)
 
 
 def _fail(code: str, **values: Any) -> UserFacingError:
@@ -21,7 +28,7 @@ async def _resolve(
     recipe_context: RecipeContext,
     *,
     guild: discord.Guild,
-    member: discord.abc.User | None,
+    member: discord.abc.User,
     subscription_id: int | None = None,
     client_id: int | None = None,
     network_key: str | None = None,
@@ -29,7 +36,6 @@ async def _resolve(
 ) -> tuple[Any, Any, Any | None]:
     require_hub_guild(recipe_context.bot, guild)
     repo = recipe_context.core.store.clients
-    networks = recipe_context.core.store.networks
     subscription = network = None
     client = None
     if subscription_id is not None:
@@ -38,19 +44,17 @@ async def _resolve(
             raise _fail("subscription_not_found")
         client = await repo.get_by_id(subscription.client_id)
         if subscription.network_id is not None:
-            network = await networks.get_by_id(subscription.network_id)
+            network = await recipe_context.core.store.networks.get_by_id(subscription.network_id)
     if client is None and client_id is not None:
         client = await repo.get_by_id(client_id)
     if client is None:
         raise _fail("client_not_found")
-    if member is not None:
-        require_client_member(guild, member, client, popup=popup, allow_non_member=True)
+    require_client_member(guild, member, client, popup=popup, allow_non_member=True)
     if network is None and network_key is not None:
-        network = await networks.get_by_key(network_key)
+        network = await recipe_context.core.store.networks.get_by_key(network_key)
         if network is None:
             raise _fail("network_not_found", network_key=network_key)
     return client, subscription, network
-
 
 @recipe("subscription.webhook_updated")
 async def webhook_updated(
@@ -77,17 +81,27 @@ async def replace_blacklist(
     *,
     subscription_id: int,
     selected_client_ids: list[str] | tuple[str, ...] | set[str],
+    interaction: discord.Interaction | None = None,
     guild: discord.Guild | None = None,
     member: discord.abc.User | None = None,
+    select_values: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> int:
-    if guild is not None:
-        await _resolve(
-            recipe_context,
-            guild=guild,
-            member=member,
-            subscription_id=subscription_id,
-            popup="client_role_required_blacklist",
-        )
+    del select_values
+    if interaction is not None:
+        guild = interaction_guild(recipe_context.bot, interaction)
+        member = interaction_actor(interaction)
+    else:
+        guild = require_hub_guild(recipe_context.bot, guild)
+        from bot.features.widgets.guards import require_actor
+
+        member = require_actor(member)
+    await _resolve(
+        recipe_context,
+        guild=guild,
+        member=member,
+        subscription_id=subscription_id,
+        popup="client_role_required_blacklist",
+    )
     repo = recipe_context.core.store.clients
     subscription = await repo.get_subscription_by_id(subscription_id)
     if subscription is None or subscription.network_id is None:
@@ -110,17 +124,17 @@ async def replace_blacklist(
 async def create_subscription(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    view_registry: Any,
+    interaction: discord.Interaction,
     client_id: int,
     network_key: str,
-    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.channels.stickies.subscription import sync_subscription_setup
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.subscription import subscribe_client
 
+    guild = interaction_guild(recipe_context.bot, interaction)
+    member = interaction_actor(interaction)
+    view_registry = interaction_view_registry(interaction)
     client, _, network = await _resolve(
         recipe_context,
         guild=guild,
@@ -131,7 +145,7 @@ async def create_subscription(
     assert network is not None
     result = await subscribe_client(
         guild,
-        bot_member,
+        interaction_bot_member(guild),
         client=client,
         network_id=network.id,
         network_key=network.key,
@@ -167,16 +181,16 @@ async def create_subscription(
 async def leave_subscription(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
-    bot_member: discord.Member,
-    view_registry: Any,
+    interaction: discord.Interaction,
     subscription_id: int,
     network_key: str = "",
-    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.subscription import unsubscribe_client
 
+    guild = interaction_guild(recipe_context.bot, interaction)
+    member = interaction_actor(interaction)
+    view_registry = interaction_view_registry(interaction)
     client, subscription, network = await _resolve(
         recipe_context,
         guild=guild,
@@ -189,7 +203,7 @@ async def leave_subscription(
         raise _fail("subscription_not_found")
     result = await unsubscribe_client(
         guild,
-        bot_member,
+        interaction_bot_member(guild),
         client=client,
         subscription=subscription,
         network_key=(network.key if network is not None else network_key),
@@ -213,14 +227,15 @@ async def leave_subscription(
 async def confirm_subscription_connected(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
-    view_registry: Any,
+    interaction: discord.Interaction,
     subscription_id: int,
     network_key: str | None = None,
-    member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.channels.stickies.subscription import sync_subscription_setup
 
+    guild = interaction_guild(recipe_context.bot, interaction)
+    member = interaction_actor(interaction)
+    view_registry = interaction_view_registry(interaction)
     client, subscription, network = await _resolve(
         recipe_context,
         guild=guild,
@@ -249,10 +264,11 @@ async def confirm_subscription_connected(
 async def open_blacklist(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
+    interaction: discord.Interaction,
     subscription_id: int,
-    member: discord.abc.User | None = None,
 ) -> OpenEphemeralView:
+    guild = interaction_guild(recipe_context.bot, interaction)
+    member = interaction_actor(interaction)
     _client, subscription, _network = await _resolve(
         recipe_context,
         guild=guild,
@@ -295,7 +311,7 @@ async def open_blacklist(
                         "blacklist.replace", subscription_id=subscription_id
                     ),
                     min_values=0,
-                    max_values=max(len(options), 1),
+                    max_values=len(options),
                 ),
             )
         },

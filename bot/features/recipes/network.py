@@ -9,27 +9,61 @@ import discord
 from bot.contracts.recipes import RecipeContext, recipe
 from bot.contracts.widgets import OpenModal, recipe_handler
 from bot.core.models.errors import NetworkValidationError
-from bot.features.widgets.guards import require_hub_guild, require_manage_guild
+from bot.core.templates import render_text
+from bot.errors import UserFacingError
+from bot.features.widgets.guards import (
+    interaction_actor,
+    interaction_guild,
+    interaction_view_registry,
+    require_actor,
+    require_hub_guild,
+    require_manage_guild,
+)
+
+
+def _network_context(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction | None,
+    guild: discord.Guild | None,
+    view_registry: Any,
+    moderator: discord.abc.User | None,
+) -> tuple[discord.Guild, Any, discord.abc.User]:
+    if interaction is not None:
+        guild = interaction_guild(recipe_context.bot, interaction)
+        moderator = interaction_actor(interaction)
+        view_registry = interaction_view_registry(interaction)
+    else:
+        guild = require_hub_guild(recipe_context.bot, guild)
+        if view_registry is None:
+            raise UserFacingError(render_text("bot_not_ready"), code="bot_not_ready")
+        moderator = require_actor(moderator)
+    require_manage_guild(moderator)
+    return guild, view_registry, moderator
 
 
 @recipe("network.create")
 async def create_network(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
     key: str,
     display_name: str,
-    view_registry: Any,
-    moderator: discord.Member | None = None,
+    interaction: discord.Interaction | None = None,
+    guild: discord.Guild | None = None,
+    view_registry: Any = None,
+    moderator: discord.abc.User | None = None,
 ) -> tuple[Any, int, int]:
     from bot.features.channels.stickies.admin import refresh_network_admin_sticky_from_settings
     from bot.features.recipes.hub.clients.profile_sync import refresh_all_client_profiles
     from bot.features.recipes.hub.clients.subscription import resync_subscriptions_for_network
-    from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
-    require_hub_guild(recipe_context.bot, guild)
-    if moderator is not None:
-        require_manage_guild(moderator)
+    guild, view_registry, _actor = _network_context(
+        recipe_context,
+        interaction=interaction,
+        guild=guild,
+        view_registry=view_registry,
+        moderator=moderator,
+    )
     core = recipe_context.core
     existing = await core.store.networks.get_by_key(key)
     if existing is not None:
@@ -61,18 +95,22 @@ async def create_network(
 async def delete_network(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
     key: str,
-    view_registry: Any,
-    moderator: discord.Member | None = None,
+    interaction: discord.Interaction | None = None,
+    guild: discord.Guild | None = None,
+    view_registry: Any = None,
+    moderator: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.channels.stickies.admin import refresh_network_admin_sticky_from_settings
     from bot.features.recipes.hub.clients.profile_sync import refresh_all_client_profiles
-    from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
-    require_hub_guild(recipe_context.bot, guild)
-    if moderator is not None:
-        require_manage_guild(moderator)
+    guild, view_registry, _actor = _network_context(
+        recipe_context,
+        interaction=interaction,
+        guild=guild,
+        view_registry=view_registry,
+        moderator=moderator,
+    )
     core = recipe_context.core
     network = await core.store.networks.get_by_key(key)
     if network is None:
@@ -94,14 +132,10 @@ async def delete_network(
 async def open_create_network(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild | None = None,
-    moderator: discord.Member | None = None,
-    member: discord.Member | None = None,
+    interaction: discord.Interaction,
 ) -> OpenModal:
-    require_hub_guild(recipe_context.bot, guild)
-    actor = moderator or member
-    if actor is not None:
-        require_manage_guild(actor)
+    interaction_guild(recipe_context.bot, interaction)
+    require_manage_guild(interaction_actor(interaction))
     return OpenModal(
         template_id="create_network",
         submit=recipe_handler("network.create"),
@@ -112,14 +146,10 @@ async def open_create_network(
 async def open_delete_network(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild | None = None,
-    moderator: discord.Member | None = None,
-    member: discord.Member | None = None,
+    interaction: discord.Interaction,
 ) -> OpenModal:
-    require_hub_guild(recipe_context.bot, guild)
-    actor = moderator or member
-    if actor is not None:
-        require_manage_guild(actor)
+    interaction_guild(recipe_context.bot, interaction)
+    require_manage_guild(interaction_actor(interaction))
     return OpenModal(
         template_id="delete_network",
         submit=recipe_handler("network.delete"),

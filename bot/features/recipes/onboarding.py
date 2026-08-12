@@ -7,28 +7,31 @@ import discord
 from bot.contracts.recipes import RecipeContext, recipe
 from bot.contracts.widgets import OpenModal, recipe_handler
 from bot.core.models.profile_image import ProfileImageAttachment
-from bot.core.views import ViewRegistry
 from bot.errors import UserFacingError
 from bot.features.recipes.hub.onboarding.service import (
     ReviewRequestResult,
     ServerRequestService,
     SubmitRequestResult,
 )
-from bot.features.widgets.guards import require_hub_guild, require_manage_guild
+from bot.features.widgets.guards import (
+    interaction_actor,
+    interaction_guild,
+    interaction_view_registry,
+    require_manage_guild,
+)
 
 
 @recipe("request.submit")
 async def submit_request(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild,
-    requester: discord.abc.User,
+    interaction: discord.Interaction,
     server_name: str,
-    profile_image: ProfileImageAttachment,
-    view_registry: ViewRegistry,
+    profile_image: ProfileImageAttachment | discord.Attachment | None = None,
     display_name: str | None = None,
 ) -> SubmitRequestResult:
-    require_hub_guild(recipe_context.bot, guild)
+    guild = interaction_guild(recipe_context.bot, interaction)
+    requester = interaction_actor(interaction)
     if profile_image is None:
         raise UserFacingError(
             "A profile image is required.",
@@ -38,7 +41,7 @@ async def submit_request(
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
-        view_registry=view_registry,
+        view_registry=interaction_view_registry(interaction),
     ).submit_request(
         guild,
         requester=requester,
@@ -52,21 +55,20 @@ async def submit_request(
 async def approve_request(
     recipe_context: RecipeContext,
     *,
-    guild: discord.Guild | None,
+    interaction: discord.Interaction,
     request_id: int,
-    moderator: discord.Member,
-    view_registry: ViewRegistry,
 ) -> ReviewRequestResult:
-    require_hub_guild(recipe_context.bot, guild)
+    guild = interaction_guild(recipe_context.bot, interaction)
+    moderator = interaction_actor(interaction)
     require_manage_guild(moderator)
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
-        view_registry=view_registry,
+        view_registry=interaction_view_registry(interaction),
     ).approve_request(
         guild,
         request_id=request_id,
-        moderator=moderator,
+        moderator=moderator,  # type: ignore[arg-type]
     )
 
 
@@ -74,21 +76,19 @@ async def approve_request(
 async def deny_request(
     recipe_context: RecipeContext,
     *,
+    interaction: discord.Interaction,
     request_id: int,
-    moderator: discord.Member,
-    view_registry: ViewRegistry,
-    guild: discord.Guild | None = None,
 ) -> ReviewRequestResult:
-    if guild is not None:
-        require_hub_guild(recipe_context.bot, guild)
+    interaction_guild(recipe_context.bot, interaction)
+    moderator = interaction_actor(interaction)
     require_manage_guild(moderator)
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
-        view_registry=view_registry,
+        view_registry=interaction_view_registry(interaction),
     ).deny_request(
         request_id=request_id,
-        moderator=moderator,
+        moderator=moderator,  # type: ignore[arg-type]
     )
 
 
@@ -98,7 +98,8 @@ async def open_join_request(
     *,
     interaction: discord.Interaction,
 ) -> OpenModal:
-    del recipe_context, interaction
+    del recipe_context
+    interaction_actor(interaction)
     return OpenModal(
         template_id="join_network",
         submit=recipe_handler("request.submit"),

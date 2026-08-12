@@ -18,9 +18,17 @@ _STYLE = {
     "danger": discord.ButtonStyle.danger,
     "link": discord.ButtonStyle.link,
 }
+_BUTTON_LABEL_MAX = 80
+_SELECT_LABEL_MAX = 100
+_SELECT_PLACEHOLDER_MAX = 150
+_SELECT_DESC_MAX = 100
+_VIEW_CHILD_MAX = 25
+_SELECT_OPTIONS_MAX = 25
+
 
 def _err(detail: str, *, template_id: str, element_id: str | None = None) -> TemplateRenderError:
     return TemplateRenderError(detail, template_id=template_id, element_id=element_id)
+
 
 def _sub(text: str | None, values: Mapping[str, Any], *, tid: str, field: str) -> str | None:
     if text is None:
@@ -31,6 +39,7 @@ def _sub(text: str | None, values: Mapping[str, Any], *, tid: str, field: str) -
     if "{" in result and "}" in result:
         raise _err(f"unresolved placeholder in {field}", template_id=tid, element_id=field)
     return result
+
 
 def _validate(registry: Any, handler: RecipeHandler, *, tid: str, element_id: str) -> None:
     if not registry.has(handler.recipe):
@@ -44,6 +53,17 @@ def _validate(registry: Any, handler: RecipeHandler, *, tid: str, element_id: st
     except TemplateRenderError as exc:
         raise _err(str(exc), template_id=tid, element_id=element_id) from exc
 
+
+def _require_len(value: str, *, limit: int, tid: str, element_id: str, field: str) -> str:
+    if len(value) > limit:
+        raise _err(
+            f"{field} length {len(value)} exceeds Discord limit {limit}",
+            template_id=tid,
+            element_id=element_id,
+        )
+    return value
+
+
 def _button_spec(item: ButtonSpec, values: Mapping[str, Any], tid: str) -> ButtonSpec:
     return ButtonSpec(
         tag=item.tag,
@@ -55,6 +75,7 @@ def _button_spec(item: ButtonSpec, values: Mapping[str, Any], tid: str) -> Butto
         emoji=item.emoji,
     )
 
+
 class ViewDraft:
     def __init__(self, template_id: str, values: Mapping[str, Any] | None = None) -> None:
         self.template_id = template_id
@@ -62,6 +83,7 @@ class ViewDraft:
         self._bindings: dict[str, RecipeHandler] = {}
         self._slots: dict[str, tuple[ButtonSpec | SelectSpec, ...]] = {}
         self._spec = load_view(template_id)
+        self._result: discord.ui.View | None = None
 
     def bind(self, tag: str, handler: RecipeHandler) -> ViewDraft:
         if tag in self._bindings:
@@ -77,16 +99,11 @@ class ViewDraft:
 
     def build(self, bot: Any) -> discord.ui.View:
         tid, reg, comps = self.template_id, bot.recipe_registry, self._spec.components
-        static = {
-            c.tag
-            for c in comps
-            if isinstance(c, StaticButtonSpec) and c.tag and not c.disabled
-        }
-        all_static = {c.tag for c in comps if isinstance(c, StaticButtonSpec) and c.tag}
+        static = {c.tag for c in comps if isinstance(c, StaticButtonSpec) and c.tag}
         slots = {c.slot for c in comps if isinstance(c, SlotSpec)}
         for label, bad in (
             ("unbound tags", static - set(self._bindings)),
-            ("unknown tags", set(self._bindings) - all_static),
+            ("unknown tags", set(self._bindings) - static),
             ("missing slots", slots - set(self._slots)),
             ("unknown slots", set(self._slots) - slots),
         ):
@@ -98,16 +115,13 @@ class ViewDraft:
             for item in items:
                 item_handler = item.handler
                 eid = getattr(item, "tag", slot)
-                if item_handler is None and not (
-                    isinstance(item, ButtonSpec) and item.disabled
-                ):
+                if item_handler is None:
                     raise _err(
                         "dynamic interactable missing handler",
                         template_id=tid,
                         element_id=eid,
                     )
-                if item_handler is not None:
-                    _validate(reg, item_handler, tid=tid, element_id=eid)
+                _validate(reg, item_handler, tid=tid, element_id=eid)
 
         from bot.app.widgets.dispatch import RenderedView
 
@@ -116,13 +130,13 @@ class ViewDraft:
             if isinstance(component, SlotSpec):
                 for item in self._slots[component.slot]:
                     if isinstance(item, SelectSpec):
-                        _add_select(rendered, item)
+                        _add_select(rendered, item, tid=tid)
                     else:
-                        _add_button(rendered, _button_spec(item, self._values, tid))
+                        _add_button(rendered, _button_spec(item, self._values, tid), tid=tid)
                 continue
             bound_tag = component.tag
             assert bound_tag is not None
-            bound = self._bindings.get(bound_tag)
+            bound = self._bindings[bound_tag]
             _add_button(
                 rendered,
                 ButtonSpec(
@@ -133,14 +147,28 @@ class ViewDraft:
                     or "",
                     style=component.style,  # type: ignore[arg-type]
                     handler=bound,
-                    disabled=component.disabled or bound is None,
+                    disabled=component.disabled,
                     row=component.row,
                     emoji=_sub(component.emoji, self._values, tid=tid, field=f"{bound_tag}.emoji"),
                 ),
+                tid=tid,
             )
-        if len(rendered.children) > 25:
+        if len(rendered.children) > _VIEW_CHILD_MAX:
             raise _err("view exceeds Discord component limit", template_id=tid)
+        self._result = rendered
         return rendered
+
+    def __enter__(self) -> ViewDraft:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        # Convenience only; callers must still call build() for Discord objects.
+        return None
+
+    @property
+    def result(self) -> discord.ui.View | None:
+        return self._result
+
 
 class ModalDraft:
     def __init__(self, template_id: str, values: Mapping[str, Any] | None = None) -> None:
@@ -149,6 +177,7 @@ class ModalDraft:
         self._defaults: dict[str, str] = {}
         self._submit: RecipeHandler | None = None
         self._spec = load_modal(template_id)
+        self._result: discord.ui.Modal | None = None
 
     def defaults(self, **values: str) -> ModalDraft:
         self._defaults.update({key: str(value) for key, value in values.items()})
@@ -202,54 +231,100 @@ class ModalDraft:
             rendered.field_ids.append(field.id)
             rendered.add_item(label)
             rendered._labels[field.id] = label
+        self._result = rendered
         return rendered
+
+    @property
+    def result(self) -> discord.ui.Modal | None:
+        return self._result
+
 
 def view(template_id: str, **values: Any) -> ViewDraft:
     return ViewDraft(template_id, values)
 
+
 def modal(template_id: str, **values: Any) -> ModalDraft:
     return ModalDraft(template_id, values)
 
-def _add_button(target: Any, spec: ButtonSpec) -> None:
+
+def _add_button(target: Any, spec: ButtonSpec, *, tid: str) -> None:
+    if spec.handler is None:
+        raise _err("button missing handler", template_id=tid, element_id=spec.tag)
+    _require_len(
+        spec.label, limit=_BUTTON_LABEL_MAX, tid=tid, element_id=spec.tag, field="label"
+    )
     kwargs: dict[str, Any] = {
         "label": spec.label,
         "style": _STYLE[spec.style],
         "disabled": spec.disabled,
+        "custom_id": custom_id.encode(spec.handler),
     }
     if spec.row is not None:
         kwargs["row"] = spec.row
     if spec.emoji is not None:
         kwargs["emoji"] = spec.emoji
-    active = spec.handler is not None and not spec.disabled
-    if active:
-        kwargs["custom_id"] = custom_id.encode(spec.handler)  # type: ignore[arg-type]
     button: discord.ui.Button[Any] = discord.ui.Button(**kwargs)
-    if active:
-        handler = spec.handler
+    handler = spec.handler
 
-        async def _callback(interaction: discord.Interaction) -> None:
-            from bot.app.widgets.dispatch import handle_handler
+    async def _callback(interaction: discord.Interaction) -> None:
+        from bot.app.widgets.dispatch import handle_handler
 
-            await handle_handler(target.bot, interaction, handler)  # type: ignore[arg-type]
+        await handle_handler(target.bot, interaction, handler)
 
-        button.callback = _callback  # type: ignore[method-assign]
+    button.callback = _callback  # type: ignore[method-assign]
     target.add_item(button)
 
-def _add_select(target: Any, spec: SelectSpec) -> None:
-    options = [
-        discord.SelectOption(
-            label=option.label[:100],
-            value=option.value,
-            description=(option.description[:100] if option.description else None),
-            emoji=option.emoji,
-            default=option.default,
+
+def _add_select(target: Any, spec: SelectSpec, *, tid: str) -> None:
+    if len(spec.options) > _SELECT_OPTIONS_MAX:
+        raise _err(
+            f"select options {len(spec.options)} exceed Discord limit {_SELECT_OPTIONS_MAX}",
+            template_id=tid,
+            element_id=spec.tag,
         )
-        for option in spec.options
-    ][:25]
+    _require_len(
+        spec.placeholder,
+        limit=_SELECT_PLACEHOLDER_MAX,
+        tid=tid,
+        element_id=spec.tag,
+        field="placeholder",
+    )
+    if spec.max_values > len(spec.options) and len(spec.options) > 0:
+        raise _err(
+            f"select max_values {spec.max_values} exceeds option count {len(spec.options)}",
+            template_id=tid,
+            element_id=spec.tag,
+        )
+    options = []
+    for option in spec.options:
+        _require_len(
+            option.label,
+            limit=_SELECT_LABEL_MAX,
+            tid=tid,
+            element_id=spec.tag,
+            field="option.label",
+        )
+        if option.description is not None:
+            _require_len(
+                option.description,
+                limit=_SELECT_DESC_MAX,
+                tid=tid,
+                element_id=spec.tag,
+                field="option.description",
+            )
+        options.append(
+            discord.SelectOption(
+                label=option.label,
+                value=option.value,
+                description=option.description,
+                emoji=option.emoji,
+                default=option.default,
+            )
+        )
     select: discord.ui.Select[Any] = discord.ui.Select(
-        placeholder=spec.placeholder[:150],
+        placeholder=spec.placeholder,
         min_values=spec.min_values,
-        max_values=min(spec.max_values, max(len(options), 1)),
+        max_values=spec.max_values,
         options=options,
         custom_id=custom_id.encode(spec.handler),
         row=spec.row,

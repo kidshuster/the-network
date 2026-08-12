@@ -183,8 +183,23 @@ validated behavior.
 - [x] Malformed-state server-init stress passes.
 - [x] Persistent interaction tests pass.
 - [x] Install-bundle validation passes.
-- [x] Docker build passes.
-- [x] GitHub Actions passes after push.
+- [ ] Docker build passes.
+- [ ] GitHub Actions passes after push.
 - [x] Final report lists remaining widget modules and their LOC.
 - [x] Final report lists every template tag and attached recipe.
 - [x] Final report lists deleted interpreter/policy/compatibility code.
+
+## Post-c1bdc95 hardening (plan.md)
+
+Verified by executable tests in `tests/unit/test_widget_hardening.py`,
+`tests/unit/test_ui_custom_ids.py`, `tests/unit/test_recipe_registry.py`, and related handler tests:
+
+- [x] Disabled static/dynamic interactables require registered recipe handlers.
+- [x] `RecipeRegistry.run` rejects unexpected inputs (no silent filter).
+- [x] Submitted modal/select keys colliding with persistent handler args are rejected.
+- [x] Migration selects/buttons use registered `ui.migrate.*` recipes (no callback overrides).
+- [x] Typed custom-ID round trips for `str` / `int` / `bool` / `None`.
+- [x] Discord select label limit rejected at boundary (100 OK, 101 fails).
+- [x] Mutation recipes require an authorized actor (missing/unauthorized covered).
+- [x] Presenter failures propagate and do not send a misleading `Done.` response.
+- [x] Legacy decode isolated in `bot/app/widgets/custom_id_legacy.py` with removal condition.

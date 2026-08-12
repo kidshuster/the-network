@@ -84,20 +84,34 @@ class RecipeRegistry:
         if name in stack:
             raise RecipeRegistryError("Recursive recipe call: " + " -> ".join((*stack, name)))
         signature = inspect.signature(function)
+        accepts_kwargs = any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in signature.parameters.values()
+        )
         allowed = {
             key
             for key, param in signature.parameters.items()
-            if key != "recipe_context" and param.kind
+            if key != "recipe_context"
+            and param.kind
             not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         }
-        filtered = {key: value for key, value in inputs.items() if key in allowed}
+        if not accepts_kwargs:
+            unexpected = sorted(set(inputs) - allowed)
+            if unexpected:
+                raise RecipeRegistryError(
+                    f"Unexpected inputs for {name!r}: {unexpected}",
+                    recipe=name,
+                )
         try:
-            signature.bind(RecipeContext(self._bot, self), **filtered)
+            signature.bind(RecipeContext(self._bot, self), **inputs)
         except TypeError as exc:
-            raise RecipeRegistryError(f"Invalid inputs for {name!r}: {exc}") from exc
+            raise RecipeRegistryError(
+                f"Invalid inputs for {name!r}: {exc}",
+                recipe=name,
+            ) from exc
         token = _call_stack.set((*stack, name))
         try:
-            result = await function(RecipeContext(self._bot, self), **filtered)
+            result = await function(RecipeContext(self._bot, self), **inputs)
             if getattr(result, "success", None) is False:
                 message = (
                     getattr(result, "error", None)

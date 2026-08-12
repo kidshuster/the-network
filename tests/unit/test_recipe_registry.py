@@ -68,6 +68,8 @@ async def test_registry_binds_inputs() -> None:
     assert await registry.run("test.operation", value=4) == 8
     with pytest.raises(RecipeRegistryError, match="Invalid inputs"):
         await registry.run("test.operation")
+    with pytest.raises(RecipeRegistryError, match="Unexpected inputs"):
+        await registry.run("test.operation", value=4, extra=1)
 
 
 async def test_registry_supports_nested_calls_and_rejects_cycles() -> None:

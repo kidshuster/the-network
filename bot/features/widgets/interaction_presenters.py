@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import discord
+
 from bot.contracts.recipes import RecipeContext, recipe
 from bot.core.templates import render_embed, render_text
 
@@ -56,8 +58,7 @@ async def present_network_create(
     _ctx: RecipeContext, *, response: Any, value: object, **_: Any
 ) -> None:
     if not (isinstance(value, tuple) and len(value) == 3):
-        await response.send(content="Done.")
-        return
+        raise ValueError("network.create presenter expected (network, updated, relinked)")
     network, updated, relinked = value
     await _embed(
         response,
@@ -104,7 +105,7 @@ async def present_client_delete(
     if interaction is not None and getattr(interaction, "message", None) is not None:
         try:
             await interaction.message.edit(view=None)
-        except Exception:
+        except discord.HTTPException:
             pass
 
 @recipe("present.client.toggle_timecode")

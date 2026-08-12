@@ -6,11 +6,11 @@ import discord
 
 from bot.app.discord.errors import respond_to_error
 from bot.app.discord.responses import defer_ephemeral
+from bot.app.widgets.errors import TemplateRenderError
 from bot.contracts.widgets import (
     DismissMessage,
     OpenEphemeralView,
     OpenModal,
-    Primitive,
     RecipeHandler,
 )
 from bot.errors import UserFacingError
@@ -22,6 +22,8 @@ class RenderedView(discord.ui.View):
         self.bot = bot
         self.template_id = template_id
         self.decision: dict[str, Any] | None = None
+        self.resolutions: dict[str, int] = {}
+
 
 class RenderedModal(discord.ui.Modal):
     def __init__(
@@ -41,7 +43,7 @@ class RenderedModal(discord.ui.Modal):
         self._labels: dict[str, discord.ui.Label[Any]] = {}
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        values: dict[str, Primitive] = {}
+        values: dict[str, Any] = {}
         for field_id in self.field_ids:
             label = self._labels.get(field_id)
             if label is None:
@@ -52,14 +54,8 @@ class RenderedModal(discord.ui.Modal):
                 values[field_id] = attachments[0] if attachments else None
             elif isinstance(component, discord.ui.TextInput):
                 values[field_id] = component.value.strip()
-        await handle_handler(
-            self.bot,
-            interaction,
-            RecipeHandler(
-                recipe=self.submit.recipe,
-                arguments={**dict(self.submit.arguments), **values},
-            ),
-        )
+        await handle_handler(self.bot, interaction, self.submit, submitted=values)
+
 
 async def handle_handler(
     bot: Any,
@@ -69,9 +65,8 @@ async def handle_handler(
     submitted: dict[str, Any] | None = None,
 ) -> None:
     try:
-        result = await bot.recipe_registry.run(
-            handler.recipe, **_interaction_payload(interaction, handler, submitted)
-        )
+        payload = _interaction_payload(interaction, handler, submitted)
+        result = await bot.recipe_registry.run(handler.recipe, **payload)
     except Exception as error:
         await _handle_error(bot, interaction, error, handler.recipe)
         return
@@ -99,6 +94,7 @@ async def handle_handler(
     except Exception as error:
         await _handle_error(bot, interaction, error, handler.recipe, response=response)
 
+
 async def _dismiss(interaction: discord.Interaction, content: str) -> None:
     if interaction.message is not None:
         edit = (
@@ -110,6 +106,7 @@ async def _dismiss(interaction: discord.Interaction, content: str) -> None:
     elif not interaction.response.is_done():
         await interaction.response.send_message(content, ephemeral=True)
 
+
 async def _open_modal(bot: Any, interaction: discord.Interaction, spec: OpenModal) -> None:
     draft = bot.templates_modal(spec.template_id, **dict(spec.values))
     if spec.defaults:
@@ -120,6 +117,7 @@ async def _open_modal(bot: Any, interaction: discord.Interaction, spec: OpenModa
         await interaction.followup.send("Open the modal from a fresh click.", ephemeral=True)
     else:
         await interaction.response.send_modal(built)
+
 
 async def _open_ephemeral_view(
     bot: Any,
@@ -140,6 +138,7 @@ async def _open_ephemeral_view(
         else interaction.response.send_message
     )
     await send(**kwargs)
+
 
 async def _handle_error(
     bot: Any,
@@ -166,29 +165,23 @@ async def _handle_error(
         response = await defer_ephemeral(interaction)
     await respond_to_error(bot, interaction, response, error, operation=operation)
 
+
 def _interaction_payload(
     interaction: discord.Interaction,
     handler: RecipeHandler,
     submitted: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    guild = interaction.guild
-    payload: dict[str, Any] = dict(handler.arguments)
-    if submitted:
-        payload.update(submitted)
-    payload["interaction"] = interaction
-    if guild is not None:
-        payload.setdefault("guild", guild)
-        if guild.me is not None:
-            payload.setdefault("bot_member", guild.me)
-    user = interaction.user
-    if isinstance(user, discord.Member) or (
-        hasattr(user, "roles") and hasattr(user, "guild_permissions")
-    ):
-        payload.setdefault("moderator", user)
-        payload.setdefault("member", user)
-    payload.setdefault("requester", user)
-    payload.setdefault("view_registry", interaction.client.make_view_registry())  # type: ignore[attr-defined]
-    return payload
+    persistent = dict(handler.arguments)
+    runtime = dict(submitted or {})
+    overlap = sorted(set(persistent) & set(runtime))
+    if overlap:
+        raise TemplateRenderError(
+            f"submitted keys collide with persistent handler arguments: {overlap}",
+            template_id=handler.recipe,
+            element_id=overlap[0],
+        )
+    return {**persistent, **runtime, "interaction": interaction}
+
 
 async def _present(
     bot: Any,

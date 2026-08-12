@@ -13,12 +13,24 @@ def test_action_custom_id_roundtrip() -> None:
         client_id=12,
         network_key="stingers",
     )
-    assert decode(encode(handler)) == handler
+    encoded = encode(handler)
+    assert encoded == "tn1:subscription.create:client_id=!i12:network_key=!sstingers"
+    assert decode(encoded) == handler
 
 
 def test_open_recipe_custom_id_roundtrip() -> None:
     handler = recipe_handler("request.join.open")
     assert decode(encode(handler)).recipe == "request.join.open"
+
+
+def test_bool_and_none_roundtrip() -> None:
+    handler = recipe_handler("x", on=True, off=False, missing=None, zero=0)
+    restored = decode(encode(handler))
+    assert restored.arguments["on"] is True
+    assert restored.arguments["off"] is False
+    assert restored.arguments["missing"] is None
+    assert restored.arguments["zero"] == 0
+    assert type(restored.arguments["zero"]) is int
 
 
 def test_legacy_ui_modal_custom_ids_map_to_open_recipes() -> None:
@@ -43,3 +55,9 @@ def test_legacy_profile_and_delete() -> None:
 def test_custom_id_rejects_reserved_characters() -> None:
     with pytest.raises(TemplateRenderError):
         encode(recipe_handler("x", bad="a=b"))
+
+
+def test_transitional_untyped_tn1_still_decodes_ints() -> None:
+    handler = decode("tn1:subscription.create:client_id=12:network_key=stingers")
+    assert handler.arguments["client_id"] == 12
+    assert handler.arguments["network_key"] == "stingers"

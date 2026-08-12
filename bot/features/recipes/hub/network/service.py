@@ -43,14 +43,17 @@ async def create_network(
     key: str,
     display_name: str,
     view_registry: ViewRegistry,
+    moderator: discord.abc.User | None = None,
 ) -> CreateNetworkResult:
     try:
+        actor = moderator or guild.me
         network, updated_count, relinked_count = await _registry_for(bot, context).run(
             "network.create",
             guild=guild,
             key=key,
             display_name=display_name,
             view_registry=view_registry,
+            moderator=actor,
         )
         return CreateNetworkResult(
             success=True,
@@ -82,13 +85,16 @@ async def delete_network(
     *,
     key: str,
     view_registry: ViewRegistry,
+    moderator: discord.abc.User | None = None,
 ) -> DeleteNetworkResult:
     try:
+        actor = moderator or guild.me
         network = await _registry_for(bot, context).run(
             "network.delete",
             guild=guild,
             key=key,
             view_registry=view_registry,
+            moderator=actor,
         )
         return DeleteNetworkResult(success=True, network_key=network.key)
     except RecipeBoundaryError as exc:

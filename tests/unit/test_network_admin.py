@@ -48,13 +48,13 @@ async def test_network_service_maps_recipe_outputs_to_public_result() -> None:
     assert result.network is network
     assert result.updated_profile_count == 2
     assert result.relinked_subscription_count == 3
-    registry.run.assert_awaited_once_with(
-        "network.create",
-        guild=guild,
-        key="stingers",
-        display_name="Stingers",
-        view_registry=view_registry,
-    )
+    registry.run.assert_awaited_once()
+    kwargs = registry.run.await_args.kwargs
+    assert kwargs["guild"] is guild
+    assert kwargs["key"] == "stingers"
+    assert kwargs["display_name"] == "Stingers"
+    assert kwargs["view_registry"] is view_registry
+    assert "moderator" in kwargs
 
 
 async def test_network_service_preserves_validation_message() -> None:

@@ -5,8 +5,6 @@ from typing import Any
 
 import discord
 
-from bot.app.widgets import custom_id as codec
-from bot.app.widgets.dispatch import RenderedView
 from bot.contracts.widgets import ButtonSpec, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.channels.migration import MigrationPlan
 
@@ -15,6 +13,7 @@ from bot.core.channels.migration import MigrationPlan
 class MigrationReviewDecision:
     resolutions: dict[str, int] = field(default_factory=dict)
     confirm_deletes: bool = False
+
 
 def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
     embed = discord.Embed(
@@ -38,6 +37,7 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
             inline=False,
         )
     return embed
+
 
 async def present_migration_review(
     interaction: discord.Interaction,
@@ -63,7 +63,7 @@ async def present_migration_review(
         selects.append(
             SelectSpec(
                 tag=item.resource_key,
-                placeholder=item.resource_key,
+                placeholder=item.resource_key[:150],
                 options=options,
                 handler=recipe_handler("ui.migrate.store", resource_key=item.resource_key),
             )
@@ -90,33 +90,8 @@ async def present_migration_review(
         )
         .build(bot)
     )
-    assert isinstance(built, RenderedView)
     built.decision = {}
-    resolutions: dict[str, int] = {}
-
-    for child in built.children:
-        if not isinstance(child, discord.ui.Select):
-            continue
-
-        async def _on_select(
-            interaction: discord.Interaction,
-            *,
-            select: discord.ui.Select[Any] = child,
-        ) -> None:
-            handler = codec.decode(select.custom_id or "")
-            key = str(handler.arguments.get("resource_key") or "")
-            raw: dict[str, Any] = (
-                dict(interaction.data) if isinstance(interaction.data, dict) else {}
-            )
-            selected = raw.get("values")
-            values = [str(v) for v in selected] if isinstance(selected, list) else []
-            if key and values:
-                resolutions[key] = int(values[0])
-            if not interaction.response.is_done():
-                await interaction.response.defer()
-
-        child.callback = _on_select  # type: ignore[method-assign]
-
+    built.resolutions = {}
     embed = migration_review_embed(plan)
     send = (
         interaction.followup.send
@@ -136,4 +111,7 @@ async def present_migration_review(
         except discord.HTTPException:
             pass
         return None
-    return MigrationReviewDecision(resolutions=resolutions, confirm_deletes=True)
+    return MigrationReviewDecision(
+        resolutions=dict(built.resolutions),
+        confirm_deletes=True,
+    )
