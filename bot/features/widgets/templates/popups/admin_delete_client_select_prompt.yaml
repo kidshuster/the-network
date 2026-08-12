@@ -1,0 +1,3 @@
+kind: text
+id: admin_delete_client_select_prompt
+content: "Select a registered client to delete. Missing Discord resources are cleaned up when present."

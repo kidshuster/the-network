@@ -7,8 +7,15 @@ from typing import Any
 import discord
 
 from bot.contracts.recipes import RecipeContext, recipe
-from bot.contracts.widgets import OpenEphemeralView, OpenModal, recipe_handler
+from bot.contracts.widgets import (
+    OpenEphemeralView,
+    OpenModal,
+    SelectOptionSpec,
+    SelectSpec,
+    recipe_handler,
+)
 from bot.core.templates import render_text
+from bot.core.text import truncate_external_text
 from bot.errors import UserFacingError
 from bot.features.widgets.guards import (
     interaction_actor,
@@ -16,6 +23,7 @@ from bot.features.widgets.guards import (
     interaction_guild,
     interaction_view_registry,
     require_client_member,
+    require_manage_guild,
 )
 
 
@@ -33,10 +41,37 @@ async def provision_client_from_request(
     from bot.features.recipes.hub.clients.profile_post import build_client_profile_embed
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.provision import provision_client
+    from bot.features.recipes.hub.clients.reconcile import reconcile_client_from_request
     from bot.features.recipes.hub.onboarding.service import _ProvisionOutcome
 
     bot = recipe_context.bot
     core = recipe_context.core
+    repair_client_id = getattr(request, "repair_client_id", None)
+    if repair_client_id is not None:
+        existing = await core.store.clients.get_by_id(int(repair_client_id))
+        if existing is None:
+            return _ProvisionOutcome(
+                success=False,
+                error="Repair target client was not found.",
+            )
+        _client, role, profile = await reconcile_client_from_request(
+            guild,
+            bot_member,
+            bot=bot,
+            context=core,
+            request=request,
+            client=existing,
+            image=image,
+            view_registry=view_registry,
+            access_role_name=bot.settings.network_access_role_name,
+            operator_role_name=bot.settings.network_operator_role_name,
+        )
+        return _ProvisionOutcome(
+            success=True,
+            client_role=role,
+            profile_channel=profile,
+        )
+
     provision = await provision_client(
         guild,
         bot_member,
@@ -230,6 +265,99 @@ async def toggle_client_timecode(
         view_registry=interaction_view_registry(interaction),
     )
     return updated
+
+@recipe("admin.client.delete.open")
+async def open_admin_client_delete(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction,
+) -> OpenEphemeralView:
+    interaction_guild(recipe_context.bot, interaction)
+    require_manage_guild(interaction_actor(interaction))
+    clients = await recipe_context.core.store.clients.list_all()
+    guild_id = recipe_context.bot.settings.guild_id
+    options = [
+        SelectOptionSpec(
+            label=truncate_external_text(client.server_name, limit=100),
+            value=str(client.id),
+            description=truncate_external_text(client.display_name, limit=100),
+        )
+        for client in clients
+        if client.guild_id == guild_id
+    ][:25]
+    if not options:
+        raise UserFacingError(
+            render_text("admin_no_clients_to_delete"),
+            code="admin_no_clients_to_delete",
+        )
+    return OpenEphemeralView(
+        template_id="admin_delete_client_select",
+        content=render_text("admin_delete_client_select_prompt"),
+        slots={
+            "client_select": (
+                SelectSpec(
+                    tag="select",
+                    placeholder="Select a client to delete…",
+                    options=tuple(options),
+                    handler=recipe_handler("admin.client.delete.prompt"),
+                    min_values=1,
+                    max_values=1,
+                ),
+            )
+        },
+    )
+
+
+@recipe("admin.client.delete.prompt")
+async def prompt_admin_client_delete(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction,
+    selected_client_ids: list[str] | tuple[str, ...] | set[str],
+    select_values: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> OpenEphemeralView:
+    del select_values
+    interaction_guild(recipe_context.bot, interaction)
+    require_manage_guild(interaction_actor(interaction))
+    if not selected_client_ids:
+        raise UserFacingError(
+            render_text("admin_no_clients_to_delete"),
+            code="admin_no_clients_to_delete",
+        )
+    client_id = int(next(iter(selected_client_ids)))
+    client = await _require_client(recipe_context, client_id)
+    return OpenEphemeralView(
+        template_id="delete_client_confirm",
+        content=render_text("delete_client_confirm_prompt", server_name=client.server_name),
+        bindings={
+            "confirm_button": recipe_handler("admin.client.delete", client_id=client_id),
+            "cancel_button": recipe_handler("ui.dismiss"),
+        },
+    )
+
+
+@recipe("admin.client.delete")
+async def admin_delete_client(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction,
+    client_id: int,
+) -> Any:
+    from bot.features.recipes.hub.clients.deletion import delete_client_resources
+
+    guild = interaction_guild(recipe_context.bot, interaction)
+    require_manage_guild(interaction_actor(interaction))
+    client = await _require_client(recipe_context, client_id)
+    return await delete_client_resources(
+        guild,
+        interaction_bot_member(guild),
+        client=client,
+        client_repo=recipe_context.core.store.clients,
+        network_repo=recipe_context.core.store.networks,
+        context=recipe_context.core,
+        force=True,
+    )
+
 
 @recipe("clients.rectify")
 async def rectify_client(

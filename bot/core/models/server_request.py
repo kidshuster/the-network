@@ -25,3 +25,4 @@ class ServerRequest:
     resolved_by_user_id: int | None
     created_at: str
     updated_at: str
+    repair_client_id: int | None = None

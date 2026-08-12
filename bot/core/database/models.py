@@ -69,6 +69,11 @@ class ServerRequestRow:
             ),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
+            repair_client_id=(
+                int(row["repair_client_id"])
+                if "repair_client_id" in row.keys() and row["repair_client_id"] is not None
+                else None
+            ),
         )
 
 

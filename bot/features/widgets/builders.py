@@ -26,6 +26,7 @@ def build_named_view(bot: Any, name: str, **ctx: Any) -> Any:
             {
                 "create_button": _rh("network.create.open"),
                 "delete_button": _rh("network.delete.open"),
+                "delete_client_button": _rh("admin.client.delete.open"),
             },
         )
     if name == "moderator_review":
@@ -58,6 +59,19 @@ def build_named_view(bot: Any, name: str, **ctx: Any) -> Any:
             {
                 "confirm_button": _rh("client.delete", client_id=cid),
                 "cancel_button": _rh("ui.dismiss"),
+            },
+        )
+    if name == "test_smoke_confirm":
+        return _view(
+            bot,
+            name,
+            {
+                "confirm_button": _rh(
+                    "test.smoke.confirm",
+                    recipe_name=str(ctx.get("recipe_name") or ctx.get("recipe") or ""),
+                    scenario=str(ctx.get("scenario") or "healthy"),
+                ),
+                "cancel_button": _rh("test.smoke.cancel"),
             },
         )
     if name == "network_profile":

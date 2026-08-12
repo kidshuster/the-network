@@ -607,6 +607,19 @@ async def _migration_v14(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v15(db: Database) -> None:
+    cursor = await db.connection.execute("PRAGMA table_info(server_requests)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "repair_client_id" in columns:
+        return
+
+    await db.connection.execute(
+        "ALTER TABLE server_requests ADD COLUMN repair_client_id INTEGER"
+    )
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -622,6 +635,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     12: _migration_v12,
     13: _migration_v13,
     14: _migration_v14,
+    15: _migration_v15,
 }
 
 

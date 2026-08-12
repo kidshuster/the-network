@@ -12,7 +12,7 @@ def test_network_admin_view_has_create_and_delete_buttons() -> None:
     bot = wire_widget_bot()
     view = render_view("network_admin", bot)
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
-    assert labels == {"Create Network", "Delete Network"}
+    assert labels == {"Create Network", "Delete Network", "Delete Client"}
 
 
 def test_create_network_modal_loads_template_fields() -> None:

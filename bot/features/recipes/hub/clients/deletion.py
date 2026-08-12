@@ -21,6 +21,7 @@ _DELETE_REASON = "The Network client deletion"
 class DeleteClientResult:
     success: bool
     error: str | None = None
+    server_name: str | None = None
 
 
 async def delete_client_resources(
@@ -31,6 +32,7 @@ async def delete_client_resources(
     client_repo: ClientStore,
     network_repo: NetworkStore,
     context: Any,
+    force: bool = False,
 ) -> DeleteClientResult:
     from bot.features.recipes.hub.clients.subscription import unsubscribe_client
 
@@ -47,16 +49,48 @@ async def delete_client_resources(
             network_repo=network_repo,
         )
         if not result.success:
-            return DeleteClientResult(
-                success=False,
-                error=result.error or "Could not remove a network subscription.",
+            if not force:
+                return DeleteClientResult(
+                    success=False,
+                    error=result.error or "Could not remove a network subscription.",
+                    server_name=client.server_name,
+                )
+            logger.warning(
+                "Client deletion: force-clearing subscription after unsubscribe failure",
+                extra={
+                    "client_id": client.id,
+                    "subscription_id": subscription.id,
+                    "error": result.error,
+                },
             )
+            await client_repo.delete_subscription_with_relations(subscription.id)
 
+    await purge_client_discord_resources(guild, client, reason=_DELETE_REASON)
+
+    deleted = await client_repo.delete_with_relations(client.id)
+    if deleted is None:
+        return DeleteClientResult(
+            success=False,
+            error="Client was not found.",
+            server_name=client.server_name,
+        )
+
+    await context.refresh_projections()
+    return DeleteClientResult(success=True, server_name=deleted.server_name)
+
+
+async def purge_client_discord_resources(
+    guild: discord.Guild,
+    client: Client,
+    *,
+    reason: str = _DELETE_REASON,
+) -> None:
+    """Best-effort Discord teardown for a client without touching the database."""
     if client.emoji_id is not None:
         emoji = guild.get_emoji(client.emoji_id)
         if emoji is not None:
             try:
-                await emoji.delete(reason=_DELETE_REASON)
+                await emoji.delete(reason=reason)
             except discord.HTTPException:
                 logger.warning(
                     "Client deletion: could not delete client emoji",
@@ -69,7 +103,7 @@ async def delete_client_resources(
         for member in guild.members:
             if client_role in member.roles:
                 try:
-                    await member.remove_roles(client_role, reason=_DELETE_REASON)
+                    await member.remove_roles(client_role, reason=reason)
                 except discord.HTTPException:
                     logger.warning(
                         "Client deletion: could not remove client role from member",
@@ -82,13 +116,10 @@ async def delete_client_resources(
     if category is not None:
         for channel in list(category.channels):
             channel_ids.add(channel.id)
-            await _delete_client_channel(
-                channel,
-                reason=_DELETE_REASON,
-            )
+            await _delete_client_channel(channel, reason=reason)
         if not category.channels:
             try:
-                await category.delete(reason=_DELETE_REASON)
+                await category.delete(reason=reason)
             except discord.HTTPException:
                 logger.warning(
                     "Client deletion: could not delete client category",
@@ -103,27 +134,16 @@ async def delete_client_resources(
             )
 
     for channel_id in channel_ids:
-        await _delete_client_channel_by_id(
-            guild,
-            channel_id,
-            reason=_DELETE_REASON,
-        )
+        await _delete_client_channel_by_id(guild, channel_id, reason=reason)
 
     if client_role is not None:
         try:
-            await client_role.delete(reason=_DELETE_REASON)
+            await client_role.delete(reason=reason)
         except discord.HTTPException:
             logger.warning(
                 "Client deletion: could not delete client role",
                 extra={"role_id": client_role.id},
             )
-
-    deleted = await client_repo.delete_with_relations(client.id)
-    if deleted is None:
-        return DeleteClientResult(success=False, error="Client was not found.")
-
-    await context.refresh_projections()
-    return DeleteClientResult(success=True)
 
 
 async def _realign_categories_after_client_delete(guild: discord.Guild) -> None:

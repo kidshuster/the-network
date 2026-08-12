@@ -1,0 +1,5 @@
+kind: view
+id: admin_delete_client_select
+timeout: 180
+components:
+  - slot: client_select

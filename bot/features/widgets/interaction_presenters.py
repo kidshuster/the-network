@@ -21,6 +21,13 @@ async def _text(response: Any, template: str, **values: Any) -> None:
 async def _review(response: Any, *, label: str, colour: str, description: str) -> None:
     await _embed(response, "review_success", label=label, colour=colour, description=description)
 
+@recipe("present.test.smoke.cancel")
+async def present_test_smoke_cancel(
+    _ctx: RecipeContext, *, response: Any, value: object, **_: Any
+) -> None:
+    await _text(response, "test_smoke_cancelled")
+
+
 @recipe("present.request.submit")
 async def present_request_submit(
     _ctx: RecipeContext, *, response: Any, value: object, **_: Any
@@ -107,6 +114,13 @@ async def present_client_delete(
             await interaction.message.edit(view=None)
         except discord.HTTPException:
             pass
+
+
+@recipe("present.admin.client.delete")
+async def present_admin_client_delete(
+    ctx: RecipeContext, *, response: Any, value: object, interaction: Any = None, **_: Any
+) -> None:
+    await present_client_delete(ctx, response=response, value=value, interaction=interaction)
 
 @recipe("present.client.toggle_timecode")
 async def present_timecode(

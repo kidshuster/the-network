@@ -385,7 +385,7 @@ async def run_join_approval_smoke_flow(
         request_ids_for_cleanup: list[int] = []
 
         try:
-            # Bot acts as requester to exercise provisioning; outcome DMs are skipped for self.
+            # Bot acts as requester to exercise provisioning.
             submit_accept = await service.submit_request(
                 guild,
                 requester=bot_member,

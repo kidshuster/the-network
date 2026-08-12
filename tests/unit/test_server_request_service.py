@@ -50,12 +50,20 @@ async def test_submit_request_rejects_duplicate_pending() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_request_rejects_existing_client_name() -> None:
+async def test_submit_request_rejects_existing_client_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     guild, _, _, _, _ = make_guild_with_roles()
     context = _service_context(
         get_pending_for_requester=AsyncMock(return_value=None),
     )
-    context.store.clients.get_by_server_name = AsyncMock(return_value=MagicMock())
+    existing = MagicMock(id=42)
+    context.store.clients.get_by_server_name = AsyncMock(return_value=existing)
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "bot.core.clients.integrity.inspect_client_integrity",
+        AsyncMock(return_value=SimpleNamespace(is_healthy=True)),
+    )
     bot = MagicMock()
     service = ServerRequestService(context, bot, view_registry=make_test_view_registry())  # type: ignore[arg-type]
 
@@ -126,11 +134,6 @@ async def test_approve_request_provisions_client_on_success(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        ServerRequestService,
-        "_notify_requester",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
         "bot.features.recipes.hub.leaders.grant_leaders_channel_access",
         AsyncMock(),
     )
@@ -187,11 +190,6 @@ async def test_approve_request_grants_leaders_access_for_provisioned_role(
     monkeypatch.setattr(
         ServerRequestService,
         "_finalize_review_message",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
-        ServerRequestService,
-        "_notify_requester",
         AsyncMock(),
     )
     monkeypatch.setattr(
@@ -256,11 +254,6 @@ async def test_approve_request_surfaces_leaders_sync_failures_in_message(
         AsyncMock(),
     )
     monkeypatch.setattr(
-        ServerRequestService,
-        "_notify_requester",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(
         "bot.features.recipes.hub.leaders.grant_leaders_channel_access",
         AsyncMock(
             return_value=MagicMock(
@@ -321,7 +314,7 @@ async def test_approve_request_surfaces_provisioning_failure(
 
 
 @pytest.mark.asyncio
-async def test_deny_request_resolves_and_notifies(
+async def test_deny_request_resolves(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guild, _, _, _, _ = make_guild_with_roles()
@@ -336,14 +329,6 @@ async def test_deny_request_resolves_and_notifies(
         "_finalize_review_message",
         AsyncMock(),
     )
-    monkeypatch.setattr(
-        ServerRequestService,
-        "_notify_requester",
-        AsyncMock(),
-    )
-
-    requester = MagicMock(spec=discord.User, id=555)
-    guild.get_member = MagicMock(return_value=requester)
 
     bot = MagicMock()
     bot.settings.guild_id = 100

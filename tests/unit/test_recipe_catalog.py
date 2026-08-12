@@ -25,6 +25,9 @@ def test_catalog_exposes_stable_public_operations() -> None:
     registry = build_recipe_registry(_bot())
 
     expected = {
+        "admin.client.delete",
+        "admin.client.delete.open",
+        "admin.client.delete.prompt",
         "blacklist.replace",
         "client.delete",
         "client.edit_profile",

@@ -345,6 +345,7 @@ class RequestStore:
         display_name: str,
         profile_image_url: str,
         profile_image_data: bytes | None = None,
+        repair_client_id: int | None = None,
     ) -> ServerRequest:
         now = _now_iso()
         row_id = await self._db.insert(
@@ -352,8 +353,8 @@ class RequestStore:
             INSERT INTO server_requests (
                 guild_id, network_id, requester_user_id,
                 server_name, display_name, profile_image_url, profile_image_data,
-                status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, created_at, updated_at, repair_client_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 guild_id,
@@ -366,6 +367,7 @@ class RequestStore:
                 ServerRequestStatus.PENDING,
                 now,
                 now,
+                repair_client_id,
             ),
         )
         row = await _fetch_row_by_id(
@@ -423,6 +425,17 @@ class RequestStore:
                 """,
                 (requester_user_id, ServerRequestStatus.PENDING),
             )
+        return ServerRequestRow.from_row(row) if row else None
+
+    async def get_pending_for_repair_client(self, client_id: int) -> ServerRequest | None:
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM server_requests
+            WHERE repair_client_id = ? AND status = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (client_id, ServerRequestStatus.PENDING),
+        )
         return ServerRequestRow.from_row(row) if row else None
 
     async def set_moderator_message_id(self, request_id: int, message_id: int) -> ServerRequest:
@@ -622,6 +635,96 @@ class ClientStore:
             client_id,
             not_found="Client disappeared after profile message update",
         )
+
+    async def update_provisioned_resources(
+        self,
+        client_id: int,
+        *,
+        category_id: int,
+        client_role_id: int,
+        profile_channel_id: int,
+        profile_message_id: int,
+        display_name: str | None = None,
+    ) -> Client:
+        now = _now_iso()
+        if display_name is not None:
+            label = display_name.strip()
+            if not label:
+                raise ProfileValidationError("Display name cannot be empty.")
+            await self._db.execute(
+                """
+                UPDATE clients SET
+                    category_id = ?, client_role_id = ?, profile_channel_id = ?,
+                    profile_message_id = ?, display_name = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    category_id,
+                    client_role_id,
+                    profile_channel_id,
+                    profile_message_id,
+                    label,
+                    now,
+                    client_id,
+                ),
+            )
+        else:
+            await self._db.execute(
+                """
+                UPDATE clients SET
+                    category_id = ?, client_role_id = ?, profile_channel_id = ?,
+                    profile_message_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    category_id,
+                    client_role_id,
+                    profile_channel_id,
+                    profile_message_id,
+                    now,
+                    client_id,
+                ),
+            )
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after provisioned-resource update",
+        )
+
+    async def clear_subscriptions_with_relations(self, client_id: int) -> int:
+        """Remove subscription rows for a client without deleting the client row."""
+        async with self._db.transaction() as connection:
+            cursor = await connection.execute(
+                "SELECT id FROM client_subscriptions WHERE client_id = ?",
+                (client_id,),
+            )
+            subscription_ids = [int(row[0]) for row in await cursor.fetchall()]
+            await cursor.close()
+            if not subscription_ids:
+                return 0
+            placeholders = ", ".join("?" for _ in subscription_ids)
+            await connection.execute(
+                f"""
+                DELETE FROM managed_resources
+                WHERE owner_type = 'subscription' AND owner_id IN ({placeholders})
+                """,
+                tuple(subscription_ids),
+            )
+            await connection.execute(
+                f"""
+                DELETE FROM client_blacklists
+                WHERE subscription_id IN ({placeholders})
+                """,
+                tuple(subscription_ids),
+            )
+            await connection.execute(
+                "DELETE FROM client_blacklists WHERE blocked_client_id = ?",
+                (client_id,),
+            )
+            await connection.execute(
+                "DELETE FROM client_subscriptions WHERE client_id = ?",
+                (client_id,),
+            )
+        return len(subscription_ids)
 
     async def update_display_name(self, client_id: int, display_name: str) -> Client:
         label = display_name.strip()

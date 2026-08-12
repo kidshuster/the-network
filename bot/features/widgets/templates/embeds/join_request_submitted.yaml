@@ -3,7 +3,6 @@ title: "Request Submitted"
 colour: green
 description: |
   Your join request was sent to moderators for review.
-  You will be notified when it is approved or denied.
 fields:
   - name: Name
     value: "{client_name}"

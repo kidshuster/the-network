@@ -47,15 +47,28 @@ def build_moderator_request_embed(
     requester: discord.abc.User,
     server_name: str,
     request_id: int,
+    repair_client_id: int | None = None,
 ) -> discord.Embed:
     from bot.core.templates import render_embed
 
-    return render_embed(
+    embed = render_embed(
         "join_request_moderator",
         requester_mention=requester.mention,
         request_id=request_id,
         client_name=server_name,
     )
+    if repair_client_id is not None:
+        embed.title = "Client repair request"
+        embed.description = (
+            "Existing client is malformed (missing Discord resources). "
+            "Accept rebuilds the client in place; Deny removes remaining resources."
+        )
+        embed.add_field(
+            name="Repair client ID",
+            value=f"`{repair_client_id}`",
+            inline=True,
+        )
+    return embed
 
 
 async def _load_request_profile_image(request: ServerRequest) -> ProfileImage:
@@ -128,15 +141,36 @@ class ServerRequestService:
                 error="You already have a pending join request.",
             )
 
+        repair_client_id: int | None = None
         existing_client = await self._context.store.clients.get_by_server_name(
             guild.id,
             name,
         )
         if existing_client is not None:
-            return SubmitRequestResult(
-                success=False,
-                error=f"A client named {name!r} already exists on this hub.",
+            from bot.core.clients.integrity import inspect_client_integrity
+
+            subscriptions = await self._context.store.clients.list_subscriptions_by_client(
+                existing_client.id,
             )
+            integrity = await inspect_client_integrity(
+                guild,
+                existing_client,
+                subscriptions,
+            )
+            if integrity.is_healthy:
+                return SubmitRequestResult(
+                    success=False,
+                    error=f"A client named {name!r} already exists on this hub.",
+                )
+            pending_repair = await self._context.store.requests.get_pending_for_repair_client(
+                existing_client.id,
+            )
+            if pending_repair is not None:
+                return SubmitRequestResult(
+                    success=False,
+                    error=f"A repair request for {name!r} is already pending review.",
+                )
+            repair_client_id = existing_client.id
 
         try:
             image = await read_profile_image_attachment(profile_image)
@@ -151,6 +185,7 @@ class ServerRequestService:
             display_name=label,
             profile_image_url=profile_image.url,
             profile_image_data=image.data,
+            repair_client_id=repair_client_id,
         )
 
         mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
@@ -181,6 +216,7 @@ class ServerRequestService:
             requester=requester,
             server_name=request.server_name,
             request_id=request.id,
+            repair_client_id=request.repair_client_id,
         )
         try:
             from bot.core.relay.delivery import build_moderator_join_request_send_kwargs
@@ -284,20 +320,21 @@ class ServerRequestService:
             leaders_sync = None
         await self._finalize_review_message(guild, request, moderator, ServerRequestStatus.APPROVED)
 
-        summary = "Client category created."
+        if request.repair_client_id is not None:
+            summary = "Malformed client repaired."
+        else:
+            summary = "Client category created."
         if result.profile_channel is not None:
-            summary = f"Created {result.profile_channel.mention}."
+            summary = (
+                f"Repaired {result.profile_channel.mention}."
+                if request.repair_client_id is not None
+                else f"Created {result.profile_channel.mention}."
+            )
         if leaders_sync is not None and leaders_sync.failures:
             summary += (
                 " Leaders access sync reported issues: "
                 + "; ".join(leaders_sync.failures[:3])
                 + ("…" if len(leaders_sync.failures) > 3 else "")
-            )
-        if requester is not None:
-            await self._notify_requester(
-                requester,
-                approved=True,
-                profile_channel=result.profile_channel,
             )
         return ReviewRequestResult(success=True, message=summary)
 
@@ -350,15 +387,42 @@ class ServerRequestService:
         )
 
         guild = self._bot.get_guild(request.guild_id)
+        message = "The join request was denied."
         if guild is not None:
             await self._finalize_review_message(
                 guild, request, moderator, ServerRequestStatus.DENIED
             )
-            requester = guild.get_member(request.requester_user_id)
-            if requester is not None:
-                await self._notify_requester(requester, approved=False)
+            if request.repair_client_id is not None:
+                from bot.features.recipes.hub.clients.deletion import delete_client_resources
 
-        return ReviewRequestResult(success=True, message="The join request was denied.")
+                client = await self._context.store.clients.get_by_id(request.repair_client_id)
+                bot_member = guild.me
+                if client is not None and bot_member is not None:
+                    deleted = await delete_client_resources(
+                        guild,
+                        bot_member,
+                        client=client,
+                        client_repo=self._context.store.clients,
+                        network_repo=self._context.store.networks,
+                        context=self._context,
+                        force=True,
+                    )
+                    if not deleted.success:
+                        return ReviewRequestResult(
+                            success=False,
+                            error=deleted.error
+                            or "Denied the request but could not remove the malformed client.",
+                        )
+                    message = (
+                        f"Denied repair for {client.server_name!r} and removed remaining resources."
+                    )
+                elif client is not None:
+                    return ReviewRequestResult(
+                        success=False,
+                        error="Denied the request but the bot member is unavailable for cleanup.",
+                    )
+
+        return ReviewRequestResult(success=True, message=message)
 
     async def _finalize_review_message(
         self,
@@ -395,51 +459,5 @@ class ServerRequestService:
             logger.warning(
                 "Could not update moderator review message",
                 extra={"message_id": message.id, "request_id": request.id},
-            )
-
-    async def _notify_requester(
-        self,
-        requester: discord.Member,
-        *,
-        approved: bool,
-        profile_channel: discord.TextChannel | None = None,
-    ) -> None:
-        bot_user = self._bot.user
-        if bot_user is not None and requester.id == bot_user.id:
-            logger.debug(
-                "Skipping join-request DM to bot user",
-                extra={"user_id": requester.id, "approved": approved},
-            )
-            return
-        if getattr(requester, "bot", False):
-            logger.debug(
-                "Skipping join-request DM to bot account",
-                extra={"user_id": requester.id, "approved": approved},
-            )
-            return
-
-        if approved:
-            description = (
-                "Your request to join **The Network** hub was approved.\n\n"
-                "Open your **client-profile** channel and subscribe to networks "
-                "with the buttons there. Connect your announcement channel to each "
-                "**publish** channel via Channel Follow.\n"
-            )
-            if profile_channel is not None:
-                description += f"\nProfile: {profile_channel.mention}"
-            colour = discord.Colour.green()
-            title = "Join request approved"
-        else:
-            description = "Your request to join **The Network** hub was denied."
-            colour = discord.Colour.red()
-            title = "Join request denied"
-
-        embed = discord.Embed(title=title, description=description, colour=colour)
-        try:
-            await requester.send(embed=embed)
-        except (discord.HTTPException, AttributeError):
-            logger.debug(
-                "Could not DM requester about review outcome",
-                extra={"user_id": requester.id, "approved": approved},
             )
 

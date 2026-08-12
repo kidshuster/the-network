@@ -10,3 +10,7 @@ components:
     tag: delete_button
     label: "Delete Network"
     style: danger
+  - type: button
+    tag: delete_client_button
+    label: "Delete Client"
+    style: danger
