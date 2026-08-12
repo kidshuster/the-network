@@ -75,6 +75,10 @@ if ! grep -q 'validate_image_offline' "${INSTALL}/scripts/update.sh"; then
   echo "install/scripts/update.sh must call validate_image_offline before swap" >&2
   exit 1
 fi
+if ! grep -q 'pull_install_repo' "${INSTALL}/scripts/update.sh"; then
+  echo "install/scripts/update.sh must pull the install git repo before image swap" >&2
+  exit 1
+fi
 if ! grep -q 'compose_cmd pull' "${INSTALL}/scripts/update.sh"; then
   echo "install/scripts/update.sh must pull before validate/swap" >&2
   exit 1
@@ -93,6 +97,10 @@ if ! grep -q 'validate_image_offline' "${INSTALL}/scripts/lib.sh"; then
 fi
 if ! grep -q 'compose_service_image' "${INSTALL}/scripts/lib.sh"; then
   echo "install/scripts/lib.sh must define compose_service_image" >&2
+  exit 1
+fi
+if ! grep -q 'pull_install_repo' "${INSTALL}/scripts/lib.sh"; then
+  echo "install/scripts/lib.sh must define pull_install_repo" >&2
   exit 1
 fi
 
