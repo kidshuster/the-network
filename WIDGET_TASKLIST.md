@@ -9,8 +9,8 @@ not when historical LOC targets are met.
 
 ## Measured production LOC (from Git)
 
-| Scope | `8003569` | `6d66c7a` | `5c49e05` | This pass (pre-commit) |
-|-------|----------:|----------:|----------:|-----------------------:|
+| Scope | `8003569` | `6d66c7a` | `5c49e05` | `940f5b5` |
+|-------|----------:|----------:|----------:|----------:|
 | `bot/app/widgets` | 1,086 | 1,309 | 1,490 | 1,632 |
 | `bot/features/widgets` | 880 | 554 | 554 | 554 |
 | Combined widgets | 1,966 | 1,863 | 2,044 | 2,186 |
@@ -38,7 +38,8 @@ Verified by `tests/unit/test_final_convergence.py` and retained hardening suites
 - [x] Resolved static+dynamic view layout validated before Discord construction.
 - [x] External truncation only via `truncate_external_text()`.
 - [x] Presenter failures propagate; client deletion stays recipe-gated.
-- [ ] Final Docker / GitHub Actions green for this pass’s SHA.
+- [x] Final Docker / GitHub Actions green for implementation SHA `940f5b5`
+  ([run 31568965452](https://github.com/kidshuster/the-network/actions/runs/31568965452)).
 
 ## Validation gates (this pass)
 
@@ -49,4 +50,6 @@ Verified by `tests/unit/test_final_convergence.py` and retained hardening suites
 - [x] mock full + malformed-state stress
 - [x] install-bundle
 - [x] persistent/legacy custom-ID + client-deletion tests
-- [ ] Docker / GitHub Actions for exact final SHA (local Docker unavailable; CI required)
+- [x] Docker / GitHub Actions for exact implementation SHA `940f5b5`
+  ([run 31568965452](https://github.com/kidshuster/the-network/actions/runs/31568965452))
+  (local Docker unavailable; CI Docker image build succeeded)
