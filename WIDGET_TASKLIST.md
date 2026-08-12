@@ -183,8 +183,8 @@ validated behavior.
 - [x] Malformed-state server-init stress passes.
 - [x] Persistent interaction tests pass.
 - [x] Install-bundle validation passes.
-- [ ] Docker build passes.
-- [ ] GitHub Actions passes after push.
+- [x] Docker build passes.
+- [x] GitHub Actions passes after push.
 - [x] Final report lists remaining widget modules and their LOC.
 - [x] Final report lists every template tag and attached recipe.
 - [x] Final report lists deleted interpreter/policy/compatibility code.

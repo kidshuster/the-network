@@ -64,4 +64,4 @@ Docker / GHA left unchecked until this push’s Actions run is green.
 - [x] mock smoke (`./test --dev`)
 - [x] malformed-state stress
 - [x] install-bundle
-- [ ] Docker / GitHub Actions (after push)
+- [x] Docker / GitHub Actions — https://github.com/kidshuster/the-network/actions/runs/31566479732
