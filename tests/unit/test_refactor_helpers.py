@@ -58,6 +58,8 @@ def test_resolve_subscription_channels_falls_back_to_category_names() -> None:
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
         activation_welcome_message_id=None,
+        network_welcome_message_id=None,
+        network_welcome_complete=False,
         subscribe_confirmed=False,
         enabled=True,
     )

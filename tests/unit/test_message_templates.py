@@ -7,11 +7,13 @@ import pytest
 from bot.core.templates import (
     MessageTemplateError,
     clear_template_cache,
+    load_template,
     modal_spec,
     render_embed,
     render_text,
     validate_all_templates,
 )
+from bot.core.templates.schema import EmbedTemplateSpec, TextTemplateSpec
 from bot.features.channels.stickies.join import HOW_TO_JOIN_VERSION
 from bot.features.channels.stickies.rules import RULES_STICKY_VERSION
 
@@ -48,6 +50,17 @@ def test_all_yaml_files_load() -> None:
     channel_names = [path.stem for path in _CHANNEL_TEMPLATES_DIR.glob("*.yaml")]
     assert channel_names
     for name in channel_names:
+        spec = load_template(name)
+        if isinstance(spec, TextTemplateSpec):
+            text = render_text(
+                name,
+                network_key="x",
+                network_display_name="X",
+                client_server_name="y",
+            )
+            assert text.strip()
+            continue
+        assert isinstance(spec, EmbedTemplateSpec)
         embed = render_embed(name, version=1, colour="green")
         assert embed.colour is not None
 

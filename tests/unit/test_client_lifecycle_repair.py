@@ -72,6 +72,7 @@ async def test_inspect_client_integrity_healthy() -> None:
 
     integrity = await inspect_client_integrity(guild, _client())
     assert integrity.is_healthy is True
+    assert integrity.state == "healthy"
 
 
 @pytest.mark.asyncio
@@ -84,6 +85,7 @@ async def test_inspect_client_integrity_missing_category() -> None:
 
     integrity = await inspect_client_integrity(guild, _client())
     assert integrity.is_healthy is False
+    assert integrity.state == "partial"
     assert integrity.category_present is False
     assert integrity.profile_channel_present is False
 
@@ -166,21 +168,29 @@ async def test_deny_repair_request_force_deletes_client(
     guild.me = bot_member
     request = make_server_request(repair_client_id=9)
     client = _client(id=9, server_name="Test")
+    events: list[str] = []
+
+    async def _resolve(*args: object, **kwargs: object) -> None:
+        events.append("resolve")
+
+    async def _delete(*args: object, **kwargs: object):
+        events.append("delete")
+        return SimpleNamespace(success=True, error=None)
+
     context = SimpleNamespace(
         store=SimpleNamespace(
             requests=SimpleNamespace(
                 get_by_id=AsyncMock(return_value=request),
-                resolve=AsyncMock(),
+                resolve=AsyncMock(side_effect=_resolve),
             ),
             clients=SimpleNamespace(get_by_id=AsyncMock(return_value=client)),
             networks=MagicMock(),
         ),
         refresh_projections=AsyncMock(),
     )
-    delete_mock = AsyncMock(return_value=SimpleNamespace(success=True, error=None))
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.deletion.delete_client_resources",
-        delete_mock,
+        AsyncMock(side_effect=_delete),
     )
     monkeypatch.setattr(
         ServerRequestService,
@@ -198,8 +208,7 @@ async def test_deny_repair_request_force_deletes_client(
 
     assert result.success is True
     assert "removed remaining resources" in (result.message or "")
-    delete_mock.assert_awaited_once()
-    assert delete_mock.await_args.kwargs["force"] is True
+    assert events == ["delete", "resolve"]
 
 
 @pytest.mark.asyncio

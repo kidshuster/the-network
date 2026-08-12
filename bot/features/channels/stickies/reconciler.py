@@ -335,9 +335,22 @@ async def sync_footer_marker_embed_sticky(
     if not allow_create:
         return FooterMarkerStickySyncResult()
 
-    message = await channel.send(
-        embed=embed,
-        view=view,
-        silent=True,
-    )
+    try:
+        message = await channel.send(
+            embed=embed,
+            view=view,
+            silent=True,
+        )
+    except discord.NotFound:
+        logger.warning(
+            "Could not create footer-marker sticky; channel missing",
+            extra={"channel_id": getattr(channel, "id", None)},
+        )
+        return FooterMarkerStickySyncResult()
+    except discord.HTTPException as exc:
+        logger.warning(
+            "Could not create footer-marker sticky",
+            extra={"channel_id": getattr(channel, "id", None), "error": str(exc)},
+        )
+        return FooterMarkerStickySyncResult()
     return FooterMarkerStickySyncResult(message=message, created=True)

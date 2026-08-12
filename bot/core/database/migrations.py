@@ -620,6 +620,37 @@ async def _migration_v15(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v16(db: Database) -> None:
+    """Independent network-welcome marker + baseline existing subscriptions.
+
+    Baseline marks every pre-existing subscription as already welcomed so
+    startup reconcile cannot spam historical active clients after upgrade.
+    New subscriptions keep network_welcome_complete=0 and announce on first
+    full activation transition.
+    """
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    added = False
+    if "network_welcome_message_id" not in columns:
+        await db.connection.execute(
+            "ALTER TABLE client_subscriptions ADD COLUMN network_welcome_message_id INTEGER"
+        )
+        added = True
+    if "network_welcome_complete" not in columns:
+        await db.connection.execute(
+            "ALTER TABLE client_subscriptions "
+            "ADD COLUMN network_welcome_complete INTEGER NOT NULL DEFAULT 0"
+        )
+        added = True
+    if added:
+        # Only baseline rows that existed before this migration added the columns.
+        await db.connection.execute(
+            "UPDATE client_subscriptions SET network_welcome_complete = 1"
+        )
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -636,6 +667,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     13: _migration_v13,
     14: _migration_v14,
     15: _migration_v15,
+    16: _migration_v16,
 }
 
 

@@ -255,9 +255,20 @@ class RelayService:
         *,
         network_id: int,
         body: str,
+        about_client_id: int | None = None,
+        exclude_client_id: int | None = None,
+        author_icon_url: str | None = None,
     ) -> RelayResult:
-        """Deliver a trusted hub announcement without manufacturing a client."""
-        payload = await build_system_announcement_payload(message, body=body)
+        """Deliver a trusted hub announcement without manufacturing a client.
+
+        ``about_client_id`` honors per-subscription blacklists for that client.
+        ``exclude_client_id`` skips the joining client's own subscribe channel.
+        """
+        payload = await build_system_announcement_payload(
+            message,
+            body=body,
+            author_icon_url=author_icon_url,
+        )
         destinations = self._routing.list_network_subscriptions(network_id)
         sent_ids: list[int] = []
         published_ids: list[int] = []
@@ -266,8 +277,15 @@ class RelayService:
         for subscription in destinations:
             if not subscription.enabled or subscription.subscribe_channel_id in seen_channels:
                 continue
+            if exclude_client_id is not None and subscription.client_id == exclude_client_id:
+                continue
             client = self._clients.get_client(subscription.client_id)
             if client is None or not client.enabled or message.guild is None:
+                continue
+            if about_client_id is not None and await self._client_repo.is_blacklisted(
+                subscription.id,
+                about_client_id,
+            ):
                 continue
             seen_channels.add(subscription.subscribe_channel_id)
             channel = message.guild.get_channel(subscription.subscribe_channel_id)
@@ -288,7 +306,7 @@ class RelayService:
             source_message_id=message.id,
             destination_message_ids=tuple(sent_ids),
             published_message_ids=tuple(published_ids),
-            success=bool(published_ids),
+            success=not errors,
             error="; ".join(errors) if errors else None,
         )
 

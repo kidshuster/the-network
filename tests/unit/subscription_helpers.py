@@ -15,6 +15,8 @@ def make_client_subscription(**overrides: object) -> ClientSubscription:
         "publish_setup_message_id": None,
         "subscribe_setup_message_id": None,
         "activation_welcome_message_id": None,
+        "network_welcome_message_id": None,
+        "network_welcome_complete": False,
         "subscribe_confirmed": False,
         "enabled": True,
     }

@@ -37,8 +37,10 @@ jobs:
           python -m tests.core.runner recipe server-init-stress \
             --backend mock --scenario malformed_channels
 
-      - name: Install bundle check
-        run: ./bin/domain/test-install-bundle.sh
+      - name: Install bundle / script check
+        run: |
+          ./bin/domain/check-no-guild-secrets.sh
+          REQUIRE_VERSION_MATCH=1 ./bin/domain/test-install-scripts.sh
 
       - name: Docker image build
         run: docker build --tag the-network:ci .

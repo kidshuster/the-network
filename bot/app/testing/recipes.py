@@ -8,6 +8,8 @@ from typing import Any
 import discord
 
 from bot.app.testing.catalog import (
+    ALL_SCENARIOS_CHOICE,
+    expand_scenarios_for_recipe,
     requires_confirmation,
     validate_recipe_choice,
     validate_scenario_choice,
@@ -83,12 +85,18 @@ async def open_smoke_test(
             code="smoke_run_active",
         )
     if requires_confirmation(name):
+        scenarios = expand_scenarios_for_recipe(name, scenario_name)
+        scenario_label = (
+            f"all ({len(scenarios)}: {', '.join(scenarios)})"
+            if scenario_name == ALL_SCENARIOS_CHOICE and len(scenarios) > 1
+            else scenarios[0] if scenario_name == ALL_SCENARIOS_CHOICE else scenario_name
+        )
         return OpenEphemeralView(
             template_id="test_smoke_confirm",
             content=render_text(
                 "test_smoke_confirm_prompt",
                 recipe=name,
-                scenario=scenario_name,
+                scenario=scenario_label,
             ),
             bindings={
                 "confirm_button": recipe_handler(
@@ -155,6 +163,7 @@ async def _execute_smoke(
     settings = bot.settings
     log_dir = Path(settings.test_command_log_dir)
     coordinator = _coordinator(bot)
+    scenarios = expand_scenarios_for_recipe(recipe_name, scenario)
     pending_path = log_dir / "pending.log"
     run = await coordinator.begin(
         recipe_name=recipe_name,
@@ -177,10 +186,11 @@ async def _execute_smoke(
 
     progress_message: Any = None
 
-    async def on_progress(phase: str, metrics: Any) -> None:
+    async def on_progress(phase: str, metrics: Any, *, current_scenario: str) -> None:
         nonlocal progress_message
         content = (
-            f"Smoke `{run.run_id}` · `{recipe_name}` · phase `{phase}`\n"
+            f"Smoke `{run.run_id}` · `{recipe_name}` · `{current_scenario}`\n"
+            f"phase `{phase}` · elapsed {metrics.duration_seconds:.1f}s\n"
             f"mutations={metrics.mutations} rest_reads={metrics.rest_reads} "
             f"wait={metrics.rate_limit_wait_seconds:.1f}s"
         )
@@ -195,40 +205,76 @@ async def _execute_smoke(
             logger.debug("Could not update smoke progress message", exc_info=True)
 
     try:
+        scenario_note = (
+            f"scenarios ({len(scenarios)}): {', '.join(scenarios)}"
+            if len(scenarios) > 1
+            else f"scenario `{scenarios[0]}`"
+        )
         await interaction.followup.send(
-            f"Starting smoke run `{run.run_id}` · recipe `{recipe_name}` · scenario `{scenario}`",
+            f"Starting smoke run `{run.run_id}` · recipe `{recipe_name}` · {scenario_note}",
             ephemeral=True,
         )
-        result = await run_smoke_recipe(
-            recipe_name=recipe_name,
-            scenario=scenario,
-            backend="live",
-            bot=bot,
-            guild=guild,
-            run_id=run.run_id,
-            log_dir=log_dir,
-            cancel_event=run.cancel_event,
-            on_progress=on_progress,
-            max_rate_limit_wait_seconds=float(settings.test_max_rate_limit_wait_seconds),
+        results: list[Any] = []
+        for index, scenario_name in enumerate(scenarios, start=1):
+            if run.cancel_event.is_set():
+                break
+            await interaction.followup.send(
+                f"[{index}/{len(scenarios)}] Running `{recipe_name}` · `{scenario_name}`…",
+                ephemeral=True,
+            )
+
+            async def _progress(phase: str, metrics: Any, *, _s: str = scenario_name) -> None:
+                await on_progress(phase, metrics, current_scenario=_s)
+
+            result = await run_smoke_recipe(
+                recipe_name=recipe_name,
+                scenario=scenario_name,
+                backend="live",
+                bot=bot,
+                guild=guild,
+                run_id=f"{run.run_id}-{scenario_name}",
+                log_dir=log_dir,
+                cancel_event=run.cancel_event,
+                on_progress=_progress,
+                max_rate_limit_wait_seconds=float(
+                    settings.test_max_rate_limit_wait_seconds
+                ),
+            )
+            results.append(result)
+            status = "PASS" if result.success else "FAIL"
+            line = (
+                f"{status} `{scenario_name}` in {result.metrics.duration_seconds:.1f}s "
+                f"(mutations={result.metrics.mutations}, "
+                f"rest_reads={result.metrics.rest_reads})"
+            )
+            if result.error:
+                line += f"\nError: {result.error}"
+            await interaction.followup.send(line, ephemeral=True)
+            if result.log_path is not None:
+                note = await attach_log_file(interaction.followup.send, result.log_path)
+                await interaction.followup.send(note, ephemeral=True)
+            if not result.success:
+                # Stop the matrix on first failure; remaining scenarios stay unrun.
+                break
+
+        passed = sum(1 for item in results if item.success)
+        failed = sum(1 for item in results if not item.success)
+        cancelled = run.cancel_event.is_set() and len(results) < len(scenarios)
+        overall_success = (
+            failed == 0 and not cancelled and len(results) == len(scenarios)
         )
+        skipped = len(scenarios) - len(results)
         summary = (
-            f"{'PASS' if result.success else 'FAIL'} smoke `{result.run_id}` "
-            f"`{recipe_name}` in {result.metrics.duration_seconds:.1f}s\n"
-            f"mutations={result.metrics.mutations} "
-            f"rest_reads={result.metrics.rest_reads} "
-            f"rate_limit_wait={result.metrics.rate_limit_wait_seconds:.1f}s"
+            f"{'PASS' if overall_success else 'FAIL'} smoke suite `{run.run_id}` "
+            f"`{recipe_name}` · {passed} passed · {failed} failed"
+            + (f" · {skipped} skipped" if skipped else "")
         )
-        if result.error:
-            summary += f"\nError: {result.error}"
         await interaction.followup.send(summary, ephemeral=True)
-        if result.log_path is not None:
-            note = await attach_log_file(interaction.followup.send, result.log_path)
-            await interaction.followup.send(note, ephemeral=True)
         return {
-            "success": result.success,
-            "run_id": result.run_id,
+            "success": overall_success,
+            "run_id": run.run_id,
             "message": summary,
-            "error": result.error,
+            "error": None if overall_success else summary,
         }
     finally:
         coordinator.end(run.run_id)

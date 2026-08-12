@@ -10,7 +10,7 @@ from bot.core.clients.setup_state import SubscriptionSetupState, resolve_setup_s
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
-from bot.core.templates import render_embed
+from bot.core.templates import render_embed, render_text
 from bot.core.views import ViewRegistry
 from bot.features.channels.resolve import (
     HUB_CATEGORY_MODERATION,
@@ -57,6 +57,62 @@ async def _publish_announcement(message: discord.Message) -> None:
         )
 
 
+async def _resolve_network_welcome_source(
+    bot: Any,
+    context: Any,
+    guild: discord.Guild,
+    subscription: ClientSubscription,
+) -> discord.Message | None:
+    message_id = subscription.network_welcome_message_id
+    if message_id is None or message_id <= 0:
+        return None
+    mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
+    channel = resolve_hub_channel(
+        guild,
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+        category_id=None if mod_category is None else mod_category.id,
+        include_announcement=False,
+    )
+    if channel is None or not hasattr(channel, "fetch_message"):
+        return None
+    try:
+        return await channel.fetch_message(message_id)
+    except discord.HTTPException:
+        return None
+
+
+async def _dispatch_network_welcome(
+    bot: Any,
+    context: Any,
+    guild: discord.Guild,
+    *,
+    client: Client,
+    subscription: ClientSubscription,
+    message: discord.Message,
+) -> bool:
+    from bot.features.recipes.hub.announcements import dispatch_system_announcement
+
+    result = await dispatch_system_announcement(
+        context,
+        guild,
+        message,
+        about_client_id=client.id,
+        exclude_client_id=client.id,
+        author_icon_url=_bot_author_icon_url(bot),
+    )
+    if not result.success:
+        logger.warning(
+            "Server-wide welcome dispatch was incomplete",
+            extra={
+                "network_key": subscription.network_key,
+                "subscription_id": subscription.id,
+                "errors": result.errors,
+            },
+        )
+        return False
+    return True
+
+
 async def _post_network_member_welcome(
     bot: Any,
     context: Any,
@@ -64,9 +120,46 @@ async def _post_network_member_welcome(
     *,
     client: Client,
     network: Network,
-) -> None:
-    """Post once to #network-announcements and dispatch through the relay recipe."""
-    from bot.features.recipes.hub.announcements import dispatch_system_announcement
+    subscription: ClientSubscription,
+) -> ClientSubscription:
+    """Post/dispatch the network-wide welcome using independent durable state.
+
+    Local subscribe-channel activation messaging uses ``activation_welcome_message_id``.
+    Network announcements use ``network_welcome_*`` so either half can retry alone.
+    """
+    fresh = await context.store.clients.get_subscription_by_id(subscription.id)
+    if fresh is None:
+        return subscription
+    subscription = cast(ClientSubscription, fresh)
+    if subscription.network_welcome_complete:
+        return subscription
+
+    existing_source = await _resolve_network_welcome_source(
+        bot, context, guild, subscription
+    )
+    if existing_source is not None:
+        if await _dispatch_network_welcome(
+            bot,
+            context,
+            guild,
+            client=client,
+            subscription=subscription,
+            message=existing_source,
+        ):
+            return cast(
+                ClientSubscription,
+                await context.store.clients.mark_network_welcome_complete(subscription.id),
+            )
+        return subscription
+
+    if subscription.network_welcome_message_id == 0:
+        # Another worker claimed the post; leave retry to a later activation check.
+        return subscription
+
+    claimed = await context.store.clients.claim_network_welcome(subscription.id)
+    if claimed is None:
+        refreshed = await context.store.clients.get_subscription_by_id(subscription.id)
+        return cast(ClientSubscription, refreshed or subscription)
 
     mod_category = resolve_hub_category(guild, HUB_CATEGORY_MODERATION)
     channel = resolve_hub_channel(
@@ -76,31 +169,53 @@ async def _post_network_member_welcome(
         include_announcement=False,
     )
     if channel is None:
-        return
-    embed = render_embed(
+        await context.store.clients.clear_network_welcome_claim(subscription.id)
+        return cast(
+            ClientSubscription,
+            await context.store.clients.get_subscription_by_id(subscription.id)
+            or subscription,
+        )
+
+    content = render_text(
         "network_member_connected",
-        author_icon_url=_bot_author_icon_url(bot),
         network_display_name=network.display_name,
         network_key=network.key,
         client_server_name=client.server_name,
-    )
+    ).strip()
     try:
-        message = await channel.send(
-            content=f"[{network.key}]",
-            embed=embed,
-            silent=True,
-        )
-        result = await dispatch_system_announcement(context, guild, message)
-        if not result.success:
-            logger.warning(
-                "Server-wide welcome dispatch was incomplete",
-                extra={"network_key": network.key, "errors": result.errors},
-            )
+        message = await channel.send(content=content, silent=True)
     except discord.HTTPException:
         logger.warning(
             "Could not post network member welcome",
             extra={"network_key": network.key, "client_id": client.id},
         )
+        await context.store.clients.clear_network_welcome_claim(subscription.id)
+        return cast(
+            ClientSubscription,
+            await context.store.clients.get_subscription_by_id(subscription.id)
+            or subscription,
+        )
+
+    subscription = cast(
+        ClientSubscription,
+        await context.store.clients.update_network_welcome_message_id(
+            subscription.id,
+            message.id,
+        ),
+    )
+    if await _dispatch_network_welcome(
+        bot,
+        context,
+        guild,
+        client=client,
+        subscription=subscription,
+        message=message,
+    ):
+        subscription = cast(
+            ClientSubscription,
+            await context.store.clients.mark_network_welcome_complete(subscription.id),
+        )
+    return subscription
 
 
 async def _delete_setup_message(
@@ -248,7 +363,11 @@ async def _maybe_post_activation_welcome(
     client: Client,
     setup_state: SubscriptionSetupState,
 ) -> ClientSubscription:
-    """Post a one-time server-connected embed when a network subscription first activates."""
+    """Run local + network welcome transitions when a subscription becomes fully active.
+
+    Full activation is: network enabled AND publish configured AND subscribe confirmed.
+    Local subscribe-channel messaging and hub network welcome have independent markers.
+    """
     if not setup_state.fully_configured:
         return subscription
     if not hasattr(subscribe_channel, "send"):
@@ -258,46 +377,43 @@ async def _maybe_post_activation_welcome(
     if fresh is None:
         return subscription
     subscription = cast(ClientSubscription, fresh)
-    if subscription.activation_welcome_message_id is not None:
-        return subscription
 
-    embed = render_embed(
-        "network_activation_welcome",
-        author_icon_url=_bot_author_icon_url(bot),
-        network_display_name=network.display_name,
-        network_key=network.key,
-        client_server_name=client.server_name,
-    )
-    try:
-        message = await subscribe_channel.send(embed=embed, silent=True)
-    except discord.HTTPException:
-        logger.warning(
-            "Could not post server connected message to subscribe channel",
-            extra={
-                "subscription_id": subscription.id,
-                "subscribe_channel_id": subscription.subscribe_channel_id,
-            },
+    if subscription.activation_welcome_message_id is None:
+        embed = render_embed(
+            "network_activation_welcome",
+            author_icon_url=_bot_author_icon_url(bot),
+            network_display_name=network.display_name,
+            network_key=network.key,
+            client_server_name=client.server_name,
         )
-        return subscription
+        try:
+            message = await subscribe_channel.send(embed=embed, silent=True)
+        except discord.HTTPException:
+            logger.warning(
+                "Could not post server connected message to subscribe channel",
+                extra={
+                    "subscription_id": subscription.id,
+                    "subscribe_channel_id": subscription.subscribe_channel_id,
+                },
+            )
+        else:
+            await _publish_announcement(message)
+            subscription = cast(
+                ClientSubscription,
+                await context.store.clients.update_activation_welcome_message_id(
+                    subscription.id,
+                    message.id,
+                ),
+            )
 
-    await _publish_announcement(message)
-
-    updated = cast(
-        ClientSubscription,
-        await context.store.clients.update_activation_welcome_message_id(
-            subscription.id,
-            message.id,
-        ),
-    )
-    await _post_network_member_welcome(
+    return await _post_network_member_welcome(
         bot,
         context,
         guild,
         client=client,
         network=network,
+        subscription=subscription,
     )
-    return updated
-
 
 async def sync_subscription_setup(
     bot: Any,
@@ -360,16 +476,19 @@ async def sync_subscription_setup(
                 subscription,
                 network_active=network_active,
             )
-            subscription = await _maybe_post_activation_welcome(
-                bot,
-                subscription,
-                subscribe_channel=subscribe_channel,
-                context=context,
-                guild=guild,
-                network=network,
-                client=client,
-                setup_state=state,
-            )
+            # Welcomes are first-activation only. Relink/reconcile after network
+            # recreate must not repost local or network-wide welcome messages.
+            if setup_mode == "create":
+                subscription = await _maybe_post_activation_welcome(
+                    bot,
+                    subscription,
+                    subscribe_channel=subscribe_channel,
+                    context=context,
+                    guild=guild,
+                    network=network,
+                    client=client,
+                    setup_state=state,
+                )
 
         await post_subscription_moderation_embed(
             bot,

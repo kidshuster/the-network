@@ -47,6 +47,8 @@ def _subscription(*, moderation_message_id: int | None = None) -> ClientSubscrip
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
         activation_welcome_message_id=None,
+        network_welcome_message_id=None,
+        network_welcome_complete=False,
         subscribe_confirmed=False,
         enabled=True,
     )
@@ -277,6 +279,8 @@ async def test_deleted_network_shows_disabled_without_join_button(
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
         activation_welcome_message_id=None,
+        network_welcome_message_id=None,
+        network_welcome_complete=False,
         subscribe_confirmed=False,
         enabled=True,
     )

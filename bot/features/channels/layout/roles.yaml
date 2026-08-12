@@ -2,16 +2,23 @@ version: 1
 roles:
   everyone:
     target: everyone
-    permissions: {view_channel: false, send_messages: false, add_reactions: false, create_public_threads: false, create_private_threads: false, send_messages_in_threads: false}
+    # Keep denials the bot can still edit after lockdown. Reaction/thread bits are
+    # omitted: once @everyone denies them, the bot often lacks those perms and
+    # Discord returns 50013 if reconcile tries to set them again.
+    permissions: {view_channel: false, send_messages: false}
   client_roles:
     target: client_roles
-    permissions: {view_channel: true, read_message_history: true, send_messages: false, embed_links: false, attach_files: false, add_reactions: false, create_public_threads: false, create_private_threads: false, send_messages_in_threads: false}
+    # View/read only. Do not deny reaction/thread bits here — @everyone already
+    # locks those down, and denying them requires the bot to hold those perms.
+    permissions: {view_channel: true, read_message_history: true, send_messages: false, embed_links: false, attach_files: false}
   client_owner:
     target: current_client_role
-    permissions: {view_channel: true, read_message_history: true, send_messages: false, add_reactions: false, create_public_threads: false, create_private_threads: false, send_messages_in_threads: false}
+    permissions: {view_channel: true, read_message_history: true, send_messages: false}
   moderator:
     target: moderator
-    permissions: {view_channel: true, read_message_history: true, send_messages: true, embed_links: true, attach_files: true, manage_channels: true, manage_webhooks: true, manage_messages: true, create_public_threads: true, send_messages_in_threads: true}
+    permissions: {view_channel: true, read_message_history: true, send_messages: true, embed_links: true, attach_files: true, manage_channels: true, manage_webhooks: true, manage_messages: true}
   bot_access:
     target: bot_access
+    # Guild Manage Roles is enough to edit overwrites; Discord rejects manage_roles
+    # in channel overwrites unless the bot has Administrator.
     permissions: {view_channel: true, read_message_history: true, send_messages: true, embed_links: true, attach_files: true, manage_channels: true, manage_messages: true, manage_webhooks: true}

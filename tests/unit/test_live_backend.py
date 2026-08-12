@@ -12,7 +12,7 @@ def test_phase_delay_uses_default_for_invalid_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SMOKE_PHASE_DELAY_SEC", "invalid")
-    assert phase_delay_seconds() == 2.0
+    assert phase_delay_seconds() == 0.5
 
 
 def test_phase_delay_clamps_negative_value(monkeypatch: pytest.MonkeyPatch) -> None:

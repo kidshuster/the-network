@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -104,6 +105,7 @@ def load_recipes(directory: Path = RECIPE_DIR) -> dict[str, Recipe]:
 
 Backend = Literal["live", "mock"]
 ProgressCallback = Callable[[str, SmokeMetrics], Any]
+PROGRESS_HEARTBEAT_SECONDS = 5.0
 
 
 class RecipeRunner:
@@ -117,6 +119,7 @@ class RecipeRunner:
         cancel_event: asyncio.Event | None = None,
         run_logger: Any | None = None,
         on_progress: ProgressCallback | None = None,
+        progress_heartbeat_seconds: float = PROGRESS_HEARTBEAT_SECONDS,
     ) -> None:
         self.context = context
         self.recipes = recipes
@@ -125,6 +128,7 @@ class RecipeRunner:
         self.cancel_event = cancel_event
         self.run_logger = run_logger
         self.on_progress = on_progress
+        self.progress_heartbeat_seconds = max(0.0, progress_heartbeat_seconds)
         self.outcomes: list[ProbeOutcome] = []
         self.budget_error: BudgetExceededError | None = None
 
@@ -132,6 +136,18 @@ class RecipeRunner:
         print(message, flush=True)
         if self.run_logger is not None:
             self.run_logger.write(message)
+
+    def _metrics(self) -> SmokeMetrics:
+        if self.scheduler is not None:
+            return self.scheduler.metrics
+        return SmokeMetrics()
+
+    async def _emit_progress(self, phase: str) -> None:
+        if self.on_progress is None:
+            return
+        maybe = self.on_progress(phase, self._metrics())
+        if asyncio.iscoroutine(maybe):
+            await maybe
 
     async def run(self, name: str) -> list[ProbeOutcome]:
         if self.scheduler is not None:
@@ -188,26 +204,44 @@ class RecipeRunner:
     async def _run_probe(
         self, name: str, *, protect_clients: bool, pause: bool
     ) -> ProbeOutcome:
-        self._log(f"  RUN  {name}")
-        if self.backend == "mock":
-            if not isinstance(self.context, MockContext):
-                raise TypeError("mock backend requires MockContext")
-            outcome = await run_mock_probe(name, self.context, pause_after=pause)
-        else:
-            if not isinstance(self.context, LiveContext):
-                raise TypeError("live backend requires LiveContext")
-            outcome = await run_live_probe(
-                name,
-                self.context,
-                pause_after=pause,
-                scheduler=self.scheduler,
-            )
+        self._log(f"  START {name}")
+        await self._emit_progress(f"start:{name}")
+
+        async def _heartbeat() -> None:
+            if self.progress_heartbeat_seconds <= 0:
+                return
+            while True:
+                await asyncio.sleep(self.progress_heartbeat_seconds)
+                self._log(f"  RUNNING {name}")
+                await self._emit_progress(f"running:{name}")
+
+        heartbeat = asyncio.create_task(_heartbeat(), name=f"smoke-heartbeat:{name}")
+        try:
+            if self.backend == "mock":
+                if not isinstance(self.context, MockContext):
+                    raise TypeError("mock backend requires MockContext")
+                outcome = await run_mock_probe(name, self.context, pause_after=pause)
+            else:
+                if not isinstance(self.context, LiveContext):
+                    raise TypeError("live backend requires LiveContext")
+                outcome = await run_live_probe(
+                    name,
+                    self.context,
+                    pause_after=pause,
+                    scheduler=self.scheduler,
+                )
+        except BaseException:
+            self._log(f"  FAIL {name}")
+            await self._emit_progress(f"fail:{name}")
+            raise
+        finally:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
+
         self.outcomes.append(outcome)
         self._log(f"  OK   {name}: {outcome.detail}")
-        if self.on_progress is not None and self.scheduler is not None:
-            maybe = self.on_progress(name, self.scheduler.metrics)
-            if asyncio.iscoroutine(maybe):
-                await maybe
+        await self._emit_progress(f"ok:{name}")
         if (
             self.backend == "live"
             and protect_clients

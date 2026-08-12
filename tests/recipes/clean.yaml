@@ -1,0 +1,11 @@
+name: clean
+description: Remove leftover smoke clients and Discord artifacts
+budgets:
+  max_mutations: 80
+  max_rest_reads: 200
+  max_rate_limit_wait_seconds: 120
+  max_duration_seconds: 300
+steps:
+  - probe: artifacts.teardown
+    protect_clients: false
+  - clients.protected

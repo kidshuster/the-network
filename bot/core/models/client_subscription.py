@@ -15,5 +15,7 @@ class ClientSubscription:
     publish_setup_message_id: int | None
     subscribe_setup_message_id: int | None
     activation_welcome_message_id: int | None
+    network_welcome_message_id: int | None
+    network_welcome_complete: bool
     subscribe_confirmed: bool
     enabled: bool

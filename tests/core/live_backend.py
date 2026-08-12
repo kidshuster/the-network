@@ -8,11 +8,11 @@ from tests.core.scheduler import DiscordTestScheduler, get_active_scheduler
 
 
 def phase_delay_seconds() -> float:
-    raw = os.getenv("SMOKE_PHASE_DELAY_SEC", "2")
+    raw = os.getenv("SMOKE_PHASE_DELAY_SEC", "0.5")
     try:
         return max(0.0, float(raw))
     except ValueError:
-        return 2.0
+        return 0.5
 
 
 async def run_live_probe(

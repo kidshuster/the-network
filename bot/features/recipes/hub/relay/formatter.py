@@ -169,13 +169,38 @@ async def build_relay_payload_from_client(
     return RelayPayload(embed=parts.embed, files=tuple(files))
 
 
+def _bot_icon_url_from_message(message: discord.Message) -> str:
+    """Resolve the bot profile image for system announcements.
+
+    Never use the human announcer's avatar — destinations must show The Network
+    with the bot's current Discord profile image.
+    """
+    guild = message.guild
+    me = getattr(guild, "me", None) if guild is not None else None
+    if me is not None:
+        avatar = getattr(me, "display_avatar", None)
+        if avatar is not None:
+            return str(avatar.url)
+    return ""
+
+
 async def build_system_announcement_payload(
     message: discord.Message,
     *,
     body: str,
+    author_icon_url: str | None = None,
 ) -> RelayPayload:
+    """Format a hub announcement source into the single destination embed shape.
+
+    Hub ``#network-announcements`` must remain plain text; this is the only
+    formatting boundary for system announcements.
+    """
     embed = discord.Embed(description=body or None, colour=resolve_colour("blurple"))
-    embed.set_author(name="The Network")
+    icon = (author_icon_url or "").strip() or _bot_icon_url_from_message(message)
+    author_kwargs: dict[str, str] = {"name": "The Network"}
+    if icon:
+        author_kwargs["icon_url"] = icon
+    embed.set_author(**author_kwargs)
     image_urls = extract_relay_image_urls(message)
     if image_urls:
         embed.set_image(url=image_urls[0])

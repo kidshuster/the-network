@@ -10,6 +10,9 @@ import pytest
 
 from bot.app.features import build_recipe_registry
 from bot.app.testing.catalog import (
+    allowed_scenario_names,
+    expand_scenarios,
+    expand_scenarios_for_recipe,
     requires_confirmation,
     validate_recipe_choice,
     validate_scenario_choice,
@@ -24,17 +27,42 @@ from tests.core.smoke_api import run_smoke_recipe
 
 def test_validate_recipe_allowlist() -> None:
     assert validate_recipe_choice("full") == "full"
+    assert validate_recipe_choice("clean") == "clean"
     with pytest.raises(ValueError):
         validate_recipe_choice("not-a-recipe")
     assert requires_confirmation("full") is True
+    assert requires_confirmation("clean") is True
     assert requires_confirmation("server-init-audit") is False
 
 
 def test_validate_scenario_allowlist() -> None:
     assert validate_scenario_choice(None) == "healthy"
     assert validate_scenario_choice("malformed_channels") == "malformed_channels"
+    assert validate_scenario_choice("all") == "all"
     with pytest.raises(ValueError):
         validate_scenario_choice("../evil")
+
+
+def test_expand_scenarios_all_runs_healthy_first() -> None:
+    assert expand_scenarios("healthy") == ("healthy",)
+    scenarios = expand_scenarios("all")
+    assert scenarios[0] == "healthy"
+    assert set(scenarios) == {
+        "healthy",
+        "stale_permissions",
+        "malformed_channels",
+        "missing_layout",
+        "hard_blocker",
+    }
+    assert allowed_scenario_names()[0] == "all"
+    assert "healthy" in allowed_scenario_names()
+
+
+def test_clean_recipe_ignores_scenario_matrix() -> None:
+    assert expand_scenarios_for_recipe("clean", "all") == ("healthy",)
+    assert expand_scenarios_for_recipe("clean", "malformed_channels") == ("healthy",)
+    assert expand_scenarios_for_recipe("full", "all")[0] == "healthy"
+    assert len(expand_scenarios_for_recipe("full", "all")) > 1
 
 
 def test_production_catalog_excludes_server_test() -> None:

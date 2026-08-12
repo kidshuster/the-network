@@ -43,6 +43,13 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
     columns = {str(row[1]) for row in await cursor.fetchall()}
     await cursor.close()
     assert "activation_welcome_message_id" in columns
+    assert "network_welcome_message_id" in columns
+    assert "network_welcome_complete" in columns
+
+    cursor = await db.connection.execute("PRAGMA table_info(server_requests)")
+    request_columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    assert "repair_client_id" in request_columns
 
     cursor = await db.connection.execute("PRAGMA table_info(clients)")
     client_columns = {str(row[1]) for row in await cursor.fetchall()}

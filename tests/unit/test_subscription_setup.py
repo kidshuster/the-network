@@ -119,6 +119,8 @@ def _subscription(**kwargs: object) -> ClientSubscription:
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
         activation_welcome_message_id=None,
+        network_welcome_message_id=None,
+        network_welcome_complete=False,
         subscribe_confirmed=False,
         enabled=True,
     )
@@ -272,13 +274,21 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
     bot = MagicMock()
     bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
 
+    state = {"sub": _subscription()}
+
+    async def _get_sub(_sid: int) -> ClientSubscription:
+        return state["sub"]
+
+    async def _update_activation(_sid: int, msg_id: int | None) -> ClientSubscription:
+        state["sub"] = _subscription(activation_welcome_message_id=msg_id)
+        return state["sub"]
+
     context = MagicMock()
-    context.store.clients.get_subscription_by_id = AsyncMock(
-        return_value=_subscription(),
-    )
+    context.store.clients.get_subscription_by_id = AsyncMock(side_effect=_get_sub)
     context.store.clients.update_activation_welcome_message_id = AsyncMock(
-        side_effect=lambda _sub_id, msg_id: _subscription(activation_welcome_message_id=msg_id)
+        side_effect=_update_activation
     )
+    context.store.clients.claim_network_welcome = AsyncMock(return_value=None)
     context.routing_service.list_network_subscriptions = MagicMock(return_value=[])
 
     guild = MagicMock()
@@ -308,17 +318,40 @@ async def test_activation_welcome_posts_once_when_fully_configured() -> None:
 
 
 @pytest.mark.asyncio
-async def test_network_member_welcome_posts_to_network_announcements(
+async def test_network_member_welcome_posts_plain_text_to_network_announcements(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bot = MagicMock()
     bot.user.display_avatar.url = "https://cdn.discordapp.com/avatars/1/a.png"
 
     message = MagicMock(spec=discord.Message)
+    message.id = 4242
     channel = MagicMock(spec=discord.TextChannel)
     channel.send = AsyncMock(return_value=message)
     guild = MagicMock()
     context = MagicMock()
+    context.store.clients.get_subscription_by_id = AsyncMock(
+        return_value=_subscription(activation_welcome_message_id=1),
+    )
+    context.store.clients.claim_network_welcome = AsyncMock(
+        return_value=_subscription(
+            activation_welcome_message_id=1,
+            network_welcome_message_id=0,
+        )
+    )
+    context.store.clients.update_network_welcome_message_id = AsyncMock(
+        side_effect=lambda _sid, mid: _subscription(
+            activation_welcome_message_id=1,
+            network_welcome_message_id=mid,
+        )
+    )
+    context.store.clients.mark_network_welcome_complete = AsyncMock(
+        side_effect=lambda _sid: _subscription(
+            activation_welcome_message_id=1,
+            network_welcome_message_id=4242,
+            network_welcome_complete=True,
+        )
+    )
     dispatch = AsyncMock(return_value=MagicMock(success=True, errors=()))
     monkeypatch.setattr(
         "bot.features.channels.stickies.subscription.resolve_hub_category",
@@ -333,20 +366,81 @@ async def test_network_member_welcome_posts_to_network_announcements(
         dispatch,
     )
 
-    await _post_network_member_welcome(
+    result = await _post_network_member_welcome(
         bot,
         context,
         guild,
         client=_client(),
         network=_network(),
+        subscription=_subscription(activation_welcome_message_id=1),
     )
 
     channel.send.assert_awaited_once()
-    assert channel.send.await_args.kwargs["content"] == "[stingers]"
-    broadcast_embed = channel.send.await_args.kwargs["embed"]
-    assert broadcast_embed.title == "New member on Stingers"
-    assert broadcast_embed.author.icon_url == "https://cdn.discordapp.com/avatars/1/a.png"
-    dispatch.assert_awaited_once_with(context, guild, message)
+    kwargs = channel.send.await_args.kwargs
+    assert "embed" not in kwargs or kwargs.get("embed") is None
+    content = kwargs["content"]
+    assert content.startswith("[stingers]")
+    assert "acme" in content.casefold() or "Acme" in content
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.kwargs["exclude_client_id"] == 1
+    assert dispatch.await_args.kwargs["about_client_id"] == 1
+    assert result.network_welcome_complete is True
+
+
+@pytest.mark.asyncio
+async def test_network_welcome_retries_dispatch_without_reposting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot = MagicMock()
+    existing = MagicMock(spec=discord.Message)
+    existing.id = 77
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.fetch_message = AsyncMock(return_value=existing)
+    channel.send = AsyncMock()
+    context = MagicMock()
+    context.store.clients.get_subscription_by_id = AsyncMock(
+        return_value=_subscription(
+            network_welcome_message_id=77,
+            network_welcome_complete=False,
+        )
+    )
+    context.store.clients.mark_network_welcome_complete = AsyncMock(
+        return_value=_subscription(
+            network_welcome_message_id=77,
+            network_welcome_complete=True,
+        )
+    )
+    dispatch = AsyncMock(return_value=MagicMock(success=True, errors=()))
+    monkeypatch.setattr(
+        "bot.features.channels.stickies.subscription.resolve_hub_category",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "bot.features.channels.stickies.subscription.resolve_hub_channel",
+        lambda *args, **kwargs: channel,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.announcements.dispatch_system_announcement",
+        dispatch,
+    )
+
+    result = await _post_network_member_welcome(
+        bot,
+        context,
+        MagicMock(),
+        client=_client(),
+        network=_network(),
+        subscription=_subscription(
+            network_welcome_message_id=77,
+            network_welcome_complete=False,
+        ),
+    )
+
+    channel.send.assert_not_called()
+    dispatch.assert_awaited_once()
+    assert dispatch.await_args.args[2] is existing
+    assert dispatch.await_args.kwargs["exclude_client_id"] == 1
+    assert result.network_welcome_complete is True
 
 
 @pytest.mark.asyncio
@@ -376,7 +470,9 @@ async def test_activation_welcome_skips_when_not_fully_configured() -> None:
 
 
 @pytest.mark.asyncio
-async def test_activation_welcome_skips_when_already_sent() -> None:
+async def test_activation_welcome_skips_local_when_already_sent_but_may_retry_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     subscribe_channel = MagicMock(spec=discord.TextChannel)
     subscribe_channel.send = AsyncMock()
 
@@ -388,12 +484,25 @@ async def test_activation_welcome_skips_when_already_sent() -> None:
 
     context = MagicMock()
     context.store.clients.get_subscription_by_id = AsyncMock(
-        return_value=_subscription(activation_welcome_message_id=999),
+        return_value=_subscription(
+            activation_welcome_message_id=999,
+            network_welcome_complete=True,
+        ),
+    )
+    post_network = AsyncMock(
+        return_value=_subscription(
+            activation_welcome_message_id=999,
+            network_welcome_complete=True,
+        )
+    )
+    monkeypatch.setattr(
+        "bot.features.channels.stickies.subscription._post_network_member_welcome",
+        post_network,
     )
 
     await _maybe_post_activation_welcome(
         MagicMock(),
-        _subscription(activation_welcome_message_id=999),
+        _subscription(activation_welcome_message_id=999, network_welcome_complete=True),
         subscribe_channel=subscribe_channel,
         context=context,
         guild=MagicMock(),
@@ -403,6 +512,7 @@ async def test_activation_welcome_skips_when_already_sent() -> None:
     )
 
     subscribe_channel.send.assert_not_called()
+    post_network.assert_awaited_once()
 
 
 def _async_empty_history():

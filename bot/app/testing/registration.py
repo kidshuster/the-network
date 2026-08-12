@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 
 from bot.app.discord.responses import defer_response
-from bot.app.testing.catalog import ALLOWED_SCENARIOS, allowed_recipe_names
+from bot.app.testing.catalog import allowed_recipe_names, allowed_scenario_names
 from bot.contracts.widgets import OpenEphemeralView
 from bot.errors import UserFacingError
 
@@ -59,7 +59,7 @@ def register_test_commands(bot: NetworkRelayBot) -> None:
         app_commands.Choice(name=name, value=name) for name in allowed_recipe_names()
     ]
     scenario_choices = [
-        app_commands.Choice(name=name, value=name) for name in sorted(ALLOWED_SCENARIOS)
+        app_commands.Choice(name=name, value=name) for name in allowed_scenario_names()
     ]
 
     async def server_test(

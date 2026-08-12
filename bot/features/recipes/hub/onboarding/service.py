@@ -380,47 +380,53 @@ class ServerRequestService:
         if request.status != ServerRequestStatus.PENDING:
             return ReviewRequestResult(success=False, error="This request was already reviewed.")
 
+        guild = self._bot.get_guild(request.guild_id)
+        message = "The join request was denied."
+        if request.repair_client_id is not None:
+            from bot.features.recipes.hub.clients.deletion import delete_client_resources
+
+            if guild is None:
+                return ReviewRequestResult(
+                    success=False,
+                    error="Cannot deny repair: hub guild is unavailable for cleanup.",
+                )
+            client = await self._context.store.clients.get_by_id(request.repair_client_id)
+            bot_member = guild.me
+            if client is not None and bot_member is None:
+                return ReviewRequestResult(
+                    success=False,
+                    error="Cannot deny repair: bot member is unavailable for cleanup.",
+                )
+            if client is not None and bot_member is not None:
+                deleted = await delete_client_resources(
+                    guild,
+                    bot_member,
+                    client=client,
+                    client_repo=self._context.store.clients,
+                    network_repo=self._context.store.networks,
+                    context=self._context,
+                    force=True,
+                )
+                if not deleted.success:
+                    return ReviewRequestResult(
+                        success=False,
+                        error=deleted.error
+                        or "Could not remove the malformed client; request left pending.",
+                    )
+                message = (
+                    f"Denied repair for {client.server_name!r} and removed remaining resources."
+                )
+
         await self._context.store.requests.resolve(
             request_id,
             status=ServerRequestStatus.DENIED,
             resolved_by_user_id=moderator.id,
         )
 
-        guild = self._bot.get_guild(request.guild_id)
-        message = "The join request was denied."
         if guild is not None:
             await self._finalize_review_message(
                 guild, request, moderator, ServerRequestStatus.DENIED
             )
-            if request.repair_client_id is not None:
-                from bot.features.recipes.hub.clients.deletion import delete_client_resources
-
-                client = await self._context.store.clients.get_by_id(request.repair_client_id)
-                bot_member = guild.me
-                if client is not None and bot_member is not None:
-                    deleted = await delete_client_resources(
-                        guild,
-                        bot_member,
-                        client=client,
-                        client_repo=self._context.store.clients,
-                        network_repo=self._context.store.networks,
-                        context=self._context,
-                        force=True,
-                    )
-                    if not deleted.success:
-                        return ReviewRequestResult(
-                            success=False,
-                            error=deleted.error
-                            or "Denied the request but could not remove the malformed client.",
-                        )
-                    message = (
-                        f"Denied repair for {client.server_name!r} and removed remaining resources."
-                    )
-                elif client is not None:
-                    return ReviewRequestResult(
-                        success=False,
-                        error="Denied the request but the bot member is unavailable for cleanup.",
-                    )
 
         return ReviewRequestResult(success=True, message=message)
 

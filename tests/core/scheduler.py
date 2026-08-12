@@ -54,7 +54,7 @@ class DiscordTestScheduler:
         budgets: SmokeBudgets | None = None,
         cancel_event: asyncio.Event | None = None,
         max_rate_limit_wait_seconds: float = 300.0,
-        phase_delay_seconds: float = 2.0,
+        phase_delay_seconds: float = 0.5,
     ) -> None:
         self.budgets = budgets or SmokeBudgets()
         self.cancel_event = cancel_event or asyncio.Event()

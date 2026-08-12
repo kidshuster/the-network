@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 _SMOKE_WELCOME_PREFIX = "Smoke Welcome "
 _ACTIVATION_FOOTER = "server connected"
-_MEMBER_FOOTER = "network welcome"
 _SUBSCRIBE_SETUP_FOOTER = "subscribe setup"
 _PUBLISH_SETUP_FOOTER = "publish setup"
 _DESKTOP_NOTE = "Discord desktop app"
@@ -247,12 +246,37 @@ async def _trigger_activation_welcome(
     )
 
 
+async def _bot_system_welcome_messages(
+    channel: discord.abc.GuildChannel,
+    *,
+    bot_user_id: int,
+    client_server_name: str,
+) -> list[discord.Message]:
+    if not hasattr(channel, "history"):
+        return []
+    matches: list[discord.Message] = []
+    needle = client_server_name.casefold()
+    async for message in channel.history(limit=_HISTORY_LIMIT):
+        if message.author.id != bot_user_id:
+            continue
+        embed = message.embeds[0] if message.embeds else None
+        if embed is None or embed.author is None:
+            continue
+        if (embed.author.name or "") != "The Network":
+            continue
+        description = (embed.description or "").casefold()
+        if needle in description and "joined" in description:
+            matches.append(message)
+    return matches
+
+
 async def _assert_welcome_counts(
     guild: discord.Guild,
     bot: NetworkRelayBot,
     *,
     joiner_subscription: ClientSubscription,
     incumbent_subscription: ClientSubscription,
+    joiner_server_name: str,
     expected_incumbent_member_welcomes: int,
 ) -> None:
     bot_user_id = bot.user.id if bot.user is not None else 0
@@ -266,15 +290,15 @@ async def _assert_welcome_counts(
         bot_user_id=bot_user_id,
         footer_marker=_ACTIVATION_FOOTER,
     )
-    joiner_member = await _bot_messages_with_footer(
+    joiner_member = await _bot_system_welcome_messages(
         joiner_channel,
         bot_user_id=bot_user_id,
-        footer_marker=_MEMBER_FOOTER,
+        client_server_name=joiner_server_name,
     )
-    incumbent_member = await _bot_messages_with_footer(
+    incumbent_member = await _bot_system_welcome_messages(
         incumbent_channel,
         bot_user_id=bot_user_id,
-        footer_marker=_MEMBER_FOOTER,
+        client_server_name=joiner_server_name,
     )
 
     if len(joiner_activation) != 1:
@@ -377,6 +401,7 @@ async def run_setup_welcome_smoke_flow(
                 bot,
                 joiner_subscription=joiner_sub,
                 incumbent_subscription=incumbent_sub,
+                joiner_server_name=joiner_server_name,
                 expected_incumbent_member_welcomes=0,
             )
 
@@ -400,6 +425,7 @@ async def run_setup_welcome_smoke_flow(
                 joiner_sub.id,
                 None,
             )
+            joiner_sub = await context.store.clients.clear_network_welcome(joiner_sub.id)
             joiner_sub = await _trigger_activation_welcome(
                 bot,
                 context,
@@ -413,6 +439,7 @@ async def run_setup_welcome_smoke_flow(
                 bot,
                 joiner_subscription=joiner_sub,
                 incumbent_subscription=incumbent_sub,
+                joiner_server_name=joiner_server_name,
                 expected_incumbent_member_welcomes=1,
             )
 

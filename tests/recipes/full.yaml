@@ -1,10 +1,10 @@
 name: full
-description: Complete production-behavior smoke test in one Discord session
+description: Product-path smoke test in one Discord session
 budgets:
-  max_mutations: 250
-  max_rest_reads: 800
-  max_rate_limit_wait_seconds: 300
-  max_duration_seconds: 1800
+  max_mutations: 160
+  max_rest_reads: 500
+  max_rate_limit_wait_seconds: 180
+  max_duration_seconds: 600
 steps:
   - artifacts.cleanup
   - probe: permissions.provision
@@ -14,8 +14,6 @@ steps:
   - probe: relay.setup_welcome
     pause: true
   - probe: relay.hub_announcement
-    pause: true
-  - probe: hub.rebuild
     pause: true
   - recipe: functional
   - clients.protected

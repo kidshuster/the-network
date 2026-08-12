@@ -156,6 +156,17 @@ class ClientSubscriptionRow:
             and row["activation_welcome_message_id"] is not None
             else None
         )
+        network_welcome_message_id = (
+            int(row["network_welcome_message_id"])
+            if "network_welcome_message_id" in keys
+            and row["network_welcome_message_id"] is not None
+            else None
+        )
+        network_welcome_complete = (
+            bool(row["network_welcome_complete"])
+            if "network_welcome_complete" in keys
+            else False
+        )
         return ClientSubscription(
             id=int(row["id"]),
             client_id=int(row["client_id"]),
@@ -171,6 +182,8 @@ class ClientSubscriptionRow:
             publish_setup_message_id=publish_setup_message_id,
             subscribe_setup_message_id=subscribe_setup_message_id,
             activation_welcome_message_id=activation_welcome_message_id,
+            network_welcome_message_id=network_welcome_message_id,
+            network_welcome_complete=network_welcome_complete,
             subscribe_confirmed=subscribe_confirmed,
             enabled=bool(row["enabled"]),
         )

@@ -24,16 +24,16 @@ def _delay_seconds(env_var: str, default: float) -> float:
 
 
 # Pause between operator and provision probes (each creates roles).
-PROBE_PHASE_DELAY_SEC = _delay_seconds("SMOKE_PROBE_PHASE_DELAY_SEC", 2.0)
+PROBE_PHASE_DELAY_SEC = _delay_seconds("SMOKE_PROBE_PHASE_DELAY_SEC", 0.5)
 
 # Pause immediately before guild.create_role (shared rate-limit bucket).
-ROLE_CREATE_DELAY_SEC = _delay_seconds("SMOKE_ROLE_CREATE_DELAY_SEC", 1.5)
+ROLE_CREATE_DELAY_SEC = _delay_seconds("SMOKE_ROLE_CREATE_DELAY_SEC", 0.5)
 
 # Optional pacing for standalone live scripts and destructive stress probes.
-STEP_DELAY_SEC = _delay_seconds("SMOKE_STEP_DELAY_SEC", 8.0)
+STEP_DELAY_SEC = _delay_seconds("SMOKE_STEP_DELAY_SEC", 2.0)
 
 # Extra pause when pre-init probes run twice in a row (probe-only then full E2E).
-DUPLICATE_PROBE_DELAY_SEC = _delay_seconds("SMOKE_DUPLICATE_PROBE_DELAY_SEC", 15.0)
+DUPLICATE_PROBE_DELAY_SEC = _delay_seconds("SMOKE_DUPLICATE_PROBE_DELAY_SEC", 3.0)
 
 
 async def pause_between_probe_phases() -> None:

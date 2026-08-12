@@ -40,6 +40,7 @@ class SubscribeResult:
     success: bool
     subscription: ClientSubscription | None = None
     created: bool = False
+    reactivated: bool = False
     error: str | None = None
 
 
@@ -259,6 +260,7 @@ async def subscribe_client(guild: discord.Guild,
         network_key,
         client=client,
     )
+    channels_preexisted = publish_channel is not None and subscribe_channel is not None
     newly_created: list[discord.abc.GuildChannel] = []
 
     if publish_channel is None or subscribe_channel is None:
@@ -340,10 +342,12 @@ async def subscribe_client(guild: discord.Guild,
                 moderation_message_id=None,
                 publish_setup_message_id=None,
                 subscribe_setup_message_id=None,
-                activation_welcome_message_id=None,
-                subscribe_confirmed=False,
-                enabled=True,
-            ),
+        activation_welcome_message_id=None,
+        network_welcome_message_id=None,
+        network_welcome_complete=False,
+        subscribe_confirmed=False,
+        enabled=True,
+    ),
             access_role_name=access_role_name,
         )
 
@@ -357,6 +361,10 @@ async def subscribe_client(guild: discord.Guild,
         publish_channel_id=publish_channel.id,
         subscribe_channel_id=subscribe_channel.id,
     )
+    reactivated = False
+    if channels_preexisted and not newly_created:
+        subscription = await client_repo.mark_silent_reconnect(subscription.id)
+        reactivated = True
     await reorder_client_category_channels(
         category,
         client=client,
@@ -367,6 +375,7 @@ async def subscribe_client(guild: discord.Guild,
         success=True,
         subscription=subscription,
         created=True,
+        reactivated=reactivated,
     )
 
 async def unsubscribe_client(guild: discord.Guild,
@@ -562,6 +571,46 @@ async def resync_subscriptions_for_network(
     if bot_member is None:
         return 0
 
+    async def _sync_existing(
+        client: Client,
+        subscription: ClientSubscription,
+        *,
+        adopt_zombie: bool = False,
+    ) -> ClientSubscription:
+        if adopt_zombie and (
+            not subscription.subscribe_confirmed or not subscription.network_welcome_complete
+        ):
+            subscription = await context.store.clients.mark_silent_reconnect(
+                subscription.id
+            )
+        await sync_subscription_channel_permissions(
+            guild,
+            bot_member,
+            client=client,
+            subscription=subscription,
+            access_role_name=access_role_name,
+        )
+        category = await resolve_client_category(guild, client)
+        if category is not None:
+            await reorder_client_category_channels(
+                category,
+                client=client,
+                client_repo=context.store.clients,
+                network_repo=context.store.networks,
+            )
+        # Relinks and rediscoveries must not recreate setup cards or welcomes.
+        await sync_subscription_setup(
+            bot,
+            context,
+            guild,
+            client=client,
+            subscription=subscription,
+            network=network,
+            setup_mode="reconcile",
+            view_registry=view_registry,
+        )
+        return subscription
+
     relinked = 0
     for client in await context.store.clients.list_all():
         if client.guild_id != guild.id:
@@ -572,28 +621,7 @@ async def resync_subscriptions_for_network(
 
         existing = await context.store.clients.get_subscription(client.id, network.id)
         if existing is not None:
-            await sync_subscription_channel_permissions(
-                guild,
-                bot_member,
-                client=client,
-                subscription=existing,
-                access_role_name=access_role_name,
-            )
-            await sync_subscription_setup(
-                bot,
-                context,
-                guild,
-                client=client,
-                subscription=existing,
-                network=network,
-                view_registry=view_registry,
-            )
-            await reorder_client_category_channels(
-                category,
-                client=client,
-                client_repo=context.store.clients,
-                network_repo=context.store.networks,
-            )
+            await _sync_existing(client, existing, adopt_zombie=True)
             continue
 
         orphan = await context.store.clients.get_subscription_by_client_and_key(
@@ -605,28 +633,7 @@ async def resync_subscriptions_for_network(
                 orphan.id,
                 network.id,
             )
-            await sync_subscription_channel_permissions(
-                guild,
-                bot_member,
-                client=client,
-                subscription=subscription,
-                access_role_name=access_role_name,
-            )
-            await reorder_client_category_channels(
-                category,
-                client=client,
-                client_repo=context.store.clients,
-                network_repo=context.store.networks,
-            )
-            await sync_subscription_setup(
-                bot,
-                context,
-                guild,
-                client=client,
-                subscription=subscription,
-                network=network,
-                view_registry=view_registry,
-            )
+            await _sync_existing(client, subscription, adopt_zombie=True)
             relinked += 1
             continue
 
@@ -645,28 +652,9 @@ async def resync_subscriptions_for_network(
             publish_channel_id=publish_channel.id,
             subscribe_channel_id=subscribe_channel.id,
         )
-        await sync_subscription_channel_permissions(
-            guild,
-            bot_member,
-            client=client,
-            subscription=subscription,
-            access_role_name=access_role_name,
-        )
-        await reorder_client_category_channels(
-            category,
-            client=client,
-            client_repo=context.store.clients,
-            network_repo=context.store.networks,
-        )
-        await sync_subscription_setup(
-            bot,
-            context,
-            guild,
-            client=client,
-            subscription=subscription,
-            network=network,
-            view_registry=view_registry,
-        )
+        # Channels survived hub uninit: reconnect without setup/welcome spam.
+        subscription = await context.store.clients.mark_silent_reconnect(subscription.id)
+        await _sync_existing(client, subscription)
         relinked += 1
 
     if relinked:

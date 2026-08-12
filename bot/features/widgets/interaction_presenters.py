@@ -108,7 +108,11 @@ async def present_client_delete(
     server_name = getattr(value, "server_name", None) or getattr(
         getattr(value, "client", None), "server_name", None
     )
-    await _embed(response, "delete_client_success", server_name=server_name or "Client")
+    try:
+        await _embed(response, "delete_client_success", server_name=server_name or "Client")
+    except discord.HTTPException:
+        # Deleting a client can remove the channel that owned this interaction.
+        pass
     if interaction is not None and getattr(interaction, "message", None) is not None:
         try:
             await interaction.message.edit(view=None)

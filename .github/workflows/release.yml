@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Docker meta
         id: meta
@@ -49,7 +51,12 @@ jobs:
             ## Docker (Raspberry Pi / Linux)
 
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:1.0.0
+            git clone https://github.com/${{ github.repository_owner }}/the-network-install.git
+            cd the-network-install
+            cp .env.example .env   # set DISCORD_TOKEN and GUILD_ID
+            ./scripts/enable.sh
             ```
 
-            See [deploy/RASPBERRY_PI.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/deploy/RASPBERRY_PI.md) for full setup.
+            Image: `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+
+            See the repository README for the full install/update flow.

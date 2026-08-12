@@ -82,10 +82,53 @@ async def test_dispatch_rejects_empty_message(db) -> None:
     await context.store.networks.create(guild_id=100, key="alpha", display_name="Alpha")
     message = MagicMock(spec=discord.Message)
     message.content = ""
-    message.embeds = []
+    message.embeds = [MagicMock()]
     message.attachments = []
 
     result = await dispatch_system_announcement(context, MagicMock(spec=discord.Guild), message)
 
     assert not result.success
     assert result.errors == ("Message is empty.",)
+
+
+async def test_system_announcement_payload_formats_plain_body_with_bot_icon() -> None:
+    from bot.features.recipes.hub.relay.formatter import build_system_announcement_payload
+
+    message = MagicMock(spec=discord.Message)
+    message.attachments = []
+    message.embeds = []
+    human = MagicMock()
+    human.display_avatar.url = "https://cdn.example/human.png"
+    message.author = human
+    bot_member = MagicMock()
+    bot_member.display_avatar.url = "https://cdn.example/bot.png"
+    guild = MagicMock()
+    guild.me = bot_member
+    message.guild = guild
+
+    payload = await build_system_announcement_payload(
+        message,
+        body="**acme** joined **`stingers`**",
+    )
+
+    assert payload.embed.author.name == "The Network"
+    assert payload.embed.author.icon_url == "https://cdn.example/bot.png"
+    assert payload.embed.description == "**acme** joined **`stingers`**"
+    assert not payload.embed.title
+
+
+async def test_system_announcement_payload_ignores_human_author_avatar() -> None:
+    from bot.features.recipes.hub.relay.formatter import build_system_announcement_payload
+
+    message = MagicMock(spec=discord.Message)
+    message.attachments = []
+    message.embeds = []
+    human = MagicMock()
+    human.display_avatar.url = "https://cdn.example/human.png"
+    message.author = human
+    bot_member = MagicMock()
+    bot_member.display_avatar.url = "https://cdn.example/bot.png"
+    message.guild = MagicMock(me=bot_member)
+
+    payload = await build_system_announcement_payload(message, body="Maintenance tonight.")
+    assert payload.embed.author.icon_url == "https://cdn.example/bot.png"

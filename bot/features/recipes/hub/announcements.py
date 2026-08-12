@@ -118,13 +118,18 @@ async def dispatch_system_announcement(
     context: Any,
     guild: discord.Guild,
     message: discord.Message,
+    *,
+    about_client_id: int | None = None,
+    exclude_client_id: int | None = None,
+    author_icon_url: str | None = None,
 ) -> DispatchResult:
     networks = [network for network in await context.store.networks.list_all() if network.enabled]
     by_key = {network.key: network for network in networks}
     parsed = parse_announcement_content(message.content or "", available_keys=set(by_key))
     if parsed.error is not None:
         return DispatchResult(False, (), (), (parsed.error,))
-    if not parsed.body and not message.embeds and not message.attachments:
+    if not parsed.body and not message.attachments:
+        # Embeds are intentionally ignored: hub announcements are plain-text sources.
         return DispatchResult(False, (), (), ("Message is empty.",))
 
     relayed: list[str] = []
@@ -135,6 +140,9 @@ async def dispatch_system_announcement(
             message,
             network_id=network.id,
             body=parsed.body,
+            about_client_id=about_client_id,
+            exclude_client_id=exclude_client_id,
+            author_icon_url=author_icon_url,
         )
         if result.success:
             relayed.append(key)
@@ -164,7 +172,16 @@ async def handle_network_announcements_message(
     if not can_post_hub_announcement(message.author, guild, bot.settings):
         return
 
-    result = await dispatch_system_announcement(context, guild, message)
+    result = await dispatch_system_announcement(
+        context,
+        guild,
+        message,
+        author_icon_url=(
+            str(bot.user.display_avatar.url)
+            if bot.user is not None
+            else None
+        ),
+    )
     if result.networks_relayed:
         description = "Relayed to " + ", ".join(f"`{key}`" for key in result.networks_relayed)
         colour = "green" if not result.errors else "yellow"

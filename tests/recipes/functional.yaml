@@ -1,10 +1,10 @@
 name: functional
-description: Permission and layout rectification checks used by the full suite
+description: Permission and layout checks used by the full suite
 budgets:
-  max_mutations: 120
-  max_rest_reads: 400
-  max_rate_limit_wait_seconds: 180
-  max_duration_seconds: 900
+  max_mutations: 80
+  max_rest_reads: 250
+  max_rate_limit_wait_seconds: 120
+  max_duration_seconds: 300
 steps:
   - hub.operator
   - hub.manage_server
@@ -12,7 +12,5 @@ steps:
   - hub.layout
   - hub.announcement_channel
   - probe: hub.leaders_drift
-    pause: true
-  - probe: hub.client_layout_reinit
     pause: true
   - hub.leaders_access

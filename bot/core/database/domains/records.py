@@ -1089,6 +1089,127 @@ class ClientStore:
             not_found="Subscription disappeared after activation welcome update",
         )
 
+    async def claim_network_welcome(self, subscription_id: int) -> ClientSubscription | None:
+        """Atomically claim first-time network welcome posting.
+
+        Sets ``network_welcome_message_id`` to ``0`` as an in-progress sentinel.
+        Returns the updated row when this caller won the claim, otherwise ``None``.
+        """
+        now = _now_iso()
+        updated = await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_welcome_message_id = 0, updated_at = ?
+            WHERE id = ?
+              AND network_welcome_complete = 0
+              AND network_welcome_message_id IS NULL
+            """,
+            (now, subscription_id),
+        )
+        if updated == 0:
+            return None
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after network welcome claim",
+        )
+
+    async def clear_network_welcome_claim(self, subscription_id: int) -> ClientSubscription:
+        """Release an in-progress claim so a later activation can retry posting."""
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_welcome_message_id = NULL, updated_at = ?
+            WHERE id = ?
+              AND network_welcome_complete = 0
+              AND network_welcome_message_id = 0
+            """,
+            (now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after network welcome claim clear",
+        )
+
+    async def update_network_welcome_message_id(
+        self,
+        subscription_id: int,
+        message_id: int | None,
+    ) -> ClientSubscription:
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_welcome_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after network welcome message update",
+        )
+
+    async def mark_network_welcome_complete(
+        self,
+        subscription_id: int,
+    ) -> ClientSubscription:
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_welcome_complete = 1, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after network welcome complete",
+        )
+
+    async def mark_silent_reconnect(self, subscription_id: int) -> ClientSubscription:
+        """Adopt a rediscovered subscription without setup prompts or welcome spam.
+
+        Used when publish/subscribe channels still exist after hub uninit/network
+        recreate. ``activation_welcome_message_id = 0`` is a durable sentinel that
+        means "already welcomed / do not post".
+        """
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET subscribe_confirmed = 1,
+                activation_welcome_message_id = 0,
+                network_welcome_complete = 1,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after silent reconnect",
+        )
+
+    async def clear_network_welcome(self, subscription_id: int) -> ClientSubscription:
+        """Clear network welcome durable state so a later activation can announce again."""
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET network_welcome_message_id = NULL,
+                network_welcome_complete = 0,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after network welcome clear",
+        )
+
     async def set_subscription_enabled(
         self,
         subscription_id: int,

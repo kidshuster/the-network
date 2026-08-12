@@ -1,4 +1,11 @@
 releases:
+  "1.3.0":
+    summary: "Architecture refactor with install submodule runtime and in-bot smoke testing."
+    changes:
+      - "Split the bot into app, core, and features with recipe/widget/trigger boundaries."
+      - "Move production Docker runtime into the the-network-install submodule."
+      - "Add mock/live smoke recipes and test-only /server test (including clean)."
+      - "Harden subscription reconnect, Leaders permissions, and hub welcome/announcement flows."
   "1.2.15":
     summary: "Smoke teardown script, hub announcements channel type, and the-network display name."
     changes:

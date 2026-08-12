@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import discord
 
@@ -14,6 +15,8 @@ from bot.core.clients.resources import (
 )
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
+
+ClientIntegrityState = Literal["healthy", "partial", "irrecoverable"]
 
 
 @dataclass(frozen=True)
@@ -31,12 +34,24 @@ class ClientIntegrity:
 
     @property
     def is_healthy(self) -> bool:
-        return (
+        return self.state == "healthy"
+
+    @property
+    def state(self) -> ClientIntegrityState:
+        """Classify Discord resource completeness for lifecycle decisions.
+
+        Ordinary reconciliation never deletes a client. Partial clients are
+        repaired through the pending-approval flow; ``irrecoverable`` is reserved
+        for rows that cannot safely be repaired in place (not currently emitted).
+        """
+        if (
             self.role_present
             and self.category_present
             and self.profile_channel_present
             and not self.broken_subscription_ids
-        )
+        ):
+            return "healthy"
+        return "partial"
 
 
 async def inspect_client_integrity(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
@@ -8,6 +9,21 @@ import discord
 Target = discord.Role | discord.Member | discord.Object
 OverwriteMap = Mapping[Target, discord.PermissionOverwrite]
 ReconcileTarget = discord.CategoryChannel | discord.TextChannel
+
+# Minimum member overwrite so the bot can rectify a private resource before
+# role-based bot_access is confirmed. Never a permanent production grant.
+_BOOTSTRAP_OVERWRITE = discord.PermissionOverwrite(
+    view_channel=True,
+    read_message_history=True,
+    manage_channels=True,
+    # Do not set manage_roles here: Discord rejects that bit in channel
+    # overwrites unless the bot has Administrator. Guild Manage Roles is enough.
+    send_messages=True,
+    embed_links=True,
+    attach_files=True,
+    manage_messages=True,
+    manage_webhooks=True,
+)
 
 
 def can_configure_role(bot_member: discord.Member, role: discord.Role) -> bool:
@@ -146,6 +162,197 @@ def _diff(
     return tuple(sorted(added)), tuple(sorted(updated)), tuple(sorted(removed))
 
 
+def _current_map(target: ReconcileTarget) -> OverwriteMap:
+    current_value = target.overwrites
+    return current_value if isinstance(current_value, Mapping) else {}
+
+
+def _overwrite_for(
+    current: OverwriteMap,
+    target: Target,
+) -> discord.PermissionOverwrite | None:
+    for existing, overwrite in current.items():
+        if _identity(existing) == _identity(target):
+            return overwrite
+    return None
+
+
+def _clamp_overwrite(
+    bot_perms: discord.Permissions,
+    overwrite: discord.PermissionOverwrite,
+    *,
+    current: discord.PermissionOverwrite | None = None,
+) -> discord.PermissionOverwrite:
+    """Drop allow/deny bits the bot cannot set; preserve current for those bits.
+
+    Discord returns 50013 when an overwrite allow/deny includes a permission the
+    bot lacks on that channel (common after @everyone lockdown).
+    """
+    clamped = discord.PermissionOverwrite()
+    for name, value in overwrite:
+        if value is None:
+            continue
+        if not getattr(bot_perms, name, False):
+            if current is not None:
+                preserved = getattr(current, name, None)
+                if preserved is not None:
+                    setattr(clamped, name, preserved)
+            continue
+        setattr(clamped, name, value)
+    return clamped
+
+
+def _clamp_desired_map(
+    target: ReconcileTarget,
+    bot_member: discord.Member,
+    desired: OverwriteMap,
+) -> dict[Target, discord.PermissionOverwrite]:
+    perms = target.permissions_for(bot_member)
+    if inspect.isawaitable(perms):
+        return dict(desired)
+    current = _current_map(target)
+    return {
+        item: _clamp_overwrite(
+            perms,
+            overwrite,
+            current=_overwrite_for(current, item),
+        )
+        for item, overwrite in desired.items()
+    }
+
+
+def _bot_can_rectify(target: ReconcileTarget, bot_member: discord.Member) -> bool:
+    """True when the bot can edit this resource's permission overwrites."""
+    perms = target.permissions_for(bot_member)
+    if inspect.isawaitable(perms):
+        # permissions_for is synchronous in discord.py; async test doubles should not
+        # force bootstrap. Treat as accessible and let the edit path surface real errors.
+        return True
+    view = getattr(perms, "view_channel", False)
+    manage_channels = getattr(perms, "manage_channels", False)
+    # Discord requires Manage Roles (channel Manage Permissions) to edit overwrites.
+    manage_roles = getattr(perms, "manage_roles", False)
+    if (
+        inspect.isawaitable(view)
+        or inspect.isawaitable(manage_channels)
+        or inspect.isawaitable(manage_roles)
+    ):
+        return True
+    return bool(view and manage_channels and manage_roles)
+
+
+def _needs_bot_bootstrap(
+    target: ReconcileTarget,
+    context: PermissionContext,
+    desired: OverwriteMap,
+    managed_targets: Collection[Target],
+) -> bool:
+    """True when applying the canonical map may strand the bot without access."""
+    if _bot_can_rectify(target, context.bot_member):
+        member_ow = _overwrite_for(_current_map(target), context.bot_member)
+        if member_ow is None:
+            return False
+        # Stale deny/allow member overwrite should still be replaced carefully.
+        if member_ow.pair()[1].view_channel:
+            return True
+        removing_member = (
+            _identity(context.bot_member) in {_identity(t) for t in managed_targets}
+            and _identity(context.bot_member) not in {_identity(t) for t in desired}
+        )
+        return removing_member and not _role_access_already_desired(context, desired)
+    return True
+
+
+def _role_access_already_desired(
+    context: PermissionContext,
+    desired: OverwriteMap,
+) -> bool:
+    access = context.bot_access_role
+    if access is None:
+        return False
+    for target, overwrite in desired.items():
+        if _identity(target) != _identity(access):
+            continue
+        allow, _deny = overwrite.pair()
+        return bool(allow.view_channel and allow.manage_channels)
+    return False
+
+
+async def _install_bot_bootstrap(
+    target: ReconcileTarget,
+    bot_member: discord.Member,
+    *,
+    reason: str,
+) -> None:
+    await target.set_permissions(
+        bot_member,
+        overwrite=_BOOTSTRAP_OVERWRITE,
+        reason=f"{reason} (bot bootstrap)",
+    )
+
+
+async def _verify_bot_access(
+    target: ReconcileTarget,
+    context: PermissionContext,
+) -> bool:
+    refreshed: ReconcileTarget = target
+    guild = context.guild
+    fetch = getattr(guild, "fetch_channel", None)
+    if fetch is not None:
+        try:
+            fetched = await fetch(target.id)
+        except discord.HTTPException:
+            fetched = None
+        if isinstance(fetched, (discord.CategoryChannel, discord.TextChannel)):
+            refreshed = fetched
+    if not _bot_can_rectify(refreshed, context.bot_member):
+        return False
+    access = context.bot_access_role
+    if access is None:
+        return True
+    # Prefer verifying role-based access once the canonical map is applied.
+    overwrite = _overwrite_for(_current_map(refreshed), access)
+    if overwrite is None:
+        # Operator/top-role mirror may also carry access.
+        operator = context.bot_member.top_role
+        if operator is not None:
+            overwrite = _overwrite_for(_current_map(refreshed), operator)
+    if overwrite is None:
+        # Effective permissions may still succeed via other roles.
+        return True
+    allow, deny = overwrite.pair()
+    if deny.view_channel:
+        return False
+    return bool(allow.view_channel)
+
+
+async def _strip_bot_member_overwrite(
+    target: ReconcileTarget,
+    context: PermissionContext,
+    desired: OverwriteMap,
+    managed_targets: Collection[Target],
+    *,
+    reason: str,
+) -> None:
+    if _identity(context.bot_member) not in {_identity(t) for t in managed_targets}:
+        return
+    if _identity(context.bot_member) in {_identity(t) for t in desired}:
+        return
+    if _overwrite_for(_current_map(target), context.bot_member) is None:
+        return
+    if not await _verify_bot_access(target, context):
+        return
+    await target.set_permissions(
+        context.bot_member,
+        overwrite=None,
+        reason=f"{reason} (remove temporary bot member overwrite)",
+    )
+
+
+def _resource_label(target: ReconcileTarget) -> str:
+    return str(getattr(target, "name", f"channel:{target.id}"))
+
+
 async def _apply_overwrites_incrementally(
     channel: ReconcileTarget,
     current: OverwriteMap,
@@ -164,8 +371,9 @@ async def _apply_overwrites_incrementally(
     }
     owned = {_identity(target) for target in managed_targets}
     top_role_id = getattr(bot_member.top_role, "id", None)
+    bot_member_id = _identity(bot_member)
 
-    # Prefer configurable bot-access style roles before optional top-role grants.
+    # Prefer bot-access role grants first, then other roles, then optional top-role.
     def _apply_order(
         item: tuple[tuple[str, int], tuple[Target, discord.PermissionOverwrite]],
     ) -> int:
@@ -175,8 +383,12 @@ async def _apply_overwrites_incrementally(
             and top_role_id is not None
             and target.id == top_role_id
         ):
-            return 1
-        return 0
+            return 2
+        overwrite = item[1][1]
+        allow, _deny = overwrite.pair()
+        if allow.manage_channels:
+            return 0
+        return 1
 
     for _, (target, overwrite) in sorted(desired_by_id.items(), key=_apply_order):
         previous = current_by_id.get(_identity(target))
@@ -195,12 +407,16 @@ async def _apply_overwrites_incrementally(
             raise
 
     for identity, (target, _) in current_by_id.items():
-        if identity in owned and identity not in desired_by_id:
-            await channel.set_permissions(
-                target,  # type: ignore[arg-type]
-                overwrite=None,
-                reason=reason,
-            )
+        if identity not in owned or identity in desired_by_id:
+            continue
+        if identity == bot_member_id:
+            # Caller strips bot-member overwrites only after effective access verifies.
+            continue
+        await channel.set_permissions(
+            target,  # type: ignore[arg-type]
+            overwrite=None,
+            reason=reason,
+        )
 
 
 class PermissionService:
@@ -224,17 +440,57 @@ class PermissionService:
                 blockers=blockers,
                 failures=blockers,
             )
-        current_value = target.overwrites
-        current: OverwriteMap = current_value if isinstance(current_value, Mapping) else {}
+        current = _current_map(target)
+        bootstrapped = False
+        if _needs_bot_bootstrap(target, context, desired, managed_targets):
+            try:
+                await _install_bot_bootstrap(target, context.bot_member, reason=reason)
+                bootstrapped = True
+                current = _current_map(target)
+            except discord.HTTPException as exc:
+                return PermissionSyncResult(
+                    False,
+                    False,
+                    target.id,
+                    failures=(f"{_resource_label(target)}: bootstrap failed: {exc}",),
+                )
+
+        desired = _clamp_desired_map(target, context.bot_member, desired)
         final, preserved = _build_final_map(current, desired, managed_targets)
         added, updated, removed = _diff(current, desired, managed_targets)
-        if not (added or updated or removed):
+        if not (added or updated or removed) and not bootstrapped:
             return PermissionSyncResult(True, False, target.id, preserved=preserved, verified=True)
+
+        changed = bool(added or updated or removed or bootstrapped)
         try:
             await target.edit(overwrites=final, reason=reason)
         except discord.HTTPException:
             # Bulk replace often 50013/50001s when preserved unmanaged overwrites are
             # present or the channel is private; fall back to per-target edits.
+            # If we skipped bootstrap because Manage Channels looked present but
+            # Manage Roles was missing, install it before incremental edits.
+            if not bootstrapped:
+                try:
+                    await _install_bot_bootstrap(
+                        target, context.bot_member, reason=reason
+                    )
+                    bootstrapped = True
+                    current = _current_map(target)
+                    desired = _clamp_desired_map(target, context.bot_member, desired)
+                    changed = True
+                except discord.HTTPException as bootstrap_exc:
+                    return PermissionSyncResult(
+                        False,
+                        False,
+                        target.id,
+                        added,
+                        updated,
+                        removed,
+                        preserved,
+                        failures=(
+                            f"{_resource_label(target)}: bootstrap failed: {bootstrap_exc}",
+                        ),
+                    )
             try:
                 await _apply_overwrites_incrementally(
                     target,
@@ -253,13 +509,48 @@ class PermissionService:
                     updated,
                     removed,
                     preserved,
-                    failures=(str(incremental_exc),),
+                    failures=(f"{_resource_label(target)}: {incremental_exc}",),
                 )
+
+        if not await _verify_bot_access(target, context):
             return PermissionSyncResult(
-                True, True, target.id, added, updated, removed, preserved, verified=True
+                False,
+                changed,
+                target.id,
+                added,
+                updated,
+                removed,
+                preserved,
+                failures=(
+                    f"{_resource_label(target)}: bot still lacks Manage Channels after reconcile.",
+                ),
             )
+
+        try:
+            await _strip_bot_member_overwrite(
+                target,
+                context,
+                desired,
+                managed_targets,
+                reason=reason,
+            )
+        except discord.HTTPException as exc:
+            return PermissionSyncResult(
+                False,
+                changed,
+                target.id,
+                added,
+                updated,
+                removed,
+                preserved,
+                failures=(
+                    f"{_resource_label(target)}: could not clear bot member overwrite: {exc}",
+                ),
+                verified=True,
+            )
+
         return PermissionSyncResult(
-            True, True, target.id, added, updated, removed, preserved, verified=True
+            True, changed, target.id, added, updated, removed, preserved, verified=True
         )
 
     async def ensure_category(

@@ -67,13 +67,17 @@ async def webhook_updated(
 
     if not isinstance(channel, discord.TextChannel):
         return None
-    return await sync_subscription_setup_by_publish_channel(
-        recipe_context.bot,
-        recipe_context.core,
-        channel.guild,
-        channel.id,
-        view_registry=recipe_context.bot.make_view_registry(),
-    )
+    try:
+        return await sync_subscription_setup_by_publish_channel(
+            recipe_context.bot,
+            recipe_context.core,
+            channel.guild,
+            channel.id,
+            view_registry=recipe_context.bot.make_view_registry(),
+        )
+    except discord.NotFound:
+        # Stale cache / deleted publish channel after client teardown — not operational.
+        return None
 
 
 @recipe("blacklist.replace")
@@ -165,6 +169,7 @@ async def create_subscription(
             client=client,
             subscription=result.subscription,
             network=network,
+            setup_mode="reconcile" if result.reactivated else "create",
             view_registry=view_registry,
         )
     else:
