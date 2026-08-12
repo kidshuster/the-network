@@ -202,8 +202,10 @@ async def test_blacklist_recipe_hides_missing_record_handling() -> None:
             subscription_id=4,
             selected_client_ids=[],
         )
-    assert isinstance(raised.value.__cause__, ValueError)
-    assert str(raised.value.__cause__) == "Subscription was not found."
+    from bot.errors import UserFacingError
+
+    assert isinstance(raised.value.__cause__, UserFacingError)
+    assert raised.value.__cause__.code == "subscription_not_found"
 
 
 async def test_command_recipe_rejects_wrong_guild_at_boundary() -> None:

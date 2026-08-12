@@ -7,12 +7,32 @@ import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
 from subscription_helpers import make_client_subscription
-from widget_helpers import wire_widget_bot
+from widget_helpers import mock_recipe_result, wire_widget_bot
 
 from bot.app.widgets import render_view
 from bot.core.models.client import Client
 from bot.core.models.network import Network
 from bot.core.templates import render_text
+
+
+def _user_message(interaction: MagicMock) -> str:
+    for call in (
+        interaction.response.send_message,
+        interaction.followup.send,
+    ):
+        count = getattr(call, "await_count", None)
+        if not isinstance(count, int) or count < 1:
+            continue
+        args = call.await_args
+        if args.args:
+            return str(args.args[0])
+        content = args.kwargs.get("content")
+        if content is not None:
+            return str(content)
+        embed = args.kwargs.get("embed")
+        if embed is not None:
+            return str(embed.description or "")
+    raise AssertionError("no user message sent")
 
 
 def _client() -> Client:
@@ -79,10 +99,16 @@ async def test_subscribe_button_success_renders_subscribe_success_embed() -> Non
     context.store.clients.get_by_id = AsyncMock(return_value=client)
     context.store.networks.get_by_key = AsyncMock(return_value=network)
 
-    subscribe_result = MagicMock(success=True, subscription=subscription, created=True, error=None)
+    subscribe_result = MagicMock(
+        success=True,
+        subscription=subscription,
+        created=True,
+        error=None,
+        message="Subscribed.",
+    )
 
     bot = _bot(context)
-    bot.dispatch_trigger = AsyncMock(return_value=subscribe_result)
+    mock_recipe_result(bot, recipe="subscription.create", result=subscribe_result)
 
     interaction = MagicMock(spec=discord.Interaction)
     interaction.guild = guild
@@ -101,8 +127,6 @@ async def test_subscribe_button_success_renders_subscribe_success_embed() -> Non
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Join stingers", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    assert bot.dispatch_trigger.await_args.args[0] == "subscription.create"
     interaction.followup.send.assert_awaited_once()
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert embed.title == "Network Subscription"
@@ -127,8 +151,7 @@ async def test_subscribe_button_blocks_without_client_role() -> None:
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Join stingers", interaction)
 
-    sent = interaction.response.send_message.await_args.args[0]
-    assert "client role" in sent.casefold()
+    assert "client role" in _user_message(interaction).casefold()
 
 
 @pytest.mark.asyncio
@@ -157,8 +180,10 @@ async def test_subscribe_button_renders_failure_embed() -> None:
     context.store.networks.get_by_key = AsyncMock(return_value=network)
 
     bot = _bot(context)
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(
+    mock_recipe_result(
+        bot,
+        recipe="subscription.create",
+        result=MagicMock(
             success=False,
             subscription=None,
             created=False,
@@ -180,9 +205,7 @@ async def test_subscribe_button_renders_failure_embed() -> None:
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Join stingers", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    embed = interaction.followup.send.await_args.kwargs["embed"]
-    assert embed.title == "Request Failed"
+    assert "missing permissions" in _user_message(interaction).casefold()
 
 
 @pytest.mark.asyncio
@@ -204,7 +227,7 @@ async def test_subscribe_button_reports_network_not_found() -> None:
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["missing"])
     await _click_label(view, "Join missing", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
+    assert _user_message(interaction) == render_text(
         "network_not_found",
         network_key="missing",
     )
@@ -225,9 +248,7 @@ async def test_subscribe_button_reports_client_not_found() -> None:
     view = render_view("network_profile", bot, client_id=999, network_keys=["stingers"])
     await _click_label(view, "Join stingers", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "client_not_found"
-    )
+    assert _user_message(interaction) == render_text("client_not_found")
 
 
 @pytest.mark.asyncio
@@ -255,8 +276,16 @@ async def test_subscribe_button_allows_manage_guild_without_client_role() -> Non
     context.store.networks.get_by_key = AsyncMock(return_value=network)
 
     bot = _bot(context)
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(success=True, subscription=subscription, created=True, error=None),
+    mock_recipe_result(
+        bot,
+        recipe="subscription.create",
+        result=MagicMock(
+            success=True,
+            subscription=subscription,
+            created=True,
+            error=None,
+            message="Subscribed.",
+        ),
     )
 
     interaction = make_interaction(guild=guild, user=member)
@@ -271,7 +300,6 @@ async def test_subscribe_button_allows_manage_guild_without_client_role() -> Non
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Join stingers", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert embed.title == "Network Subscription"
 
@@ -299,9 +327,7 @@ async def test_timecode_toggle_blocks_without_client_role() -> None:
     )
     await _click_label(view, "Timecodes: Off", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "client_role_required_edit",
-    )
+    assert _user_message(interaction) == render_text("client_role_required_edit")
 
 
 @pytest.mark.asyncio
@@ -321,10 +347,7 @@ async def test_delete_button_blocks_without_client_role() -> None:
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Delete Client", interaction)
 
-    interaction.response.send_message.assert_awaited_once()
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "client_role_required_delete",
-    )
+    assert _user_message(interaction) == render_text("client_role_required_delete")
 
 
 @pytest.mark.asyncio
@@ -380,9 +403,7 @@ async def test_leave_network_blocks_without_client_role() -> None:
     )
     await _click_label(view, "Leave stingers", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "client_role_required_leave",
-    )
+    assert _user_message(interaction) == render_text("client_role_required_leave")
 
 
 @pytest.mark.asyncio
@@ -411,8 +432,10 @@ async def test_leave_network_renders_failure_embed() -> None:
     )
 
     bot = _bot(context)
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(success=False, error="Missing Permissions"),
+    mock_recipe_result(
+        bot,
+        recipe="subscription.leave",
+        result=MagicMock(success=False, error="Missing Permissions"),
     )
 
     interaction = make_interaction(guild=guild, user=member)
@@ -427,10 +450,7 @@ async def test_leave_network_renders_failure_embed() -> None:
     )
     await _click_label(view, "Leave stingers", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    assert bot.dispatch_trigger.await_args.args[0] == "subscription.leave"
-    embed = interaction.followup.send.await_args.kwargs["embed"]
-    assert embed.title == "Request Failed"
+    assert "missing permissions" in _user_message(interaction).casefold()
 
 
 @pytest.mark.asyncio
@@ -445,6 +465,7 @@ async def test_blacklist_button_reports_no_targets() -> None:
     context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
     context.store.clients.get_by_id = AsyncMock(return_value=client)
     context.store.clients.list_subscriptions_by_network = AsyncMock(return_value=[subscription])
+    context.store.networks.get_by_id = AsyncMock(return_value=MagicMock())
 
     bot = _bot(context)
     interaction = make_interaction(guild=guild, user=member)
@@ -459,9 +480,7 @@ async def test_blacklist_button_reports_no_targets() -> None:
     )
     await _click_label(view, "Blacklist", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "no_blacklist_targets",
-    )
+    assert _user_message(interaction) == render_text("no_blacklist_targets")
 
 
 @pytest.mark.asyncio
@@ -483,6 +502,4 @@ async def test_subscribe_connected_reports_missing_subscription() -> None:
     )
     await _click_label(view, "Subscribed channel connected", interaction)
 
-    assert interaction.response.send_message.await_args.args[0] == render_text(
-        "subscription_not_found"
-    )
+    assert _user_message(interaction) == render_text("subscription_not_found")

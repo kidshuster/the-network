@@ -17,6 +17,7 @@ RECIPE_MODULES: tuple[str, ...] = (
     "bot.features.recipes.subscription",
     "bot.features.recipes.onboarding",
     "bot.features.recipes.relay",
+    "bot.app.widgets.ui_recipes",
     "bot.features.widgets.presenters",
     "bot.features.widgets.interaction_presenters",
     "bot.features.recipes.hub.initialize",

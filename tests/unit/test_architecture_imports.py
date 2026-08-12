@@ -165,13 +165,15 @@ def test_features_widgets_have_no_discord_ui_subclasses() -> None:
         assert "discord.ui.Modal" not in source
 
 
-def test_app_owns_widget_renderer_not_interpreter() -> None:
+def test_app_owns_widget_drafts_not_interpreter() -> None:
     widgets = Path(bot.__file__).resolve().parent / "app" / "widgets"
-    assert (widgets / "renderer.py").is_file()
+    assert (widgets / "drafts.py").is_file()
     assert (widgets / "registry.py").is_file()
     assert not (widgets / "engine.py").exists()
     assert not (widgets / "policies.py").exists()
+    assert not (widgets / "renderer.py").exists()
     assert "RenderedView" in (widgets / "dispatch.py").read_text(encoding="utf-8")
+    assert "ViewDraft" in (widgets / "drafts.py").read_text(encoding="utf-8")
 
 
 def test_presentation_templates_forbid_executable_keys() -> None:
@@ -189,6 +191,12 @@ def test_presentation_templates_forbid_executable_keys() -> None:
         "foreach",
         "when",
         "disabled_when",
+        "trigger",
+        "action",
+        "recipe",
+        "handler",
+        "authorize",
+        "custom_id",
     }
     root = Path(bot.__file__).resolve().parent / "features" / "widgets" / "templates"
     offenders: list[str] = []
@@ -360,13 +368,30 @@ def test_only_composition_roots_import_feature_package_from_app() -> None:
     assert offenders == []
 
 
-def test_widget_renderer_does_not_import_features_or_repos() -> None:
+def test_widget_drafts_do_not_import_features_or_repos() -> None:
     widgets = Path(bot.__file__).resolve().parent / "app" / "widgets"
     forbidden = ("bot.features", "bot.core.database", "bot.core.repositories")
     offenders: list[str] = []
-    for name in ("renderer.py", "loader.py", "schema.py", "custom_id.py", "models.py"):
+    for name in (
+        "drafts.py",
+        "dispatch.py",
+        "loader.py",
+        "schema.py",
+        "custom_id.py",
+    ):
         path = widgets / name
         imports = _imports_forbidden_layer(path.read_text(encoding="utf-8"), forbidden)
         if imports:
             offenders.append(f"{name}: {', '.join(imports)}")
     assert offenders == []
+
+
+def test_feature_widgets_have_no_enrichment_or_action_maps() -> None:
+    widgets = Path(bot.__file__).resolve().parent / "features" / "widgets"
+    assert not (widgets / "bindings.py").exists()
+    assert not (widgets / "render.py").exists()
+    for path in widgets.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "enrich_trigger_payload" not in source
+        assert "_MANAGE_ACTIONS" not in source
+        assert "_CLIENT_ACTIONS" not in source

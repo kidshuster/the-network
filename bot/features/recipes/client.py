@@ -7,6 +7,10 @@ from typing import Any
 import discord
 
 from bot.contracts.recipes import RecipeContext, recipe
+from bot.contracts.widgets import OpenEphemeralView, OpenModal, recipe_handler
+from bot.core.templates import render_text
+from bot.errors import UserFacingError
+from bot.features.widgets.guards import require_client_member, require_hub_guild
 
 
 @recipe("client.provision_from_request")
@@ -79,19 +83,81 @@ async def provision_client_from_request(
     )
 
 
+async def _require_client(recipe_context: RecipeContext, client_id: int) -> Any:
+    if recipe_context.core is None:
+        raise UserFacingError(render_text("bot_not_ready"), code="bot_not_ready")
+    client = await recipe_context.core.store.clients.get_by_id(client_id)
+    if client is None:
+        raise UserFacingError(render_text("client_not_found"), code="client_not_found")
+    return client
+
+
+@recipe("client.edit.open")
+async def open_client_edit(
+    recipe_context: RecipeContext,
+    *,
+    client_id: int,
+    guild: discord.Guild | None = None,
+    member: discord.abc.User | None = None,
+) -> OpenModal:
+    require_hub_guild(recipe_context.bot, guild)
+    client = await _require_client(recipe_context, client_id)
+    if guild is not None and member is not None:
+        require_client_member(
+            guild,
+            member,
+            client,
+            popup="client_role_required_edit",
+            allow_non_member=True,
+        )
+    return OpenModal(
+        template_id="edit_client_profile",
+        submit=recipe_handler("client.edit_profile", client_id=client_id),
+        defaults={"display_name": client.display_name},
+    )
+
+
+@recipe("client.delete.confirm")
+async def open_client_delete_confirm(
+    recipe_context: RecipeContext,
+    *,
+    client_id: int,
+    guild: discord.Guild | None = None,
+    member: discord.abc.User | None = None,
+) -> OpenEphemeralView:
+    require_hub_guild(recipe_context.bot, guild)
+    client = await _require_client(recipe_context, client_id)
+    if guild is not None and member is not None:
+        require_client_member(
+            guild,
+            member,
+            client,
+            popup="client_role_required_delete",
+            allow_non_member=True,
+        )
+    return OpenEphemeralView(
+        template_id="delete_client_confirm",
+        content=render_text("delete_client_confirm_prompt", server_name=client.server_name),
+        bindings={
+            "confirm_button": recipe_handler("client.delete", client_id=client_id),
+            "cancel_button": recipe_handler("ui.dismiss"),
+        },
+    )
+
+
 @recipe("client.delete")
 async def delete_client(
     recipe_context: RecipeContext,
     *,
     guild: discord.Guild,
     bot_member: discord.Member,
-    client: Any,
+    client_id: int,
     member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.deletion import delete_client_resources
-    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
     require_hub_guild(recipe_context.bot, guild)
+    client = await _require_client(recipe_context, client_id)
     if member is not None:
         require_client_member(
             guild, member, client, popup="client_role_required_delete", allow_non_member=True
@@ -118,12 +184,9 @@ async def edit_client_profile(
     member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_edit import apply_client_profile_edit
-    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
     require_hub_guild(recipe_context.bot, guild)
-    client = await recipe_context.core.store.clients.get_by_id(client_id)
-    if client is None:
-        raise ValueError("Client was not found.")
+    client = await _require_client(recipe_context, client_id)
     if member is not None:
         require_client_member(
             guild, member, client, popup="client_role_required_edit", allow_non_member=True
@@ -144,14 +207,14 @@ async def toggle_client_timecode(
     recipe_context: RecipeContext,
     *,
     guild: discord.Guild,
-    client: Any,
+    client_id: int,
     view_registry: Any,
     member: discord.abc.User | None = None,
 ) -> Any:
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
-    from bot.features.widgets.guards import require_client_member, require_hub_guild
 
     require_hub_guild(recipe_context.bot, guild)
+    client = await _require_client(recipe_context, client_id)
     if member is not None:
         require_client_member(
             guild, member, client, popup="client_role_required_edit", allow_non_member=True

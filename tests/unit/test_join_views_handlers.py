@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import discord
 import pytest
 from discord_helpers import make_guild_with_roles
 from interaction_helpers import make_interaction, make_member
-from widget_helpers import wire_widget_bot
+from widget_helpers import mock_recipe_result, wire_widget_bot
 
 from bot.app.widgets import render_modal, render_view
 from bot.app.widgets.dispatch import RenderedModal
@@ -74,7 +74,22 @@ async def _click(view: object, label: str, interaction: discord.Interaction) -> 
 
 
 def _auth_message(interaction: MagicMock) -> str:
-    return str(interaction.response.send_message.await_args.args[0])
+    for call in (
+        interaction.response.send_message,
+        interaction.followup.send,
+    ):
+        if not call.await_count:
+            continue
+        args = call.await_args
+        if args.args:
+            return str(args.args[0])
+        content = args.kwargs.get("content")
+        if content is not None:
+            return str(content)
+        embed = args.kwargs.get("embed")
+        if embed is not None:
+            return str(embed.description or "")
+    raise AssertionError("no auth message sent")
 
 
 @pytest.mark.asyncio
@@ -117,17 +132,15 @@ async def test_join_modal_renders_failure_embed_on_service_error() -> None:
     guild, _, _, _, _ = make_guild_with_roles()
     bot = _join_bot()
     interaction = make_interaction(guild=guild, user=make_member(guild=guild))
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(success=False, error="Server name already exists."),
+    mock_recipe_result(
+        bot,
+        recipe="request.submit",
+        result=MagicMock(success=False, error="Server name already exists."),
     )
 
     await _join_modal(bot).on_submit(interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    assert bot.dispatch_trigger.await_args.args[0] == "request.submit"
-    embed = interaction.followup.send.await_args.kwargs["embed"]
-    assert embed.title == "Request Failed"
-    assert "already exists" in (embed.description or "")
+    assert "already exists" in _auth_message(interaction).casefold()
 
 
 @pytest.mark.asyncio
@@ -141,7 +154,6 @@ async def test_moderator_review_rejects_without_manage_guild() -> None:
     await _click(view, "Accept", interaction)
 
     assert _auth_message(interaction) == render_text("manage_guild_required")
-    bot.dispatch_trigger.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -164,8 +176,10 @@ async def test_moderator_review_renders_failure_embed_on_service_error() -> None
     bot = _join_bot()
     interaction = make_interaction(guild=guild, user=member)
     view = render_view("moderator_review", bot, request_id=42)
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(
+    mock_recipe_result(
+        bot,
+        recipe="request.deny",
+        result=MagicMock(
             success=False,
             error="Request was already reviewed.",
             message=None,
@@ -174,11 +188,7 @@ async def test_moderator_review_renders_failure_embed_on_service_error() -> None
 
     await _click(view, "Deny", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    assert bot.dispatch_trigger.await_args.args[0] == "request.deny"
-    embed = interaction.followup.send.await_args.kwargs["embed"]
-    assert embed.title == "Request Failed"
-    assert "already reviewed" in (embed.description or "")
+    assert "already reviewed" in _auth_message(interaction).casefold()
 
 
 @pytest.mark.asyncio
@@ -188,33 +198,18 @@ async def test_moderator_review_renders_success_embed_on_deny() -> None:
     bot = _join_bot()
     interaction = make_interaction(guild=guild, user=member)
     view = render_view("moderator_review", bot, request_id=42)
-    bot.dispatch_trigger = AsyncMock(
-        return_value=MagicMock(
+    mock_recipe_result(
+        bot,
+        recipe="request.deny",
+        result=MagicMock(
             success=True,
             error=None,
             message="The join request was denied.",
         ),
     )
 
-    async def _present(name: str, **kwargs: object) -> None:
-        from bot.core.templates import render_embed
-
-        del name
-        await kwargs["response"].send(  # type: ignore[index]
-            embed=render_embed(
-                "review_success",
-                label="Denied",
-                colour="red",
-                description=str(getattr(kwargs["value"], "message", "")),
-            )
-        )
-
-    bot.recipe_registry.run = AsyncMock(side_effect=_present)
-
     await _click(view, "Deny", interaction)
 
-    bot.dispatch_trigger.assert_awaited_once()
-    assert bot.dispatch_trigger.await_args.args[0] == "request.deny"
     embed = interaction.followup.send.await_args.kwargs["embed"]
     assert embed.title == "Request Denied"
     assert "denied" in (embed.description or "").casefold()

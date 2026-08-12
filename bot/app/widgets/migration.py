@@ -7,8 +7,7 @@ import discord
 
 from bot.app.widgets import custom_id as codec
 from bot.app.widgets.dispatch import RenderedView
-from bot.app.widgets.models import ActionBinding, ButtonSpec, SelectOptionSpec, SelectSpec
-from bot.app.widgets.renderer import view as render_view
+from bot.contracts.widgets import ButtonSpec, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.channels.migration import MigrationPlan
 
 
@@ -16,7 +15,6 @@ from bot.core.channels.migration import MigrationPlan
 class MigrationReviewDecision:
     resolutions: dict[str, int] = field(default_factory=dict)
     confirm_deletes: bool = False
-
 
 def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
     embed = discord.Embed(
@@ -34,19 +32,18 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
         ]
         embed.add_field(name="Ambiguous maps", value="\n".join(lines)[:1024], inline=False)
     if plan.delete_candidates:
-        deletes = ", ".join(f"#{item.name}" for item in plan.delete_candidates)
         embed.add_field(
             name="Obsolete channels to remove",
-            value=deletes[:1024],
+            value=", ".join(f"#{item.name}" for item in plan.delete_candidates)[:1024],
             inline=False,
         )
     return embed
-
 
 async def present_migration_review(
     interaction: discord.Interaction,
     plan: MigrationPlan,
 ) -> MigrationReviewDecision | None:
+    bot: Any = interaction.client
     selects: list[SelectSpec] = []
     for item in plan.ambiguous[:4]:
         options = tuple(
@@ -65,33 +62,33 @@ async def present_migration_review(
             continue
         selects.append(
             SelectSpec(
-                id=item.resource_key,
+                tag=item.resource_key,
                 placeholder=item.resource_key,
                 options=options,
-                action=ActionBinding(
-                    action="ui.migrate.store",
-                    arguments={"resource_key": item.resource_key},
-                ),
+                handler=recipe_handler("ui.migrate.store", resource_key=item.resource_key),
             )
         )
-    actions = (
-        ButtonSpec(
-            id="confirm",
-            label="Confirm",
-            style="danger" if plan.delete_candidates else "primary",
-            action=ActionBinding(action="ui.migrate.confirm"),
-        ),
-        ButtonSpec(
-            id="cancel",
-            label="Cancel",
-            style="secondary",
-            action=ActionBinding(action="ui.migrate.cancel"),
-        ),
-    )
-    built = render_view(
-        interaction.client,
-        "migration_review",
-        slots={"ambiguous": tuple(selects), "actions": actions},
+    built = (
+        bot.templates_view("migration_review")
+        .fill("ambiguous", tuple(selects))
+        .fill(
+            "actions",
+            (
+                ButtonSpec(
+                    tag="confirm",
+                    label="Confirm",
+                    style="danger" if plan.delete_candidates else "primary",
+                    handler=recipe_handler("ui.migrate.confirm"),
+                ),
+                ButtonSpec(
+                    tag="cancel",
+                    label="Cancel",
+                    style="secondary",
+                    handler=recipe_handler("ui.migrate.cancel"),
+                ),
+            ),
+        )
+        .build(bot)
     )
     assert isinstance(built, RenderedView)
     built.decision = {}
@@ -106,8 +103,8 @@ async def present_migration_review(
             *,
             select: discord.ui.Select[Any] = child,
         ) -> None:
-            binding = codec.decode(select.custom_id or "")
-            key = str(binding.arguments.get("resource_key") or "")
+            handler = codec.decode(select.custom_id or "")
+            key = str(handler.arguments.get("resource_key") or "")
             raw: dict[str, Any] = (
                 dict(interaction.data) if isinstance(interaction.data, dict) else {}
             )
@@ -121,12 +118,13 @@ async def present_migration_review(
         child.callback = _on_select  # type: ignore[method-assign]
 
     embed = migration_review_embed(plan)
-    if interaction.response.is_done():
-        await interaction.followup.send(embed=embed, view=built, ephemeral=True)
-        message = await interaction.original_response()
-    else:
-        await interaction.response.send_message(embed=embed, view=built, ephemeral=True)
-        message = await interaction.original_response()
+    send = (
+        interaction.followup.send
+        if interaction.response.is_done()
+        else interaction.response.send_message
+    )
+    await send(embed=embed, view=built, ephemeral=True)
+    message = await interaction.original_response()
     await built.wait()
     if built.decision is None:
         try:

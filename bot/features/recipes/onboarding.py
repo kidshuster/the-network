@@ -5,8 +5,10 @@ from __future__ import annotations
 import discord
 
 from bot.contracts.recipes import RecipeContext, recipe
+from bot.contracts.widgets import OpenModal, recipe_handler
 from bot.core.models.profile_image import ProfileImageAttachment
 from bot.core.views import ViewRegistry
+from bot.errors import UserFacingError
 from bot.features.recipes.hub.onboarding.service import (
     ReviewRequestResult,
     ServerRequestService,
@@ -27,6 +29,12 @@ async def submit_request(
     display_name: str | None = None,
 ) -> SubmitRequestResult:
     require_hub_guild(recipe_context.bot, guild)
+    if profile_image is None:
+        raise UserFacingError(
+            "A profile image is required.",
+            title="Request Failed",
+            code="profile_image_required",
+        )
     return await ServerRequestService(
         recipe_context.core,
         recipe_context.bot,
@@ -81,4 +89,17 @@ async def deny_request(
     ).deny_request(
         request_id=request_id,
         moderator=moderator,
+    )
+
+
+@recipe("request.join.open")
+async def open_join_request(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction,
+) -> OpenModal:
+    del recipe_context, interaction
+    return OpenModal(
+        template_id="join_network",
+        submit=recipe_handler("request.submit"),
     )

@@ -3,10 +3,10 @@ id: delete_client_confirm
 timeout: 120
 components:
   - type: button
-    id: confirm
+    tag: confirm_button
     label: Delete Client
     style: danger
   - type: button
-    id: cancel
+    tag: cancel_button
     label: Cancel
     style: secondary

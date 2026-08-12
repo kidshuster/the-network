@@ -3,10 +3,10 @@ id: moderator_review
 timeout: null
 components:
   - type: button
-    id: approve
+    tag: accept_button
     label: Accept
     style: success
   - type: button
-    id: deny
+    tag: deny_button
     label: Deny
     style: danger

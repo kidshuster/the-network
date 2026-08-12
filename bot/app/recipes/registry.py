@@ -66,6 +66,9 @@ class RecipeRegistry:
         for function in functions:
             self.register(function)
 
+    def has(self, name: str) -> bool:
+        return name in self._recipes
+
     def spec(self, name: str) -> RecipeSpec:
         try:
             return self._specs[name]
@@ -81,13 +84,20 @@ class RecipeRegistry:
         if name in stack:
             raise RecipeRegistryError("Recursive recipe call: " + " -> ".join((*stack, name)))
         signature = inspect.signature(function)
+        allowed = {
+            key
+            for key, param in signature.parameters.items()
+            if key != "recipe_context" and param.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        }
+        filtered = {key: value for key, value in inputs.items() if key in allowed}
         try:
-            signature.bind(RecipeContext(self._bot, self), **inputs)
+            signature.bind(RecipeContext(self._bot, self), **filtered)
         except TypeError as exc:
             raise RecipeRegistryError(f"Invalid inputs for {name!r}: {exc}") from exc
         token = _call_stack.set((*stack, name))
         try:
-            result = await function(RecipeContext(self._bot, self), **inputs)
+            result = await function(RecipeContext(self._bot, self), **filtered)
             if getattr(result, "success", None) is False:
                 message = (
                     getattr(result, "error", None)

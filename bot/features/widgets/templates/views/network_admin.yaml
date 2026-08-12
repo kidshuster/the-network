@@ -3,10 +3,10 @@ id: network_admin
 timeout: null
 components:
   - type: button
-    id: create
+    tag: create_button
     label: "Create Network"
     style: success
   - type: button
-    id: delete
+    tag: delete_button
     label: "Delete Network"
     style: danger

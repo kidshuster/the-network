@@ -2,25 +2,43 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-from bot.app.widgets import renderer
+import discord
+
+from bot.app.widgets.drafts import modal as modal_draft
+from bot.app.widgets.drafts import view as view_draft
 from bot.app.widgets.errors import TemplateRenderError
 from bot.app.widgets.loader import clear_widget_cache, validate_widget_templates
-from bot.app.widgets.models import ActionBinding, ButtonSpec, SelectOptionSpec, SelectSpec
 from bot.app.widgets.registry import PersistentViewRegistry
+from bot.contracts.widgets import (
+    ButtonSpec,
+    DismissMessage,
+    OpenEphemeralView,
+    OpenModal,
+    RecipeHandler,
+    SelectOptionSpec,
+    SelectSpec,
+    recipe_handler,
+)
+from bot.core.templates import render_embed as embed
+from bot.core.templates import render_text as text
 
-embed = renderer.embed
-text = renderer.text
-message = renderer.message
-view = renderer.view
-modal = renderer.modal
 
+def message(
+    template_id: str,
+    *,
+    values: Mapping[str, Any] | None = None,
+    view: discord.ui.View | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"embed": embed(template_id, **dict(values or {}))}
+    if view is not None:
+        payload["view"] = view
+    return payload
 
 def render_view(name: str, bot: Any, **context: Any) -> Any:
-    """Compatibility entry; delegates named composition to features via the bot."""
     return bot.render_named_view(name, **context)
-
 
 def render_modal(
     name: str,
@@ -31,21 +49,10 @@ def render_modal(
 ) -> Any:
     return bot.render_named_modal(name, params=params, field_defaults=field_defaults)
 
-
 __all__ = [
-    "ActionBinding",
-    "ButtonSpec",
-    "PersistentViewRegistry",
-    "SelectOptionSpec",
-    "SelectSpec",
-    "TemplateRenderError",
-    "clear_widget_cache",
-    "embed",
-    "message",
-    "modal",
-    "render_modal",
-    "render_view",
-    "text",
-    "validate_widget_templates",
-    "view",
+    "ButtonSpec", "DismissMessage", "OpenEphemeralView", "OpenModal",
+    "PersistentViewRegistry", "RecipeHandler", "SelectOptionSpec", "SelectSpec",
+    "TemplateRenderError", "clear_widget_cache", "embed", "message", "modal_draft",
+    "recipe_handler", "render_modal", "render_view", "text", "validate_widget_templates",
+    "view_draft",
 ]

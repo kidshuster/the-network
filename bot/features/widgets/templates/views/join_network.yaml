@@ -3,6 +3,6 @@ id: join_network
 timeout: null
 components:
   - type: button
-    id: join
+    tag: join_button
     label: "Join Network"
     style: success

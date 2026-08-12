@@ -65,40 +65,31 @@ class NetworkRelayBot(commands.Bot):
 
         return PersistentViewRegistry(self)
 
-    def build_widget_view(self, template_id: str, **kwargs: Any) -> Any:
-        from bot.app.widgets import view
+    def templates_view(self, template_id: str, **values: Any) -> Any:
+        from bot.app.widgets.drafts import view
 
-        return view(self, template_id, **kwargs)
+        return view(template_id, **values)
 
-    def build_widget_modal(self, template_id: str, **kwargs: Any) -> Any:
-        from bot.app.widgets import modal
+    def templates_modal(self, template_id: str, **values: Any) -> Any:
+        from bot.app.widgets.drafts import modal
 
-        return modal(self, template_id, **kwargs)
+        return modal(template_id, **values)
 
     def render_named_view(self, name: str, **params: Any) -> Any:
-        from bot.features.widgets.render import render_named_view
+        from bot.features.widgets.builders import build_named_view
 
-        return render_named_view(self, name, **params)
+        return build_named_view(self, name, **params)
 
-    def render_named_modal(self, name: str, **params: Any) -> Any:
-        from bot.features.widgets.render import render_named_modal
+    def render_named_modal(
+        self,
+        name: str,
+        *,
+        params: dict[str, Any] | None = None,
+        field_defaults: dict[str, str] | None = None,
+    ) -> Any:
+        from bot.features.widgets.builders import build_named_modal
 
-        return render_named_modal(self, name, **params)
-
-    async def build_ui_modal(self, modal_id: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
-        from bot.features.widgets.render import build_ui_modal
-
-        return await build_ui_modal(self, modal_id, arguments, **kwargs)
-
-    async def build_ui_view(self, view_id: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
-        from bot.features.widgets.render import build_ui_view
-
-        return await build_ui_view(self, view_id, arguments, **kwargs)
-
-    async def enrich_widget_trigger(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
-        from bot.features.widgets.bindings import enrich_trigger_payload
-
-        return await enrich_trigger_payload(self, action, payload)
+        return build_named_modal(self, name, params=params, field_defaults=field_defaults)
 
     def render_view(self, name: str, **params: Any) -> Any:
         return self.render_named_view(name, **params)

@@ -3,6 +3,6 @@ id: subscribe_setup
 timeout: null
 components:
   - type: button
-    id: confirm
+    tag: confirm_button
     label: "Subscribed channel connected"
     style: success

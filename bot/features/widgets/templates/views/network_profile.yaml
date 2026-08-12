@@ -3,4 +3,18 @@ id: network_profile
 timeout: null
 components:
   - slot: network_actions
-  - slot: profile_actions
+  - type: button
+    tag: timecode_button
+    label: "Timecodes: {timecode_state}"
+    style: secondary
+    row: 4
+  - type: button
+    tag: edit_button
+    label: Edit Profile
+    style: secondary
+    row: 4
+  - type: button
+    tag: delete_button
+    label: Delete Client
+    style: danger
+    row: 4

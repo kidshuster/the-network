@@ -7,7 +7,9 @@ from typing import Any
 import discord
 
 from bot.contracts.recipes import RecipeContext, recipe
+from bot.contracts.widgets import OpenModal, recipe_handler
 from bot.core.models.errors import NetworkValidationError
+from bot.features.widgets.guards import require_hub_guild, require_manage_guild
 
 
 @recipe("network.create")
@@ -86,3 +88,39 @@ async def delete_network(
         view_registry.register_network_admin_view(),
     )
     return network
+
+
+@recipe("network.create.open")
+async def open_create_network(
+    recipe_context: RecipeContext,
+    *,
+    guild: discord.Guild | None = None,
+    moderator: discord.Member | None = None,
+    member: discord.Member | None = None,
+) -> OpenModal:
+    require_hub_guild(recipe_context.bot, guild)
+    actor = moderator or member
+    if actor is not None:
+        require_manage_guild(actor)
+    return OpenModal(
+        template_id="create_network",
+        submit=recipe_handler("network.create"),
+    )
+
+
+@recipe("network.delete.open")
+async def open_delete_network(
+    recipe_context: RecipeContext,
+    *,
+    guild: discord.Guild | None = None,
+    moderator: discord.Member | None = None,
+    member: discord.Member | None = None,
+) -> OpenModal:
+    require_hub_guild(recipe_context.bot, guild)
+    actor = moderator or member
+    if actor is not None:
+        require_manage_guild(actor)
+    return OpenModal(
+        template_id="delete_network",
+        submit=recipe_handler("network.delete"),
+    )

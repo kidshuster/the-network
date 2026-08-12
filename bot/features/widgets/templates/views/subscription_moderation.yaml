@@ -3,3 +3,7 @@ id: subscription_moderation
 timeout: null
 components:
   - slot: actions
+  - type: button
+    tag: leave_button
+    label: "Leave {network_key}"
+    style: danger

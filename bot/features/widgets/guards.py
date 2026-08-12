@@ -13,7 +13,6 @@ def _is_guild_member(user: discord.abc.User) -> bool:
         hasattr(user, "roles") and hasattr(user, "guild_permissions")
     )
 
-
 def require_hub_guild(bot: Any, guild: discord.Guild | None) -> discord.Guild:
     if guild is None or guild.id != bot.settings.guild_id:
         raise UserFacingError(render_text("hub_guild_only"), code="hub_guild_only")
@@ -21,20 +20,12 @@ def require_hub_guild(bot: Any, guild: discord.Guild | None) -> discord.Guild:
         raise UserFacingError(render_text("bot_not_ready"), code="bot_not_ready")
     return guild
 
-
 def require_manage_guild(member: discord.abc.User) -> None:
     if not _is_guild_member(member):
-        raise UserFacingError(
-            render_text("manage_guild_required"),
-            code="manage_guild_required",
-        )
+        raise UserFacingError(render_text("manage_guild_required"), code="manage_guild_required")
     perms = cast(Any, member).guild_permissions
     if not perms.manage_guild:
-        raise UserFacingError(
-            render_text("manage_guild_required"),
-            code="manage_guild_required",
-        )
-
+        raise UserFacingError(render_text("manage_guild_required"), code="manage_guild_required")
 
 def require_client_member(
     guild: discord.Guild,
@@ -50,7 +41,5 @@ def require_client_member(
         raise UserFacingError(render_text("invalid_member"), code="invalid_member")
     typed = cast(Any, member)
     role = guild.get_role(client.client_role_id)
-    if role is None or (
-        role not in typed.roles and not typed.guild_permissions.manage_guild
-    ):
+    if role is None or (role not in typed.roles and not typed.guild_permissions.manage_guild):
         raise UserFacingError(render_text(popup), code="client_role_required")

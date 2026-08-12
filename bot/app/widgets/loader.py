@@ -13,7 +13,6 @@ _BOT_DIR = Path(__file__).resolve().parents[2]
 _TEMPLATES_DIR = _BOT_DIR / "features" / "widgets" / "templates"
 _VIEWS_DIR = _TEMPLATES_DIR / "views"
 _MODALS_DIR = _TEMPLATES_DIR / "modals"
-
 _view_cache: dict[str, ViewTemplateSpec] = {}
 _modal_cache: dict[str, ModalTemplateSpec] = {}
 

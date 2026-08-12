@@ -4,50 +4,42 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-FORBIDDEN_KEYS = frozenset(
-    {
-        "require",
-        "inject",
-        "store",
-        "finish",
-        "on_success",
-        "on_error",
-        "field_map",
-        "options_from",
-        "foreach",
-        "when",
-        "disabled_when",
-        "trigger",
-        "open_modal",
-        "open_view",
-        "reply",
-        "params",
-        "custom_id",
-        "action",
-        "defer",
-    }
-)
-
+FORBIDDEN_KEYS = frozenset({
+    "require", "inject", "store", "finish", "on_success", "on_error", "field_map",
+    "options_from", "foreach", "when", "disabled_when", "trigger", "open_modal",
+    "open_view", "reply", "params", "custom_id", "action", "defer", "recipe",
+    "handler", "authorize", "auth", "repository", "service",
+})
 
 def reject_forbidden(raw: dict[str, Any], *, where: str) -> None:
-    found = sorted(FORBIDDEN_KEYS.intersection(raw))
-    if found:
+    if found := sorted(FORBIDDEN_KEYS.intersection(raw)):
         raise ValueError(f"{where}: forbidden executable keys {found}")
-
 
 class StaticButtonSpec(BaseModel):
     type: Literal["button"] = "button"
-    id: str
+    tag: str | None = None
+    id: str | None = None
     label: str
     style: str = "secondary"
     row: int | None = None
     emoji: str | None = None
     disabled: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_id_to_tag(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("tag") is None and data.get("id") is not None:
+            data = {**data, "tag": data["id"]}
+        return data
+
+    @model_validator(mode="after")
+    def _require_tag(self) -> Self:
+        if self.tag is None:
+            raise ValueError("button requires tag")
+        return self
 
 class SlotSpec(BaseModel):
     slot: str
-
 
 class ViewTemplateSpec(BaseModel):
     kind: Literal["view"] = "view"
@@ -65,6 +57,15 @@ class ViewTemplateSpec(BaseModel):
                     reject_forbidden(component, where=f"components[{index}]")
         return data
 
+    @model_validator(mode="after")
+    def _unique_tags_and_slots(self) -> Self:
+        tags = [c.tag for c in self.components if isinstance(c, StaticButtonSpec)]
+        if len(tags) != len(set(tags)):
+            raise ValueError("duplicate tag")
+        slots = [c.slot for c in self.components if isinstance(c, SlotSpec)]
+        if len(slots) != len(set(slots)):
+            raise ValueError("duplicate slot")
+        return self
 
 class ModalFieldSpec(BaseModel):
     id: str
@@ -75,7 +76,6 @@ class ModalFieldSpec(BaseModel):
     max_length: int = 100
     required: bool = True
     max_values: int = 1
-
 
 class ModalTemplateSpec(BaseModel):
     kind: Literal["modal"] = "modal"
@@ -92,11 +92,12 @@ class ModalTemplateSpec(BaseModel):
 
     @model_validator(mode="after")
     def _normalize_field_types(self) -> Self:
-        normalized: list[ModalFieldSpec] = []
-        for field in self.fields:
-            field_type = field.type
-            if field_type in ("short", "paragraph"):
-                field_type = "text"
-            normalized.append(field.model_copy(update={"type": field_type}))
-        self.fields = normalized
+        self.fields = [
+            field.model_copy(
+                update={
+                    "type": "text" if field.type in ("short", "paragraph") else field.type
+                }
+            )
+            for field in self.fields
+        ]
         return self
