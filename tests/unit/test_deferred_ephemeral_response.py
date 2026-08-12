@@ -78,22 +78,61 @@ async def test_ensure_sent_noop_when_already_sent() -> None:
 async def test_send_propagates_followup_http_exception() -> None:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.followup = MagicMock()
+    interaction.edit_original_response = AsyncMock()
+    interaction.channel = MagicMock(spec=discord.TextChannel)
+    interaction.channel.send = AsyncMock()
     interaction.followup.send = AsyncMock(
-        side_effect=discord.HTTPException(MagicMock(), "Interaction expired"),
+        side_effect=discord.HTTPException(MagicMock(status=500), {"message": "boom", "code": 0}),
     )
 
     response = DeferredEphemeralResponse(interaction)
     with pytest.raises(discord.HTTPException):
         await response.send("done", ephemeral=True)
     assert response.sent is False
+    interaction.edit_original_response.assert_not_awaited()
+    interaction.channel.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_falls_back_to_channel_when_deferred_reply_deleted() -> None:
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.followup = MagicMock()
+    not_found = discord.NotFound(
+        MagicMock(status=404),
+        {"message": "Unknown Message", "code": 10008},
+    )
+    interaction.followup.send = AsyncMock(side_effect=not_found)
+    interaction.edit_original_response = AsyncMock(side_effect=not_found)
+    interaction.channel = MagicMock(spec=discord.TextChannel)
+    interaction.channel.send = AsyncMock()
+
+    response = DeferredEphemeralResponse(interaction)
+    embed = render_embed(
+        "error",
+        title="Init done",
+        description="ok",
+        reference="none",
+    )
+    await response.send(embed=embed, ephemeral=True)
+
+    assert response.sent is True
+    assert response.used_channel_fallback is True
+    interaction.channel.send.assert_awaited_once()
+    kwargs = interaction.channel.send.await_args.kwargs
+    assert kwargs["embed"].title == "Init done"
+    assert "dismissed" in kwargs["content"]
 
 
 @pytest.mark.asyncio
 async def test_ensure_sent_swallows_followup_http_exception() -> None:
     interaction = MagicMock(spec=discord.Interaction)
     interaction.followup = MagicMock()
+    interaction.edit_original_response = AsyncMock(
+        side_effect=discord.HTTPException(MagicMock(status=500), {"message": "boom", "code": 0}),
+    )
+    interaction.channel = None
     interaction.followup.send = AsyncMock(
-        side_effect=discord.HTTPException(MagicMock(), "Interaction expired"),
+        side_effect=discord.HTTPException(MagicMock(status=500), {"message": "boom", "code": 0}),
     )
 
     response = DeferredEphemeralResponse(interaction)

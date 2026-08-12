@@ -115,6 +115,8 @@ async def respond_to_error(
         title=title,
         reference=reference,
     )
+    # send_error already falls back when the deferred reply is gone; if delivery
+    # still failed, avoid raising so Discord does not show a second red failure.
 
 
 async def respond_with_error(

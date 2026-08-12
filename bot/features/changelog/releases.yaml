@@ -1,4 +1,9 @@
 releases:
+  "1.3.1":
+    summary: "Harden slash replies when the deferred thinking message is dismissed."
+    changes:
+      - "Fall back to a channel message if the ephemeral interaction reply is gone or expired."
+      - "Include the client name in missing subscribe-channel relay errors."
   "1.3.0":
     summary: "Architecture refactor with install submodule runtime and in-bot smoke testing."
     changes:

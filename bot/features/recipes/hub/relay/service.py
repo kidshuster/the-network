@@ -177,7 +177,10 @@ class RelayService:
 
             output_channel = message.guild.get_channel(dest_sub.subscribe_channel_id)
             if output_channel is None:
-                errors.append(f"missing subscribe channel {dest_sub.subscribe_channel_id}")
+                errors.append(
+                    "missing subscribe channel "
+                    f"{dest_sub.subscribe_channel_id} for {subscriber.server_name}"
+                )
                 continue
 
             if first_dest_channel_id is None:
@@ -290,7 +293,10 @@ class RelayService:
             seen_channels.add(subscription.subscribe_channel_id)
             channel = message.guild.get_channel(subscription.subscribe_channel_id)
             if channel is None:
-                errors.append(f"missing subscribe channel {subscription.subscribe_channel_id}")
+                errors.append(
+                    "missing subscribe channel "
+                    f"{subscription.subscribe_channel_id} for {client.server_name}"
+                )
                 continue
             try:
                 sent = await self._send_payload(channel, payload)
