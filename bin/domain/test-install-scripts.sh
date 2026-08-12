@@ -61,11 +61,38 @@ rm -f /tmp/the-network-install-start-test.out
 bad_refs="$(
   grep -RInE 'bin/start\.sh|python -m bot\.main|ENABLE_TEST_COMMANDS=true' \
     "${INSTALL}/scripts" "${INSTALL}/docker-compose.yml" 2>/dev/null \
-    | grep -vE 'scripts/start\.sh:.*ENABLE_TEST_COMMANDS' || true
+    | grep -vE 'scripts/start\.sh:.*ENABLE_TEST_COMMANDS|scripts/lib\.sh:.*ENABLE_TEST_COMMANDS' \
+    || true
 )"
 if [[ -n "${bad_refs}" ]]; then
   echo "Install scripts must not invoke source-tree bot entrypoints or enable test mode:" >&2
   echo "${bad_refs}" >&2
+  exit 1
+fi
+
+# Hot-swap update must validate before swapping live, then prune only on success.
+if ! grep -q 'validate_image_offline' "${INSTALL}/scripts/update.sh"; then
+  echo "install/scripts/update.sh must call validate_image_offline before swap" >&2
+  exit 1
+fi
+if ! grep -q 'compose_cmd pull' "${INSTALL}/scripts/update.sh"; then
+  echo "install/scripts/update.sh must pull before validate/swap" >&2
+  exit 1
+fi
+if ! grep -q 'compose_service_running' "${INSTALL}/scripts/update.sh"; then
+  echo "install/scripts/update.sh must confirm the container is running before prune" >&2
+  exit 1
+fi
+if ! grep -q 'docker system prune -af' "${INSTALL}/scripts/update.sh"; then
+  echo "install/scripts/update.sh must prune with docker system prune -af after swap" >&2
+  exit 1
+fi
+if ! grep -q 'validate_image_offline' "${INSTALL}/scripts/lib.sh"; then
+  echo "install/scripts/lib.sh must define validate_image_offline" >&2
+  exit 1
+fi
+if ! grep -q 'compose_service_image' "${INSTALL}/scripts/lib.sh"; then
+  echo "install/scripts/lib.sh must define compose_service_image" >&2
   exit 1
 fi
 
