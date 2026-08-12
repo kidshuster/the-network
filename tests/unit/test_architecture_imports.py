@@ -229,6 +229,9 @@ def test_test_core_is_not_imported_by_production_code() -> None:
     offenders: list[str] = []
     package = Path(bot.__file__).resolve().parent
     for path in package.rglob("*.py"):
+        # Test-only Discord adapter may load tests via importlib when enabled.
+        if "app/testing" in str(path.as_posix()):
+            continue
         source = path.read_text(encoding="utf-8")
         if "tests.core" in source or "bot.smoke" in source:
             offenders.append(str(path.relative_to(package.parent)))
@@ -356,8 +359,15 @@ def test_only_composition_roots_import_feature_package_from_app() -> None:
         (package / "app" / "features" / "loader.py").resolve(),
         (package / "app" / "bot.py").resolve(),
     }
+    testing_root = (package / "app" / "testing").resolve()
     for path in (package / "app").rglob("*.py"):
         if path.resolve() in allowed:
+            continue
+        try:
+            path.resolve().relative_to(testing_root)
+        except ValueError:
+            pass
+        else:
             continue
         imports = _imports_forbidden_layer(
             path.read_text(encoding="utf-8"),

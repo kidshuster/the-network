@@ -1,0 +1,12 @@
+kind: view
+id: test_smoke_confirm
+timeout: 120
+components:
+  - type: button
+    tag: confirm_button
+    label: "Run smoke test"
+    style: danger
+  - type: button
+    tag: cancel_button
+    label: "Cancel"
+    style: secondary

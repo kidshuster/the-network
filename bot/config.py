@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bot.constants import (
@@ -35,6 +35,16 @@ class Settings(BaseSettings):
         default=DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
         alias="NETWORK_OPERATOR_ROLE_NAME",
     )
+    enable_test_commands: bool = Field(default=False, alias="ENABLE_TEST_COMMANDS")
+    test_guild_id: int | None = Field(default=None, alias="TEST_GUILD_ID")
+    test_command_log_dir: Path = Field(
+        default=Path("./data/smoke-runs"),
+        alias="TEST_COMMAND_LOG_DIR",
+    )
+    test_max_rate_limit_wait_seconds: float = Field(
+        default=300.0,
+        alias="TEST_MAX_RATE_LIMIT_WAIT_SECONDS",
+    )
 
     @property
     def network_bot_role_name(self) -> str:
@@ -45,6 +55,7 @@ class Settings(BaseSettings):
         "discord_application_id",
         "profile_forum_channel_id",
         "relay_log_channel_id",
+        "test_guild_id",
         mode="before",
     )
     @classmethod
@@ -68,3 +79,24 @@ class Settings(BaseSettings):
         if value is None or not str(value).strip():
             raise ValueError("DISCORD_TOKEN is required")
         return str(value).strip()
+
+    @field_validator("enable_test_commands", mode="before")
+    @classmethod
+    def coerce_enable_test_commands(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None or value == "":
+            return False
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @model_validator(mode="after")
+    def validate_test_command_mode(self) -> Settings:
+        if not self.enable_test_commands:
+            return self
+        if self.test_guild_id is None:
+            raise ValueError("TEST_GUILD_ID is required when ENABLE_TEST_COMMANDS=true")
+        if self.guild_id != self.test_guild_id:
+            raise ValueError(
+                "GUILD_ID must equal TEST_GUILD_ID when ENABLE_TEST_COMMANDS=true"
+            )
+        return self

@@ -43,6 +43,7 @@ class NetworkRelayBot(commands.Bot):
         self._slash_sync_started = False
         self._subscription_setup_synced = False
         self._changelog_synced = False
+        self.smoke_run_coordinator: Any = None
 
     async def dispatch_trigger(self, trigger_id: str, **payload: Any) -> Any:
         return await dispatch(
@@ -128,6 +129,14 @@ class NetworkRelayBot(commands.Bot):
 
         await self.dispatch_event("app.services")
         register_recipe_commands(self)
+        if self.settings.enable_test_commands:
+            from bot.app.testing.registration import register_test_commands
+
+            register_test_commands(self)
+        else:
+            from bot.app.testing.registration import ensure_stale_test_command_removed
+
+            ensure_stale_test_command_removed(self)
         register_recipe_events(self)
 
         from bot.app.triggers.validate import validate_template_triggers
@@ -195,5 +204,14 @@ class NetworkRelayBot(commands.Bot):
                 logger.exception("Ready recipe dispatch failed")
 
     async def close(self) -> None:
+        coordinator = getattr(self, "smoke_run_coordinator", None)
+        if coordinator is not None:
+            run_id = coordinator.request_cancel()
+            if run_id is not None:
+                logger.warning(
+                    "Signalled smoke run cancellation during shutdown",
+                    extra={"run_id": run_id},
+                )
+                await asyncio.sleep(0)
         await self.db.close()
         await super().close()

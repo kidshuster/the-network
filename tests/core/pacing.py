@@ -4,6 +4,8 @@ import asyncio
 import logging
 import os
 
+from tests.core.scheduler import get_active_scheduler
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,12 +37,20 @@ DUPLICATE_PROBE_DELAY_SEC = _delay_seconds("SMOKE_DUPLICATE_PROBE_DELAY_SEC", 15
 
 
 async def pause_between_probe_phases() -> None:
+    scheduler = get_active_scheduler()
+    if scheduler is not None:
+        await scheduler.checkpoint("probe_phase")
+        return
     if PROBE_PHASE_DELAY_SEC <= 0:
         return
     await asyncio.sleep(PROBE_PHASE_DELAY_SEC)
 
 
 async def pause_before_role_create() -> None:
+    scheduler = get_active_scheduler()
+    if scheduler is not None:
+        await scheduler.checkpoint("before_role_create")
+        return
     if ROLE_CREATE_DELAY_SEC <= 0:
         return
     await asyncio.sleep(ROLE_CREATE_DELAY_SEC)

@@ -1,5 +1,10 @@
 name: server-init-stress
 description: Main-compatible server-init permission, drift, rebuild, and idempotency stress
+budgets:
+  max_mutations: 300
+  max_rest_reads: 900
+  max_rate_limit_wait_seconds: 300
+  max_duration_seconds: 1800
 steps:
   - artifacts.cleanup
   - permissions.provision

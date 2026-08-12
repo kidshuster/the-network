@@ -10,10 +10,11 @@ import discord
 from bot.config import Settings
 from tests.core.client_guard import snapshot_protected_clients
 from tests.core.discord_client import create_smoke_discord_client
-from tests.core.mock_backend import SCENARIO_DIR, load_mock_context
+from tests.core.mock_backend import SCENARIO_DIR
 from tests.core.probes import PROBES, LiveContext
 from tests.core.provision_flow import create_smoke_context
-from tests.core.recipes import RecipeRunner, load_recipes
+from tests.core.recipes import load_recipes
+from tests.core.smoke_api import run_smoke_recipe
 
 if TYPE_CHECKING:
     from bot.app.bot import NetworkRelayBot
@@ -26,6 +27,7 @@ class LiveBot:
         self.bot_context: BotContext | None = None
         self.user: discord.ClientUser | None = None
         self._guild: discord.Guild | None = None
+        self.db: Any = None
 
     def get_guild(self, guild_id: int) -> Any:
         if self._guild is not None and self._guild.id == guild_id:
@@ -52,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_live(command: str, name: str) -> None:
+async def run_live(command: str, name: str, scenario: str) -> None:
     settings = Settings()
     client = create_smoke_discord_client(members=True)
     bot = LiveBot(settings)
@@ -69,6 +71,7 @@ async def run_live(command: str, name: str) -> None:
             bot._guild = guild
             database, runtime = await create_smoke_context(settings)
             bot.bot_context = runtime
+            bot.db = database
             context = LiveContext(
                 guild=guild,
                 bot_member=guild.me,
@@ -79,10 +82,20 @@ async def run_live(command: str, name: str) -> None:
                 protected_clients=await snapshot_protected_clients(runtime, guild.id),
             )
             try:
-                runner = RecipeRunner(context, load_recipes())
                 if command == "recipe":
-                    await runner.run(name)
+                    result = await run_smoke_recipe(
+                        recipe_name=name,
+                        scenario=scenario,
+                        backend="live",
+                        context=context,
+                        close_database=False,
+                    )
+                    if not result.success:
+                        raise RuntimeError(result.error or "Smoke recipe failed")
                 else:
+                    from tests.core.recipes import RecipeRunner
+
+                    runner = RecipeRunner(context, load_recipes(), backend="live")
                     await runner.run_probe(name)
             finally:
                 await database.close()
@@ -104,12 +117,21 @@ async def run_live(command: str, name: str) -> None:
 
 
 async def run_mock(command: str, name: str, scenario: str) -> None:
+    if command == "recipe":
+        result = await run_smoke_recipe(
+            recipe_name=name,
+            scenario=scenario,
+            backend="mock",
+        )
+        if not result.success:
+            raise RuntimeError(result.error or "Smoke recipe failed")
+        return
+    from tests.core.mock_backend import load_mock_context
+    from tests.core.recipes import RecipeRunner
+
     context = load_mock_context(scenario)
     runner = RecipeRunner(context, load_recipes(), backend="mock")
-    if command == "recipe":
-        await runner.run(name)
-    else:
-        await runner.run_probe(name)
+    await runner.run_probe(name)
 
 
 def main() -> None:
@@ -129,7 +151,7 @@ def main() -> None:
         if args.backend == "mock":
             asyncio.run(run_mock(args.command, args.name, args.scenario))
         else:
-            asyncio.run(run_live(args.command, args.name))
+            asyncio.run(run_live(args.command, args.name, args.scenario))
     except BaseException as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

@@ -1,5 +1,10 @@
 name: full
 description: Complete production-behavior smoke test in one Discord session
+budgets:
+  max_mutations: 250
+  max_rest_reads: 800
+  max_rate_limit_wait_seconds: 300
+  max_duration_seconds: 1800
 steps:
   - artifacts.cleanup
   - probe: permissions.provision
@@ -18,4 +23,3 @@ finally:
   - probe: artifacts.teardown
     protect_clients: false
   - clients.protected
-

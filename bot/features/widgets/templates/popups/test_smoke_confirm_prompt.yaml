@@ -1,0 +1,3 @@
+kind: text
+id: test_smoke_confirm_prompt
+content: "Run destructive smoke recipe `{recipe}` (scenario `{scenario}`)? Protected clients stay guarded."

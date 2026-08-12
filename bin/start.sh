@@ -5,6 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+if [[ "${ENABLE_TEST_COMMANDS:-false}" == "true" ]]; then
+  echo "Test commands cannot be enabled by the production launcher." >&2
+  exit 1
+fi
+
 DATA_DIR="${DATA_DIR:-$ROOT/data}"
 PID_FILE="${PID_FILE:-$DATA_DIR/bot.pid}"
 LOG_FILE="${LOG_FILE:-$DATA_DIR/bot.log}"
