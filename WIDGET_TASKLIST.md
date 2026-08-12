@@ -182,8 +182,8 @@ Active convergence contract: [`FINAL_REFACTOR_PLAN.md`](FINAL_REFACTOR_PLAN.md).
 - [x] Malformed-state server-init stress passes.
 - [x] Persistent interaction tests pass.
 - [x] Install-bundle validation passes.
-- [ ] Docker build passes.
-- [ ] GitHub Actions passes after push.
+- [x] Docker build passes.
+- [x] GitHub Actions passes after push.
 - [x] Final report lists remaining widget modules and their LOC.
 - [x] Final report lists every template tag and attached recipe.
 - [x] Final report lists deleted interpreter/policy/compatibility code.
@@ -216,4 +216,5 @@ Verified by `tests/unit/test_final_convergence.py` (and retained hardening suite
 - [x] Migration confirm blocks incomplete resolutions; store validates candidates.
 - [x] `truncate_external_text()` used for external/widget presentation truncation.
 - [x] Active codec remains typed `tn1`; legacy removal condition documented in `custom_id_legacy.py`.
-- [ ] Final Docker / GitHub Actions green for the convergence commit.
+- [x] Final Docker / GitHub Actions green for the convergence commit
+  (`2461b10`, https://github.com/kidshuster/the-network/actions/runs/31568112201).
