@@ -126,45 +126,24 @@ class ViewDraft:
                     )
                 _validate_handler(reg, item.handler, tid=tid, element_id=eid)
 
+        resolved = _resolve_view_components(
+            comps,
+            bindings=self._bindings,
+            slots=self._slots,
+            values=self._values,
+            tid=tid,
+        )
+        laid_out = _assign_and_validate_layout(resolved, tid=tid)
+
         from bot.app.widgets.dispatch import RenderedView
 
         rendered = RenderedView(bot, timeout=self._spec.timeout, template_id=tid)
-        for component in comps:
-            if isinstance(component, SlotSpec):
-                for item in self._slots[component.slot]:
-                    if isinstance(item, SelectSpec):
-                        _add_select(rendered, item, tid=tid)
-                    else:
-                        _add_button(
-                            rendered,
-                            _resolved_button(item, self._values, tid),
-                            tid=tid,
-                        )
-                continue
-            bound_tag = component.tag
-            label = _require_len(
-                _sub(component.label, self._values, tid=tid, field=f"{bound_tag}.label") or "",
-                limit=_BUTTON_LABEL_MAX,
-                tid=tid,
-                element_id=bound_tag,
-                field="label",
-            )
-            emoji = _sub(component.emoji, self._values, tid=tid, field=f"{bound_tag}.emoji")
-            _add_button(
-                rendered,
-                ButtonSpec(
-                    tag=bound_tag,
-                    label=label,
-                    style=component.style,
-                    handler=self._bindings[bound_tag],
-                    disabled=component.disabled,
-                    row=component.row,
-                    emoji=emoji,
-                ),
-                tid=tid,
-            )
-        if len(rendered.children) > _VIEW_CHILD_MAX:
-            raise _err("view exceeds Discord component limit", template_id=tid)
+        for row, item in laid_out:
+            placed = item if item.row == row else _with_row(item, row)
+            if isinstance(placed, SelectSpec):
+                _add_select(rendered, placed, tid=tid)
+            else:
+                _add_button(rendered, placed, tid=tid)
         return rendered
 
 
@@ -272,6 +251,136 @@ def view(template_id: str, **values: Any) -> ViewDraft:
 
 def modal(template_id: str, **values: Any) -> ModalDraft:
     return ModalDraft(template_id, values)
+
+
+def _with_row(item: ButtonSpec | SelectSpec, row: int) -> ButtonSpec | SelectSpec:
+    if item.row == row:
+        return item
+    if isinstance(item, SelectSpec):
+        return SelectSpec(
+            tag=item.tag,
+            placeholder=item.placeholder,
+            options=item.options,
+            handler=item.handler,
+            min_values=item.min_values,
+            max_values=item.max_values,
+            row=row,
+        )
+    return ButtonSpec(
+        tag=item.tag,
+        label=item.label,
+        style=item.style,
+        handler=item.handler,
+        disabled=item.disabled,
+        row=row,
+        emoji=item.emoji,
+    )
+
+
+def _resolve_view_components(
+    comps: Sequence[StaticButtonSpec | SlotSpec],
+    *,
+    bindings: Mapping[str, RecipeHandler],
+    slots: Mapping[str, tuple[ButtonSpec | SelectSpec, ...]],
+    values: Mapping[str, Any],
+    tid: str,
+) -> list[ButtonSpec | SelectSpec]:
+    resolved: list[ButtonSpec | SelectSpec] = []
+    for component in comps:
+        if isinstance(component, SlotSpec):
+            for item in slots[component.slot]:
+                if isinstance(item, SelectSpec):
+                    resolved.append(item)
+                else:
+                    resolved.append(_resolved_button(item, values, tid))
+            continue
+        bound_tag = component.tag
+        label = _require_len(
+            _sub(component.label, values, tid=tid, field=f"{bound_tag}.label") or "",
+            limit=_BUTTON_LABEL_MAX,
+            tid=tid,
+            element_id=bound_tag,
+            field="label",
+        )
+        resolved.append(
+            ButtonSpec(
+                tag=bound_tag,
+                label=label,
+                style=component.style,
+                handler=bindings[bound_tag],
+                disabled=component.disabled,
+                row=component.row,
+                emoji=_sub(component.emoji, values, tid=tid, field=f"{bound_tag}.emoji"),
+            )
+        )
+    return resolved
+
+
+def _assign_and_validate_layout(
+    items: Sequence[ButtonSpec | SelectSpec],
+    *,
+    tid: str,
+) -> list[tuple[int, ButtonSpec | SelectSpec]]:
+    """Assign rows (matching Discord fill order) and reject invalid resolved layouts."""
+    if len(items) > _VIEW_CHILD_MAX:
+        raise _err(
+            f"view exceeds Discord component limit {_VIEW_CHILD_MAX}",
+            template_id=tid,
+        )
+    weights = [0] * (_ROW_MAX + 1)
+    has_select = [False] * (_ROW_MAX + 1)
+    laid_out: list[tuple[int, ButtonSpec | SelectSpec]] = []
+
+    for item in items:
+        tag = item.tag
+        select = isinstance(item, SelectSpec)
+        weight = 5 if select else 1
+        _validate_row(item.row, tid=tid, element_id=tag)
+
+        explicit_row = item.row
+        chosen_row: int
+        if explicit_row is not None:
+            chosen_row = explicit_row
+            if select and weights[chosen_row] > 0:
+                raise _err(
+                    f"select cannot share row {chosen_row}",
+                    template_id=tid,
+                    element_id=tag,
+                )
+            if not select and has_select[chosen_row]:
+                raise _err(
+                    f"button cannot share row {chosen_row} with a select",
+                    template_id=tid,
+                    element_id=tag,
+                )
+            if weights[chosen_row] + weight > 5:
+                raise _err(
+                    f"row {chosen_row} exceeds Discord capacity (max 5 button slots)",
+                    template_id=tid,
+                    element_id=tag,
+                )
+        else:
+            assigned: int | None = None
+            for candidate in range(_ROW_MAX + 1):
+                if select and weights[candidate] != 0:
+                    continue
+                if not select and has_select[candidate]:
+                    continue
+                if weights[candidate] + weight <= 5:
+                    assigned = candidate
+                    break
+            if assigned is None:
+                raise _err(
+                    "no available Discord row for component",
+                    template_id=tid,
+                    element_id=tag,
+                )
+            chosen_row = assigned
+
+        weights[chosen_row] += weight
+        has_select[chosen_row] = has_select[chosen_row] or select
+        laid_out.append((chosen_row, item))
+    return laid_out
 
 
 def _resolved_button(item: ButtonSpec, values: Mapping[str, Any], tid: str) -> ButtonSpec:

@@ -14,7 +14,8 @@ from bot.app.widgets.drafts import view
 from bot.app.widgets.errors import TemplateRenderError
 from bot.app.widgets.loader import clear_widget_cache
 from bot.app.widgets.schema import ModalTemplateSpec, ViewTemplateSpec
-from bot.contracts.widgets import SelectOptionSpec, SelectSpec, recipe_handler
+from bot.contracts.widgets import ButtonSpec, SelectOptionSpec, SelectSpec, recipe_handler
+from bot.core.channels.migration import AmbiguousMatch
 from bot.core.text import truncate_external_text
 from bot.errors import UserFacingError
 
@@ -258,3 +259,249 @@ def test_no_legacy_button_id_alias() -> None:
                 "components": [{"type": "button", "id": "old", "label": "A"}],
             }
         )
+
+
+def _ambiguous(key: str, *ids: int) -> AmbiguousMatch:
+    return AmbiguousMatch(
+        resource_key=key,
+        candidate_ids=tuple(ids),
+        candidate_names=tuple(f"ch-{discord_id}" for discord_id in ids),
+    )
+
+
+def test_migration_rejects_more_than_four_ambiguities() -> None:
+    from bot.app.widgets.migration import _require_reviewable_ambiguities
+    from bot.core.channels.migration import MigrationPlan
+
+    plan = MigrationPlan(
+        ambiguous=tuple(_ambiguous(f"r{i}", i + 1) for i in range(5)),
+    )
+    with pytest.raises(UserFacingError, match="5.*ambiguous") as raised:
+        _require_reviewable_ambiguities(plan)
+    assert raised.value.code == "migration_too_many_ambiguous"
+
+
+def test_migration_allows_zero_to_four_ambiguities() -> None:
+    from bot.app.widgets.migration import _require_reviewable_ambiguities
+    from bot.core.channels.migration import MigrationPlan
+
+    _require_reviewable_ambiguities(MigrationPlan())
+    _require_reviewable_ambiguities(
+        MigrationPlan(ambiguous=(_ambiguous("admin", 1),))
+    )
+    _require_reviewable_ambiguities(
+        MigrationPlan(ambiguous=tuple(_ambiguous(f"r{i}", i + 1) for i in range(4)))
+    )
+
+
+def test_migration_review_builds_all_four_ambiguities() -> None:
+    """All plan ambiguities (≤4) become required_keys — none are sliced away."""
+    from bot.app.widgets.migration import _MAX_AMBIGUOUS_SELECTS, _require_reviewable_ambiguities
+    from bot.core.channels.migration import MigrationPlan
+
+    plan = MigrationPlan(
+        ambiguous=tuple(_ambiguous(f"r{i}", 10 + i) for i in range(_MAX_AMBIGUOUS_SELECTS)),
+    )
+    _require_reviewable_ambiguities(plan)
+    bot = wire_widget_bot()
+    selects = [
+        SelectSpec(
+            tag=item.resource_key,
+            placeholder=item.resource_key,
+            options=tuple(
+                SelectOptionSpec(label=name, value=str(discord_id))
+                for discord_id, name in zip(
+                    item.candidate_ids, item.candidate_names, strict=True
+                )
+            ),
+            handler=recipe_handler("ui.migrate.store", resource_key=item.resource_key),
+        )
+        for item in plan.ambiguous
+    ]
+    built = (
+        bot.templates_view("migration_review")
+        .fill("ambiguous", selects)
+        .fill(
+            "actions",
+            (
+                ButtonSpec(
+                    tag="confirm",
+                    label="Confirm",
+                    handler=recipe_handler("ui.migrate.confirm"),
+                ),
+                ButtonSpec(
+                    tag="cancel",
+                    label="Cancel",
+                    handler=recipe_handler("ui.migrate.cancel"),
+                ),
+            ),
+        )
+        .build(bot)
+    )
+    assert len([c for c in built.children if isinstance(c, discord.ui.Select)]) == 4
+
+
+async def test_migrate_store_replaces_previous_selection() -> None:
+    bot = wire_widget_bot()
+    view_obj = RenderedView(bot, timeout=None, template_id="migration_review")
+    view_obj.required_keys = {"admin"}
+    view_obj.candidates = {"admin": {1, 2}}
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.view = view_obj
+    interaction.response = MagicMock()
+    interaction.response.is_done.return_value = False
+    interaction.response.defer = AsyncMock()
+    await bot.recipe_registry.run(
+        "ui.migrate.store",
+        interaction=interaction,
+        resource_key="admin",
+        select_values=["1"],
+    )
+    await bot.recipe_registry.run(
+        "ui.migrate.store",
+        interaction=interaction,
+        resource_key="admin",
+        select_values=["2"],
+    )
+    assert view_obj.resolutions["admin"] == 2
+
+
+async def test_migrate_store_rejects_unknown_resource_key() -> None:
+    from bot.app.recipes.registry import RecipeRegistryError
+
+    bot = wire_widget_bot()
+    view_obj = RenderedView(bot, timeout=None, template_id="migration_review")
+    view_obj.required_keys = {"admin"}
+    view_obj.candidates = {"admin": {1}}
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.view = view_obj
+    interaction.response = MagicMock()
+    interaction.response.is_done.return_value = False
+    with pytest.raises(RecipeRegistryError) as raised:
+        await bot.recipe_registry.run(
+            "ui.migrate.store",
+            interaction=interaction,
+            resource_key="rules",
+            select_values=["1"],
+        )
+    assert isinstance(raised.value.__cause__, UserFacingError)
+
+
+def test_resolved_layout_valid_static_and_mixed() -> None:
+    bot = wire_widget_bot()
+    static = (
+        view("join_network")
+        .bind("join_button", recipe_handler("request.join.open"))
+        .build(bot)
+    )
+    assert len(static.children) == 1
+    mixed = (
+        view("blacklist_select")
+        .fill(
+            "blacklist",
+            [
+                SelectSpec(
+                    tag="select",
+                    placeholder="Pick",
+                    options=(SelectOptionSpec(label="A", value="1"),),
+                    handler=recipe_handler("ui.dismiss"),
+                )
+            ],
+        )
+        .build(bot)
+    )
+    assert len(mixed.children) == 1
+
+
+def test_resolved_layout_rejects_six_buttons_one_row() -> None:
+    bot = wire_widget_bot()
+    buttons = [
+        ButtonSpec(
+            tag=f"b{i}",
+            label=str(i),
+            handler=recipe_handler("ui.dismiss"),
+            row=0,
+        )
+        for i in range(6)
+    ]
+    with pytest.raises(TemplateRenderError, match="row 0 exceeds") as raised:
+        view("blacklist_select").fill("blacklist", buttons).build(bot)
+    assert raised.value.template_id == "blacklist_select"
+    assert raised.value.element_id == "b5"
+
+
+def test_resolved_layout_rejects_select_sharing_row_with_button() -> None:
+    bot = wire_widget_bot()
+    with pytest.raises(TemplateRenderError, match="share row") as raised:
+        view("blacklist_select").fill(
+            "blacklist",
+            [
+                ButtonSpec(
+                    tag="b",
+                    label="B",
+                    handler=recipe_handler("ui.dismiss"),
+                    row=1,
+                ),
+                SelectSpec(
+                    tag="s",
+                    placeholder="Pick",
+                    options=(SelectOptionSpec(label="A", value="1"),),
+                    handler=recipe_handler("ui.dismiss"),
+                    row=1,
+                ),
+            ],
+        ).build(bot)
+    assert raised.value.template_id == "blacklist_select"
+    assert raised.value.element_id == "s"
+
+
+def test_resolved_layout_rejects_two_selects_same_row() -> None:
+    bot = wire_widget_bot()
+    with pytest.raises(TemplateRenderError, match="share row"):
+        view("blacklist_select").fill(
+            "blacklist",
+            [
+                SelectSpec(
+                    tag="s1",
+                    placeholder="Pick",
+                    options=(SelectOptionSpec(label="A", value="1"),),
+                    handler=recipe_handler("ui.dismiss"),
+                    row=2,
+                ),
+                SelectSpec(
+                    tag="s2",
+                    placeholder="Pick",
+                    options=(SelectOptionSpec(label="B", value="2"),),
+                    handler=recipe_handler("ui.dismiss"),
+                    row=2,
+                ),
+            ],
+        ).build(bot)
+
+
+def test_resolved_layout_rejects_invalid_dynamic_row() -> None:
+    bot = wire_widget_bot()
+    with pytest.raises(TemplateRenderError, match="outside Discord range") as raised:
+        view("blacklist_select").fill(
+            "blacklist",
+            [
+                ButtonSpec(
+                    tag="b",
+                    label="B",
+                    handler=recipe_handler("ui.dismiss"),
+                    row=5,
+                )
+            ],
+        ).build(bot)
+    assert raised.value.element_id == "b"
+
+
+def test_resolved_layout_rejects_too_many_components() -> None:
+    bot = wire_widget_bot()
+    buttons = [
+        ButtonSpec(tag=f"b{i}", label=str(i % 10), handler=recipe_handler("ui.dismiss"))
+        for i in range(26)
+    ]
+    with pytest.raises(TemplateRenderError, match="component limit") as raised:
+        view("blacklist_select").fill("blacklist", buttons).build(bot)
+    assert raised.value.template_id == "blacklist_select"

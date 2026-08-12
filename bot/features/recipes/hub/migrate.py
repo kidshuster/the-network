@@ -182,7 +182,16 @@ async def migrate_hub_layout(
                 plan=plan,
                 reason="Hub migration review is unavailable in this runtime.",
             )
-        reviewed = await presenter.present_migration_review(interaction, plan)
+        from bot.errors import UserFacingError
+
+        try:
+            reviewed = await presenter.present_migration_review(interaction, plan)
+        except UserFacingError as exc:
+            return HubMigrationResult(
+                success=False,
+                plan=plan,
+                reason=exc.message,
+            )
         if reviewed is None:
             return HubMigrationResult(
                 success=False,

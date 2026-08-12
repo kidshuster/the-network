@@ -8,6 +8,10 @@ import discord
 from bot.contracts.widgets import ButtonSpec, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.channels.migration import MigrationPlan
 from bot.core.text import truncate_external_text
+from bot.errors import UserFacingError
+
+# Discord view: up to 5 rows; confirm/cancel occupy one row → at most 4 ambiguous selects.
+_MAX_AMBIGUOUS_SELECTS = 4
 
 
 @dataclass
@@ -47,15 +51,38 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
     return embed
 
 
+def _require_reviewable_ambiguities(plan: MigrationPlan) -> None:
+    count = len(plan.ambiguous)
+    if count > _MAX_AMBIGUOUS_SELECTS:
+        raise UserFacingError(
+            (
+                f"Hub migration has **{count}** ambiguous channel maps, but the review UI "
+                f"can resolve at most **{_MAX_AMBIGUOUS_SELECTS}** at once. Rename or remove "
+                "leftover hub channels to reduce ambiguities, then re-run migration."
+            ),
+            code="migration_too_many_ambiguous",
+        )
+    for item in plan.ambiguous:
+        if not item.candidate_ids:
+            raise UserFacingError(
+                (
+                    f"Ambiguous resource `{item.resource_key}` has no candidate channels "
+                    "to choose from."
+                ),
+                code="migration_empty_candidates",
+            )
+
+
 async def present_migration_review(
     interaction: discord.Interaction,
     plan: MigrationPlan,
 ) -> MigrationReviewDecision | None:
+    _require_reviewable_ambiguities(plan)
     bot: Any = interaction.client
     selects: list[SelectSpec] = []
     required_keys: set[str] = set()
     candidates: dict[str, set[int]] = {}
-    for item in plan.ambiguous[:4]:
+    for item in plan.ambiguous:
         options = tuple(
             SelectOptionSpec(
                 label=truncate_external_text(name, limit=100),
@@ -69,7 +96,13 @@ async def present_migration_review(
             )
         )[:25]
         if not options:
-            continue
+            raise UserFacingError(
+                (
+                    f"Ambiguous resource `{item.resource_key}` has no displayable "
+                    "candidate options."
+                ),
+                code="migration_empty_candidates",
+            )
         required_keys.add(item.resource_key)
         candidates[item.resource_key] = set(item.candidate_ids)
         selects.append(

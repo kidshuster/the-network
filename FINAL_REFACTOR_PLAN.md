@@ -191,9 +191,22 @@ available to the implementing agent.
 
 ## Implementation status
 
-Phases 1–7 implemented against baseline `6d66c7a`. Active codec: typed `tn1` (`!` markers).
-External truncation: `bot.core.text.truncate_external_text`. Legacy decode:
-`bot/app/widgets/custom_id_legacy.py` (remove after sticky rewrite + one release with no legacy hits).
+Phases 1–7 implemented against baseline `6d66c7a`, plus a narrowly scoped follow-up for:
+
+1. Migration reviews with more than four ambiguities fail before open (no silent omit).
+2. Resolved static+dynamic view layouts are validated before Discord construction.
+
+Active codec: typed `tn1` (`!` markers). External truncation:
+`bot.core.text.truncate_external_text`. Legacy decode:
+`bot/app/widgets/custom_id_legacy.py` (remove after sticky rewrite + one release with no
+legacy hits).
+
+### LOC honesty
+
+Historical aspirational targets (≈1,000 `app/widgets`, total production Python below
+`8003569`) are **unmet and superseded**. Correctness hardening increased production LOC
+relative to both `8003569` and `6d66c7a`. Report measured counts from Git; do not weaken
+validation to chase old numbers. `plan.md` is superseded by this document.
 
 ## Definition of convergence
 
@@ -202,6 +215,8 @@ The final refactor is converged when:
 - Invalid templates fail deterministically at load/build boundaries with useful context.
 - Custom IDs preserve types and reject malformed or ambiguous input.
 - Migration review cannot confirm incomplete or invalid resolutions.
+- Migration review never silently omits ambiguities (fail closed when UI capacity is exceeded).
+- Resolved static+dynamic layouts are validated before Discord view construction.
 - Truncation occurs only through an explicit external-content policy.
 - Every documented widget invariant has direct regression coverage.
 - No alternate interaction execution path bypasses the recipe registry.
