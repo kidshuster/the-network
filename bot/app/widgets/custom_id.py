@@ -1,12 +1,8 @@
-"""Versioned recipe custom-ID codec (``tn1:<recipe>:k=<typed>``).
+"""Versioned recipe custom-ID codec (``tn1:<recipe>:k=!typed``).
 
-Typed values are marked with a leading ``!`` and never contain ``:``:
-- ``!n`` → None
-- ``!b1`` / ``!b0`` → bool
-- ``!i<digits>`` → int
-- ``!s<text>`` → str
-
-Values without ``!`` are transitional untyped tn1 segments.
+Active writer remains ``tn1`` with typed ``!`` markers (unambiguous vs untyped
+transitional segments). Legacy ``tn:`` / transitional open maps stay read-only in
+``custom_id_legacy.py``.
 """
 
 from __future__ import annotations
@@ -33,7 +29,12 @@ def encode(handler: RecipeHandler) -> str:
             element_id=recipe,
         )
     parts = [f"{_PREFIX}:{recipe}"]
+    seen: set[str] = set()
     for key in sorted(handler.arguments):
+        _validate_key(key)
+        if key in seen:
+            raise TemplateRenderError("duplicate custom_id key", element_id=key)
+        seen.add(key)
         parts.append(f"{key}={_encode_primitive(handler.arguments[key], key=key)}")
     custom_id = ":".join(parts)
     if len(custom_id) > _MAX_LEN:
@@ -45,12 +46,27 @@ def encode(handler: RecipeHandler) -> str:
 
 
 def decode(custom_id: str) -> RecipeHandler:
+    if len(custom_id) > _MAX_LEN:
+        raise TemplateRenderError(
+            f"custom_id length {len(custom_id)} exceeds {_MAX_LEN}",
+            element_id=custom_id[:32],
+        )
     if custom_id.startswith(f"{_PREFIX}:"):
         return _decode_v1(custom_id)
     legacy = decode_legacy_prefix(custom_id)
     if legacy is not None:
         return legacy
     raise TemplateRenderError("malformed custom_id", element_id=custom_id)
+
+
+def _validate_key(key: str) -> None:
+    if not key:
+        raise TemplateRenderError("custom_id argument key is empty")
+    if any(ch in key for ch in (":", "=")):
+        raise TemplateRenderError(
+            "custom_id argument key contains reserved characters",
+            element_id=key,
+        )
 
 
 def _encode_primitive(value: Primitive, *, key: str) -> str:
@@ -87,7 +103,9 @@ def _parse_primitive(value: str) -> Primitive:
         return False
     if typed.startswith("i"):
         raw = typed[1:]
-        if raw.isdigit() or (raw.startswith("-") and raw[1:].isdigit()):
+        if not raw:
+            raise TemplateRenderError("malformed int custom_id value", element_id=value)
+        if raw.isdigit() or (raw.startswith("-") and len(raw) > 1 and raw[1:].isdigit()):
             return int(raw)
         raise TemplateRenderError("malformed int custom_id value", element_id=value)
     if typed.startswith("s"):
@@ -101,16 +119,21 @@ def _parse_args(parts: list[str]) -> dict[str, Primitive]:
         if "=" not in part:
             raise TemplateRenderError("malformed custom_id argument", element_id=part)
         key, value = part.split("=", 1)
+        _validate_key(key)
+        if key in arguments:
+            raise TemplateRenderError("duplicate custom_id key", element_id=key)
         arguments[key] = _parse_primitive(value)
     return arguments
 
 
 def _decode_v1(custom_id: str) -> RecipeHandler:
     rest = custom_id.removeprefix(f"{_PREFIX}:")
-    parts = rest.split(":")
-    if not parts or not parts[0]:
+    if not rest:
         raise TemplateRenderError("malformed custom_id", element_id=custom_id)
+    parts = rest.split(":")
     recipe = parts[0]
+    if not recipe:
+        raise TemplateRenderError("malformed custom_id", element_id=custom_id)
     if recipe in {"ui.modal", "ui.view"} and len(parts) >= 2:
         mapped = map_transitional_open(recipe, parts[1], parts[2:])
         if mapped is not None:

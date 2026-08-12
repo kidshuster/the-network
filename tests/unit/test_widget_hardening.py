@@ -153,6 +153,8 @@ async def test_migration_store_updates_resolutions_via_recipe() -> None:
 
     bot = wire_widget_bot()
     view_obj = RenderedView(bot, timeout=None, template_id="migration_review")
+    view_obj.required_keys = {"admin"}
+    view_obj.candidates = {"admin": {99}}
     interaction = MagicMock(spec=discord.Interaction)
     interaction.view = view_obj
     interaction.guild = None

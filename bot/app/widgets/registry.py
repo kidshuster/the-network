@@ -20,9 +20,7 @@ class PersistentViewRegistry:
         self._bot = bot
 
     def _register(self, name: str, **context: Any) -> discord.ui.View:
-        from bot.app.widgets import render_view
-
-        view = cast("discord.ui.View", render_view(name, self._bot, **context))
+        view = cast("discord.ui.View", self._bot.render_named_view(name, **context))
         self._bot.add_view(view)
         return view
 

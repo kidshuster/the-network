@@ -1,0 +1,9 @@
+kind: view
+id: disabled_static
+timeout: null
+components:
+  - type: button
+    tag: locked_button
+    label: Locked
+    style: secondary
+    disabled: true

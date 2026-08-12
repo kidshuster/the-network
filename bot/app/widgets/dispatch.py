@@ -23,6 +23,8 @@ class RenderedView(discord.ui.View):
         self.template_id = template_id
         self.decision: dict[str, Any] | None = None
         self.resolutions: dict[str, int] = {}
+        self.required_keys: set[str] = set()
+        self.candidates: dict[str, set[int]] = {}
 
 
 class RenderedModal(discord.ui.Modal):

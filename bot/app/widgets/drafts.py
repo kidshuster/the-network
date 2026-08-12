@@ -9,9 +9,9 @@ from bot.app.widgets import custom_id
 from bot.app.widgets.errors import TemplateRenderError
 from bot.app.widgets.loader import load_modal, load_view
 from bot.app.widgets.schema import SlotSpec, StaticButtonSpec
-from bot.contracts.widgets import ButtonSpec, RecipeHandler, SelectSpec
+from bot.contracts.widgets import ButtonSpec, ButtonStyle, RecipeHandler, SelectSpec
 
-_STYLE = {
+_STYLE: dict[ButtonStyle, discord.ButtonStyle] = {
     "primary": discord.ButtonStyle.primary,
     "secondary": discord.ButtonStyle.secondary,
     "success": discord.ButtonStyle.success,
@@ -20,10 +20,16 @@ _STYLE = {
 }
 _BUTTON_LABEL_MAX = 80
 _SELECT_LABEL_MAX = 100
+_SELECT_VALUE_MAX = 100
 _SELECT_PLACEHOLDER_MAX = 150
 _SELECT_DESC_MAX = 100
 _VIEW_CHILD_MAX = 25
 _SELECT_OPTIONS_MAX = 25
+_MODAL_TITLE_MAX = 45
+_MODAL_LABEL_MAX = 45
+_MODAL_DESC_MAX = 100
+_MODAL_PLACEHOLDER_MAX = 100
+_ROW_MAX = 4
 
 
 def _err(detail: str, *, template_id: str, element_id: str | None = None) -> TemplateRenderError:
@@ -41,7 +47,19 @@ def _sub(text: str | None, values: Mapping[str, Any], *, tid: str, field: str) -
     return result
 
 
-def _validate(registry: Any, handler: RecipeHandler, *, tid: str, element_id: str) -> None:
+def _require_len(value: str, *, limit: int, tid: str, element_id: str, field: str) -> str:
+    if len(value) > limit:
+        raise _err(
+            f"{field} length {len(value)} exceeds Discord limit {limit}",
+            template_id=tid,
+            element_id=element_id,
+        )
+    return value
+
+
+def _validate_handler(
+    registry: Any, handler: RecipeHandler, *, tid: str, element_id: str
+) -> None:
     if not registry.has(handler.recipe):
         raise _err(
             f"unregistered recipe {handler.recipe!r}",
@@ -54,26 +72,13 @@ def _validate(registry: Any, handler: RecipeHandler, *, tid: str, element_id: st
         raise _err(str(exc), template_id=tid, element_id=element_id) from exc
 
 
-def _require_len(value: str, *, limit: int, tid: str, element_id: str, field: str) -> str:
-    if len(value) > limit:
+def _validate_row(row: int | None, *, tid: str, element_id: str) -> None:
+    if row is not None and (row < 0 or row > _ROW_MAX):
         raise _err(
-            f"{field} length {len(value)} exceeds Discord limit {limit}",
+            f"row {row} outside Discord range 0-{_ROW_MAX}",
             template_id=tid,
             element_id=element_id,
         )
-    return value
-
-
-def _button_spec(item: ButtonSpec, values: Mapping[str, Any], tid: str) -> ButtonSpec:
-    return ButtonSpec(
-        tag=item.tag,
-        label=_sub(item.label, values, tid=tid, field=f"{item.tag}.label") or "",
-        style=item.style,
-        handler=item.handler,
-        disabled=item.disabled,
-        row=item.row,
-        emoji=item.emoji,
-    )
 
 
 class ViewDraft:
@@ -83,7 +88,6 @@ class ViewDraft:
         self._bindings: dict[str, RecipeHandler] = {}
         self._slots: dict[str, tuple[ButtonSpec | SelectSpec, ...]] = {}
         self._spec = load_view(template_id)
-        self._result: discord.ui.View | None = None
 
     def bind(self, tag: str, handler: RecipeHandler) -> ViewDraft:
         if tag in self._bindings:
@@ -99,7 +103,7 @@ class ViewDraft:
 
     def build(self, bot: Any) -> discord.ui.View:
         tid, reg, comps = self.template_id, bot.recipe_registry, self._spec.components
-        static = {c.tag for c in comps if isinstance(c, StaticButtonSpec) and c.tag}
+        static = {c.tag for c in comps if isinstance(c, StaticButtonSpec)}
         slots = {c.slot for c in comps if isinstance(c, SlotSpec)}
         for label, bad in (
             ("unbound tags", static - set(self._bindings)),
@@ -110,18 +114,17 @@ class ViewDraft:
             if bad:
                 raise _err(f"{label} {sorted(bad)}", template_id=tid)
         for tag, handler in self._bindings.items():
-            _validate(reg, handler, tid=tid, element_id=tag)
+            _validate_handler(reg, handler, tid=tid, element_id=tag)
         for slot, items in self._slots.items():
             for item in items:
-                item_handler = item.handler
                 eid = getattr(item, "tag", slot)
-                if item_handler is None:
+                if item.handler is None:
                     raise _err(
                         "dynamic interactable missing handler",
                         template_id=tid,
                         element_id=eid,
                     )
-                _validate(reg, item_handler, tid=tid, element_id=eid)
+                _validate_handler(reg, item.handler, tid=tid, element_id=eid)
 
         from bot.app.widgets.dispatch import RenderedView
 
@@ -132,42 +135,37 @@ class ViewDraft:
                     if isinstance(item, SelectSpec):
                         _add_select(rendered, item, tid=tid)
                     else:
-                        _add_button(rendered, _button_spec(item, self._values, tid), tid=tid)
+                        _add_button(
+                            rendered,
+                            _resolved_button(item, self._values, tid),
+                            tid=tid,
+                        )
                 continue
             bound_tag = component.tag
-            assert bound_tag is not None
-            bound = self._bindings[bound_tag]
+            label = _require_len(
+                _sub(component.label, self._values, tid=tid, field=f"{bound_tag}.label") or "",
+                limit=_BUTTON_LABEL_MAX,
+                tid=tid,
+                element_id=bound_tag,
+                field="label",
+            )
+            emoji = _sub(component.emoji, self._values, tid=tid, field=f"{bound_tag}.emoji")
             _add_button(
                 rendered,
                 ButtonSpec(
                     tag=bound_tag,
-                    label=_sub(
-                        component.label, self._values, tid=tid, field=f"{bound_tag}.label"
-                    )
-                    or "",
-                    style=component.style,  # type: ignore[arg-type]
-                    handler=bound,
+                    label=label,
+                    style=component.style,
+                    handler=self._bindings[bound_tag],
                     disabled=component.disabled,
                     row=component.row,
-                    emoji=_sub(component.emoji, self._values, tid=tid, field=f"{bound_tag}.emoji"),
+                    emoji=emoji,
                 ),
                 tid=tid,
             )
         if len(rendered.children) > _VIEW_CHILD_MAX:
             raise _err("view exceeds Discord component limit", template_id=tid)
-        self._result = rendered
         return rendered
-
-    def __enter__(self) -> ViewDraft:
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        # Convenience only; callers must still call build() for Discord objects.
-        return None
-
-    @property
-    def result(self) -> discord.ui.View | None:
-        return self._result
 
 
 class ModalDraft:
@@ -177,7 +175,6 @@ class ModalDraft:
         self._defaults: dict[str, str] = {}
         self._submit: RecipeHandler | None = None
         self._spec = load_modal(template_id)
-        self._result: discord.ui.Modal | None = None
 
     def defaults(self, **values: str) -> ModalDraft:
         self._defaults.update({key: str(value) for key, value in values.items()})
@@ -193,35 +190,70 @@ class ModalDraft:
         tid = self.template_id
         if self._submit is None:
             raise _err("modal requires submit recipe", template_id=tid)
-        _validate(bot.recipe_registry, self._submit, tid=tid, element_id="submit")
+        _validate_handler(bot.recipe_registry, self._submit, tid=tid, element_id="submit")
         from bot.app.widgets.dispatch import RenderedModal
 
+        title = _require_len(
+            _sub(self._spec.title, self._values, tid=tid, field="title") or "",
+            limit=_MODAL_TITLE_MAX,
+            tid=tid,
+            element_id="title",
+            field="title",
+        )
         rendered = RenderedModal(
             bot,
-            title=_sub(self._spec.title, self._values, tid=tid, field="title") or "",
+            title=title,
             submit=self._submit,
             template_id=tid,
         )
         for field in self._spec.fields:
-            label_text = _sub(field.label, self._values, tid=tid, field=f"{field.id}.label") or ""
+            label_text = _require_len(
+                _sub(field.label, self._values, tid=tid, field=f"{field.id}.label") or "",
+                limit=_MODAL_LABEL_MAX,
+                tid=tid,
+                element_id=field.id,
+                field="label",
+            )
             description = _sub(
                 field.description, self._values, tid=tid, field=f"{field.id}.description"
             )
+            if description is not None:
+                _require_len(
+                    description,
+                    limit=_MODAL_DESC_MAX,
+                    tid=tid,
+                    element_id=field.id,
+                    field="description",
+                )
             if field.type == "file_upload":
                 component: Any = discord.ui.FileUpload(
                     required=field.required, max_values=field.max_values
                 )
                 rendered.file_fields.add(field.id)
             else:
-                component = discord.ui.TextInput(
-                    placeholder=_sub(
-                        field.placeholder, self._values, tid=tid, field=f"{field.id}.placeholder"
+                placeholder = _sub(
+                    field.placeholder, self._values, tid=tid, field=f"{field.id}.placeholder"
+                )
+                if placeholder is not None:
+                    _require_len(
+                        placeholder,
+                        limit=_MODAL_PLACEHOLDER_MAX,
+                        tid=tid,
+                        element_id=field.id,
+                        field="placeholder",
                     )
-                    or discord.utils.MISSING,
+                component = discord.ui.TextInput(
+                    placeholder=placeholder or discord.utils.MISSING,
                     max_length=field.max_length,
                     required=field.required,
                 )
                 if (default := self._defaults.get(field.id)) is not None:
+                    if len(default) > field.max_length:
+                        raise _err(
+                            f"default exceeds max_length {field.max_length}",
+                            template_id=tid,
+                            element_id=field.id,
+                        )
                     component.default = default
             label: discord.ui.Label[Any] = discord.ui.Label(
                 text=label_text,
@@ -231,12 +263,7 @@ class ModalDraft:
             rendered.field_ids.append(field.id)
             rendered.add_item(label)
             rendered._labels[field.id] = label
-        self._result = rendered
         return rendered
-
-    @property
-    def result(self) -> discord.ui.Modal | None:
-        return self._result
 
 
 def view(template_id: str, **values: Any) -> ViewDraft:
@@ -247,12 +274,34 @@ def modal(template_id: str, **values: Any) -> ModalDraft:
     return ModalDraft(template_id, values)
 
 
+def _resolved_button(item: ButtonSpec, values: Mapping[str, Any], tid: str) -> ButtonSpec:
+    label = _require_len(
+        _sub(item.label, values, tid=tid, field=f"{item.tag}.label") or "",
+        limit=_BUTTON_LABEL_MAX,
+        tid=tid,
+        element_id=item.tag,
+        field="label",
+    )
+    return ButtonSpec(
+        tag=item.tag,
+        label=label,
+        style=item.style,
+        handler=item.handler,
+        disabled=item.disabled,
+        row=item.row,
+        emoji=_sub(item.emoji, values, tid=tid, field=f"{item.tag}.emoji"),
+    )
+
+
 def _add_button(target: Any, spec: ButtonSpec, *, tid: str) -> None:
     if spec.handler is None:
         raise _err("button missing handler", template_id=tid, element_id=spec.tag)
     _require_len(
         spec.label, limit=_BUTTON_LABEL_MAX, tid=tid, element_id=spec.tag, field="label"
     )
+    _validate_row(spec.row, tid=tid, element_id=spec.tag)
+    if spec.style not in _STYLE:
+        raise _err(f"invalid button style {spec.style!r}", template_id=tid, element_id=spec.tag)
     kwargs: dict[str, Any] = {
         "label": spec.label,
         "style": _STYLE[spec.style],
@@ -282,6 +331,8 @@ def _add_select(target: Any, spec: SelectSpec, *, tid: str) -> None:
             template_id=tid,
             element_id=spec.tag,
         )
+    if len(spec.options) == 0:
+        raise _err("select requires at least one option", template_id=tid, element_id=spec.tag)
     _require_len(
         spec.placeholder,
         limit=_SELECT_PLACEHOLDER_MAX,
@@ -289,7 +340,16 @@ def _add_select(target: Any, spec: SelectSpec, *, tid: str) -> None:
         element_id=spec.tag,
         field="placeholder",
     )
-    if spec.max_values > len(spec.options) and len(spec.options) > 0:
+    _validate_row(spec.row, tid=tid, element_id=spec.tag)
+    if spec.min_values < 0 or spec.max_values < 1:
+        raise _err("invalid select value range", template_id=tid, element_id=spec.tag)
+    if spec.min_values > spec.max_values:
+        raise _err(
+            "select min_values exceeds max_values",
+            template_id=tid,
+            element_id=spec.tag,
+        )
+    if spec.max_values > len(spec.options):
         raise _err(
             f"select max_values {spec.max_values} exceeds option count {len(spec.options)}",
             template_id=tid,
@@ -303,6 +363,13 @@ def _add_select(target: Any, spec: SelectSpec, *, tid: str) -> None:
             tid=tid,
             element_id=spec.tag,
             field="option.label",
+        )
+        _require_len(
+            option.value,
+            limit=_SELECT_VALUE_MAX,
+            tid=tid,
+            element_id=spec.tag,
+            field="option.value",
         )
         if option.description is not None:
             _require_len(

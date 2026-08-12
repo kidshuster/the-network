@@ -9,6 +9,7 @@ import discord
 from bot.contracts.recipes import RecipeContext, recipe
 from bot.contracts.widgets import OpenEphemeralView, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.templates import render_text
+from bot.core.text import truncate_external_text
 from bot.errors import UserFacingError
 from bot.features.widgets.guards import (
     interaction_actor,
@@ -289,7 +290,7 @@ async def open_blacklist(
     current = set(await repo.list_blacklisted_client_ids(subscription_id))
     options = [
         SelectOptionSpec(
-            label=peer_client.display_name[:100],
+            label=truncate_external_text(peer_client.display_name, limit=100),
             value=str(peer_client.id),
             default=peer_client.id in current,
         )

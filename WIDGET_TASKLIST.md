@@ -1,8 +1,7 @@
 # Widget Template Refactor Tasklist
 
-Use this checklist with `plan.md` and `CURSOR_ARCHITECTURE_GOALS.md`. Do not perform another
-top-level reorganization. Preserve the existing `app` / `features` / `core` boundaries and all
-validated behavior.
+Active convergence contract: [`FINAL_REFACTOR_PLAN.md`](FINAL_REFACTOR_PLAN.md).
+`plan.md` is superseded. Preserve the existing `app` / `features` / `core` boundaries.
 
 ## Baseline and inventory
 
@@ -183,16 +182,16 @@ validated behavior.
 - [x] Malformed-state server-init stress passes.
 - [x] Persistent interaction tests pass.
 - [x] Install-bundle validation passes.
-- [x] Docker build passes.
-- [x] GitHub Actions passes after push.
+- [ ] Docker build passes.
+- [ ] GitHub Actions passes after push.
 - [x] Final report lists remaining widget modules and their LOC.
 - [x] Final report lists every template tag and attached recipe.
 - [x] Final report lists deleted interpreter/policy/compatibility code.
 
-## Post-c1bdc95 hardening (plan.md)
+## Post-c1bdc95 hardening
 
-Verified by executable tests in `tests/unit/test_widget_hardening.py`,
-`tests/unit/test_ui_custom_ids.py`, `tests/unit/test_recipe_registry.py`, and related handler tests:
+Verified by `tests/unit/test_widget_hardening.py`, `tests/unit/test_ui_custom_ids.py`,
+`tests/unit/test_recipe_registry.py`, and related handler tests:
 
 - [x] Disabled static/dynamic interactables require registered recipe handlers.
 - [x] `RecipeRegistry.run` rejects unexpected inputs (no silent filter).
@@ -203,3 +202,18 @@ Verified by executable tests in `tests/unit/test_widget_hardening.py`,
 - [x] Mutation recipes require an authorized actor (missing/unauthorized covered).
 - [x] Presenter failures propagate and do not send a misleading `Done.` response.
 - [x] Legacy decode isolated in `bot/app/widgets/custom_id_legacy.py` with removal condition.
+
+## Final convergence (`FINAL_REFACTOR_PLAN.md`)
+
+Verified by `tests/unit/test_final_convergence.py` (and retained hardening suites):
+
+- [x] Shared `ButtonStyle` in YAML schema; invalid styles rejected.
+- [x] Row bounds, modal title/field uniqueness, select ranges validated.
+- [x] Substituted label overflows rejected at build.
+- [x] Real disabled static YAML-button requires binding.
+- [x] Custom-ID empty/duplicate keys, malformed markers, oversized decode rejected.
+- [x] Numeric-looking strings preserve type; legacy `tn:` / transitional open maps still decode.
+- [x] Migration confirm blocks incomplete resolutions; store validates candidates.
+- [x] `truncate_external_text()` used for external/widget presentation truncation.
+- [x] Active codec remains typed `tn1`; legacy removal condition documented in `custom_id_legacy.py`.
+- [ ] Final Docker / GitHub Actions green for the convergence commit.

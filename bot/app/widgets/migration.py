@@ -7,6 +7,7 @@ import discord
 
 from bot.contracts.widgets import ButtonSpec, SelectOptionSpec, SelectSpec, recipe_handler
 from bot.core.channels.migration import MigrationPlan
+from bot.core.text import truncate_external_text
 
 
 @dataclass
@@ -29,11 +30,18 @@ def migration_review_embed(plan: MigrationPlan) -> discord.Embed:
             f"`{item.resource_key}` ← {', '.join(f'#{name}' for name in item.candidate_names)}"
             for item in plan.ambiguous
         ]
-        embed.add_field(name="Ambiguous maps", value="\n".join(lines)[:1024], inline=False)
+        embed.add_field(
+            name="Ambiguous maps",
+            value=truncate_external_text("\n".join(lines), limit=1024),
+            inline=False,
+        )
     if plan.delete_candidates:
         embed.add_field(
             name="Obsolete channels to remove",
-            value=", ".join(f"#{item.name}" for item in plan.delete_candidates)[:1024],
+            value=truncate_external_text(
+                ", ".join(f"#{item.name}" for item in plan.delete_candidates),
+                limit=1024,
+            ),
             inline=False,
         )
     return embed
@@ -45,12 +53,14 @@ async def present_migration_review(
 ) -> MigrationReviewDecision | None:
     bot: Any = interaction.client
     selects: list[SelectSpec] = []
+    required_keys: set[str] = set()
+    candidates: dict[str, set[int]] = {}
     for item in plan.ambiguous[:4]:
         options = tuple(
             SelectOptionSpec(
-                label=name[:100],
+                label=truncate_external_text(name, limit=100),
                 value=str(discord_id),
-                description=f"id {discord_id}"[:100],
+                description=truncate_external_text(f"id {discord_id}", limit=100),
             )
             for discord_id, name in zip(
                 item.candidate_ids,
@@ -60,10 +70,12 @@ async def present_migration_review(
         )[:25]
         if not options:
             continue
+        required_keys.add(item.resource_key)
+        candidates[item.resource_key] = set(item.candidate_ids)
         selects.append(
             SelectSpec(
                 tag=item.resource_key,
-                placeholder=item.resource_key[:150],
+                placeholder=truncate_external_text(item.resource_key, limit=150),
                 options=options,
                 handler=recipe_handler("ui.migrate.store", resource_key=item.resource_key),
             )
@@ -92,6 +104,8 @@ async def present_migration_review(
     )
     built.decision = {}
     built.resolutions = {}
+    built.required_keys = required_keys
+    built.candidates = candidates
     embed = migration_review_embed(plan)
     send = (
         interaction.followup.send
