@@ -1,0 +1,64 @@
+# Timecode candidate patterns for relay date conversion.
+#
+# Matching runs only after sanitize_for_dates():
+#   - lowercase
+#   - whitespace collapsed to single spaces
+#   - Discord markdown markers stripped (* _ ` ~ |)
+#
+# To add coverage for a new announcement phrase:
+#   1. Prefer a new small pattern (id + example + match)
+#   2. Reuse {fragments} instead of duplicating alternations
+#   3. Keep examples lowercase and spacing-normalized
+
+fragments:
+  tz: "pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt"
+  weekday: "monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun"
+  month: "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec"
+  # 4 pm / 4pm / 4:30 pm pst
+  clock: "\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)(?:\\s+(?:{tz}))?"
+  # Optional time after a day word: "at 10am pst", ", at 10am", "10am pst", " noon"
+  day_time: "(?:,?\\s+at\\s+(?:{clock}|noon|midnight)|\\s+{clock}|\\s+(?:noon|midnight)(?:\\s+(?:{tz}))?)?"
+
+patterns:
+  - id: iso_date
+    example: "2026-08-07 14:30"
+    match: "\\b\\d{4}-\\d{1,2}-\\d{1,2}(?:\\s+\\d{1,2}:\\d{2}(?::\\d{2})?)?(?:\\s+\\w+)?\\b"
+
+  - id: slash_date
+    example: "3/15/2026 4:00 pm"
+    match: "\\b\\d{1,2}/\\d{1,2}/\\d{2,4}(?:\\s+\\d{1,2}:\\d{2})?(?:\\s*(?:am|pm))?(?:\\s+\\w+)?\\b"
+
+  - id: month_day
+    example: "march 3 2026 6 pm"
+    match: "\\b(?:{month})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s+\\d{2,4})?(?:\\s+\\d{1,2}(?::\\d{2})?\\s*(?:am|pm))?(?:\\s+\\w+)?\\b"
+
+  - id: relative_day_time
+    example: "today at 8 pm pst"
+    match: "\\b(?:today|tomorrow|tonight)(?:{day_time})\\b"
+
+  - id: next_weekday_time
+    example: "next friday at 7 pm cst"
+    match: "\\bnext\\s+(?:{weekday})(?:{day_time})\\b"
+
+  - id: weekday_time
+    example: "saturday at 10am pst"
+    match: "\\b(?:{weekday})(?:{day_time})\\b"
+
+  - id: noon_midnight
+    example: "noon"
+    match: "\\b(?:noon|midnight)\\b"
+
+  - id: clock_only
+    example: "4 pm pst"
+    match: "\\b(?:{clock})\\b"
+
+  - id: hhmm
+    example: "16:00 utc"
+    match: "\\b\\d{1,2}:\\d{2}\\s*(?:{tz})?\\b"
+
+hints:
+  - "\\d{4}-\\d{1,2}-\\d{1,2}"
+  - "\\d{1,2}/\\d{1,2}/\\d{2,4}"
+  - "\\b(?:{month})\\b"
+  - "\\b(?:{weekday})\\b"
+  - "\\b(?:today|tomorrow|tonight|next)\\b"

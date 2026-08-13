@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import discord
+import pytest
 
 from bot.core.models.client import Client
 from bot.features.recipes.hub.relay.formatter import (
@@ -66,11 +67,27 @@ def test_build_relay_embed_uses_display_name_and_server_icon() -> None:
 
 def test_build_relay_embed_converts_dates_when_timecodes_enabled() -> None:
     client = _sample_client()
-    message = _message(content="we are grouping at 4 pm pst")
+    message = _message(content="Official end time will be Saturday at 10am pst.")
     parts = build_relay_embed_from_client(message, client)
     assert parts.embed.description is not None
-    assert parts.embed.description.startswith("we are grouping at <t:")
-    assert parts.embed.description.endswith(">")
+    assert parts.embed.description.startswith("Official end time will be <t:")
+    assert parts.embed.description.endswith(">.")
+
+
+@pytest.mark.asyncio
+async def test_system_announcement_payload_converts_dates() -> None:
+    from bot.features.recipes.hub.relay.formatter import build_system_announcement_payload
+
+    message = _message(content="")
+    message.guild = MagicMock()
+    message.guild.me = MagicMock(display_avatar=MagicMock(url="https://cdn.example/bot.png"))
+    payload = await build_system_announcement_payload(
+        message,
+        body="Maintenance Saturday at 10am pst.",
+    )
+    assert payload.embed.description is not None
+    assert "<t:" in payload.embed.description
+    assert "Saturday" not in payload.embed.description
 
 
 def test_build_relay_embed_skips_date_conversion_when_timecodes_disabled() -> None:

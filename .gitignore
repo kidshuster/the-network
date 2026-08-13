@@ -32,3 +32,6 @@ deploy/
 # Local agent entry (symlink into cursor/)
 AGENTS.md
 commands.md
+
+# Local live-host helpers (machine-specific)
+bin/live-update.sh

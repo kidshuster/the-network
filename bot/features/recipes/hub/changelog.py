@@ -27,6 +27,7 @@ class ReleaseNotes:
     version: str
     summary: str
     changes: tuple[str, ...]
+    post: bool = False
 
 
 def installed_version() -> str:
@@ -68,6 +69,7 @@ def _load_releases_catalog() -> dict[str, ReleaseNotes]:
             version=str(version_key_str),
             summary=summary or f"Release {version_key_str}",
             changes=tuple(changes),
+            post=bool(entry.get("post", False)),
         )
     return catalog
 
@@ -81,12 +83,19 @@ def pending_release_versions(
     *,
     last_posted: str | None,
     up_to: str,
+    channel_only: bool = False,
 ) -> list[str]:
-    """Catalog versions after last_posted up to installed, oldest first."""
+    """Catalog versions after last_posted up to installed, oldest first.
+
+    When ``channel_only`` is true, only releases tagged ``post: true`` are
+    included (Discord #changelog). Patches stay in the catalog for history.
+    """
     cap = version_key(up_to)
     last = version_key(last_posted) if last_posted else None
     pending: list[str] = []
-    for release_version in catalog:
+    for release_version, notes in catalog.items():
+        if channel_only and not notes.post:
+            continue
         key = version_key(release_version)
         if key > cap:
             continue
@@ -95,6 +104,21 @@ def pending_release_versions(
         pending.append(release_version)
     pending.sort(key=version_key)
     return pending
+
+
+def pending_channel_release_versions(
+    catalog: dict[str, ReleaseNotes],
+    *,
+    last_posted: str | None,
+    up_to: str,
+) -> list[str]:
+    """Postable (``post: true``) catalog versions after last_posted up to installed."""
+    return pending_release_versions(
+        catalog,
+        last_posted=last_posted,
+        up_to=up_to,
+        channel_only=True,
+    )
 
 
 def _chunk_bullet_lines(items: tuple[str, ...], *, prefix: str = "• ") -> list[str]:
@@ -135,11 +159,16 @@ async def sync_changelog_releases(
     context: Any,
     channel: discord.TextChannel,
 ) -> int:
-    """Post missing release notes in version order up to the installed package version."""
+    """Post missing postable release notes up to the installed package version.
+
+    Only catalog entries with ``post: true`` are sent to Discord. Patch releases
+    remain in the YAML history; the cursor still advances to ``installed`` when
+    no postable versions remain so patch-only deploys stay idempotent.
+    """
     installed = installed_version()
     catalog = _load_releases_catalog()
     last_posted = await context.store.settings.get(LAST_CHANGELOG_VERSION_KEY)
-    versions = pending_release_versions(
+    versions = pending_channel_release_versions(
         catalog,
         last_posted=last_posted,
         up_to=installed,
@@ -167,7 +196,7 @@ async def sync_changelog_releases(
 
     current_last = await context.store.settings.get(LAST_CHANGELOG_VERSION_KEY)
     if version_key(installed) > version_key(current_last or "0"):
-        remaining = pending_release_versions(
+        remaining = pending_channel_release_versions(
             catalog,
             last_posted=current_last,
             up_to=installed,

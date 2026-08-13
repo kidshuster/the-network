@@ -5,6 +5,7 @@ releases:
       - "Fall back to a channel message if the ephemeral interaction reply is gone or expired."
       - "Include the client name in missing subscribe-channel relay errors."
   "1.3.0":
+    post: true
     summary: "Architecture refactor with install submodule runtime and in-bot smoke testing."
     changes:
       - "Split the bot into app, core, and features with recipe/widget/trigger boundaries."

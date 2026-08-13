@@ -137,7 +137,9 @@ async def _build_service(
 async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> None:
     _client, _sub, _subscriber, _sub_sub = await _seed_client_subscription(db)
     service = await _build_service(db, monkeypatch)
-    message = _make_webhook_message()
+    message = _make_webhook_message(
+        content="Official end time will be Saturday at 10am pst.",
+    )
 
     own_subscribe = MagicMock(spec=discord.TextChannel)
     own_sent = MagicMock(spec=discord.Message)
@@ -168,6 +170,10 @@ async def test_end_to_end_webhook_relay(db, monkeypatch: pytest.MonkeyPatch) -> 
     other_subscribe.send.assert_awaited_once()
     own_sent.publish.assert_awaited_once()
     other_sent.publish.assert_awaited_once()
+    embed = own_subscribe.send.await_args.kwargs["embed"]
+    assert embed.description is not None
+    assert "<t:" in embed.description
+    assert "Saturday" not in embed.description
 
 
 @pytest.mark.asyncio

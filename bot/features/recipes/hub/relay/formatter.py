@@ -9,6 +9,7 @@ import discord
 
 from bot.constants import DEGRADED_FALLBACK
 from bot.core.models.client import Client
+from bot.core.parsers.date_parser import replace_dates
 from bot.core.templates import relay_embed_spec, resolve_colour
 
 logger = logging.getLogger(__name__)
@@ -110,19 +111,57 @@ class RelayEmbedParts:
     primary_image_url: str | None
 
 
+@dataclass(frozen=True)
+class RelayPayload:
+    embed: discord.Embed
+    files: tuple[discord.File, ...] = ()
+
+
+def apply_timecodes(
+    body: str,
+    *,
+    enabled: bool,
+    client_id: int | None = None,
+) -> str:
+    """Convert dates/times in relay body text when enabled."""
+    if not enabled or not body:
+        return body
+    try:
+        return replace_dates(body)
+    except Exception:
+        logger.exception(
+            "Date/time conversion failed; relaying original text",
+            extra={"client_id": client_id},
+        )
+        return body
+
+
+async def _attachment_files(
+    message: discord.Message,
+    *,
+    skip_url: str | None,
+) -> tuple[discord.File, ...]:
+    files: list[discord.File] = []
+    for attachment in message.attachments:
+        if skip_url is not None and attachment.url == skip_url:
+            continue
+        try:
+            data = await attachment.read()
+        except discord.HTTPException:
+            continue
+        if not data:
+            continue
+        files.append(discord.File(fp=io.BytesIO(data), filename=attachment.filename))
+    return tuple(files)
+
+
 def build_relay_embed_from_client(message: discord.Message, client: Client) -> RelayEmbedParts:
     shell = relay_embed_spec()
-    body = extract_relay_body(message)
-    if client.timecode_enabled and body:
-        try:
-            from bot.core.parsers.date_parser import replace_dates
-
-            body = replace_dates(body)
-        except Exception:
-            logger.exception(
-                "Date/time conversion failed; relaying original text",
-                extra={"client_id": client.id},
-            )
+    body = apply_timecodes(
+        extract_relay_body(message),
+        enabled=client.timecode_enabled,
+        client_id=client.id,
+    )
     image_urls = extract_relay_image_urls(message)
     primary_image_url = image_urls[0] if image_urls else None
 
@@ -143,30 +182,13 @@ def build_relay_embed_from_client(message: discord.Message, client: Client) -> R
     return RelayEmbedParts(embed=embed, primary_image_url=primary_image_url)
 
 
-@dataclass(frozen=True)
-class RelayPayload:
-    embed: discord.Embed
-    files: tuple[discord.File, ...] = ()
-
-
 async def build_relay_payload_from_client(
     message: discord.Message,
     client: Client,
 ) -> RelayPayload:
     parts = build_relay_embed_from_client(message, client)
-    files: list[discord.File] = []
-    skip_url = parts.primary_image_url
-    for attachment in message.attachments:
-        if skip_url is not None and attachment.url == skip_url:
-            continue
-        try:
-            data = await attachment.read()
-        except discord.HTTPException:
-            continue
-        if not data:
-            continue
-        files.append(discord.File(fp=io.BytesIO(data), filename=attachment.filename))
-    return RelayPayload(embed=parts.embed, files=tuple(files))
+    files = await _attachment_files(message, skip_url=parts.primary_image_url)
+    return RelayPayload(embed=parts.embed, files=files)
 
 
 def _bot_icon_url_from_message(message: discord.Message) -> str:
@@ -193,25 +215,19 @@ async def build_system_announcement_payload(
     """Format a hub announcement source into the single destination embed shape.
 
     Hub ``#network-announcements`` must remain plain text; this is the only
-    formatting boundary for system announcements.
+    formatting boundary for system announcements. Timecodes always apply (no
+    per-client toggle on hub posts).
     """
-    embed = discord.Embed(description=body or None, colour=resolve_colour("blurple"))
+    converted = apply_timecodes(body, enabled=True)
+    embed = discord.Embed(description=converted or None, colour=resolve_colour("blurple"))
     icon = (author_icon_url or "").strip() or _bot_icon_url_from_message(message)
     author_kwargs: dict[str, str] = {"name": "The Network"}
     if icon:
         author_kwargs["icon_url"] = icon
     embed.set_author(**author_kwargs)
     image_urls = extract_relay_image_urls(message)
-    if image_urls:
-        embed.set_image(url=image_urls[0])
-    files: list[discord.File] = []
-    for attachment in message.attachments:
-        if image_urls and attachment.url == image_urls[0]:
-            continue
-        try:
-            data = await attachment.read()
-        except discord.HTTPException:
-            continue
-        if data:
-            files.append(discord.File(fp=io.BytesIO(data), filename=attachment.filename))
-    return RelayPayload(embed=embed, files=tuple(files))
+    primary_image_url = image_urls[0] if image_urls else None
+    if primary_image_url is not None:
+        embed.set_image(url=primary_image_url)
+    files = await _attachment_files(message, skip_url=primary_image_url)
+    return RelayPayload(embed=embed, files=files)

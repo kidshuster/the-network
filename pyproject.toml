@@ -12,6 +12,7 @@ dependencies = [
     "Pillow>=10.0",
     "PyYAML>=6.0",
     "dateparser>=1.2",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,7 @@ include = ["bot*"]
 [tool.setuptools.package-data]
 bot = [
     "features/**/*.yaml",
+    "core/parsers/*.yaml",
 ]
 
 [tool.pytest.ini_options]

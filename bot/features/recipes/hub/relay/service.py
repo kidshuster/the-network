@@ -187,14 +187,7 @@ class RelayService:
                 first_dest_channel_id = dest_sub.subscribe_channel_id
 
             try:
-                send_kwargs: dict[str, Any] = {
-                    "embed": payload.embed,
-                    "allowed_mentions": discord.AllowedMentions.none(),
-                    "silent": True,
-                }
-                if payload.files:
-                    send_kwargs["files"] = list(payload.files)
-                sent = await cast(Messageable, output_channel).send(**send_kwargs)
+                sent = await self._send_payload(output_channel, payload)
                 sent_ids.append(sent.id)
                 publish_error = await self._publish_with_retries(sent)
                 if publish_error is not None:
