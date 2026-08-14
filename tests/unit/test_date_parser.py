@@ -1,12 +1,37 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot.core.parsers.date_parser import replace_dates, sanitize_for_dates
+from bot.core.parsers import date_parser as date_parser_module
+from bot.core.parsers.date_parser import parse_expression, replace_dates, sanitize_for_dates
 
 TIMECODE = re.compile(r"<t:\d+>")
+PT = ZoneInfo("America/Los_Angeles")
+UTC = ZoneInfo("UTC")
+
+
+def _freeze_now(moment: datetime):
+    """Patch date_parser.datetime so now()/parsing anchor at ``moment``."""
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: ZoneInfo | None = None) -> datetime:
+            if tz is None:
+                return moment.astimezone(UTC).replace(tzinfo=None)
+            return moment.astimezone(tz)
+
+    return patch.object(date_parser_module, "datetime", FrozenDateTime)
+
+
+def _assert_timestamp_local(ts: int | None, expected: datetime) -> None:
+    assert ts is not None
+    got = datetime.fromtimestamp(ts, expected.tzinfo)
+    assert got == expected
 
 
 def _assert_converts(input_text: str, *, preserved: tuple[str, ...] = ()) -> str:
@@ -20,6 +45,42 @@ def _assert_converts(input_text: str, *, preserved: tuple[str, ...] = ()) -> str
 
 def _assert_unchanged(input_text: str) -> None:
     assert replace_dates(input_text) == input_text
+
+
+class TestNextOccurrenceUsesParsedTimezone:
+    """Relative 'next time' / today / tomorrow must use the parsed TZ, not server local."""
+
+    def test_time_only_uses_pst_now_across_utc_midnight(self) -> None:
+        # 02:00 UTC Aug 15 == 19:00 PDT Aug 14 — 8pm PST is still later tonight.
+        moment = datetime(2026, 8, 15, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("8 pm pst")
+        _assert_timestamp_local(ts, datetime(2026, 8, 14, 20, 0, tzinfo=PT))
+
+    def test_today_uses_pst_calendar_day_not_utc(self) -> None:
+        moment = datetime(2026, 8, 15, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("today at 8 pm pst")
+        _assert_timestamp_local(ts, datetime(2026, 8, 14, 20, 0, tzinfo=PT))
+
+    def test_tomorrow_uses_pst_calendar_day_not_utc(self) -> None:
+        moment = datetime(2026, 8, 15, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("tomorrow at 5 pm pst")
+        _assert_timestamp_local(ts, datetime(2026, 8, 15, 17, 0, tzinfo=PT))
+
+    def test_ambiguous_hhmm_picks_sooner_twelve_hour_slot_in_pst(self) -> None:
+        # 16:47 PDT — next "5:30" in PST is 5:30pm today, not 5:30am tomorrow.
+        moment = datetime(2026, 8, 14, 16, 47, tzinfo=PT)
+        with _freeze_now(moment):
+            ts = parse_expression("5:30 pst")
+        _assert_timestamp_local(ts, datetime(2026, 8, 14, 17, 30, tzinfo=PT))
+
+    def test_explicit_meridiem_not_flipped(self) -> None:
+        moment = datetime(2026, 8, 14, 16, 47, tzinfo=PT)
+        with _freeze_now(moment):
+            ts = parse_expression("5:30 am pst")
+        _assert_timestamp_local(ts, datetime(2026, 8, 15, 5, 30, tzinfo=PT))
 
 
 class TestTimeWithTimezone:

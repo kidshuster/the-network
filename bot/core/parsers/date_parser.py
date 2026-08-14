@@ -298,27 +298,52 @@ def _normalize_for_parse(text: str) -> str:
     )
 
 
-def next_occurrence(dt: datetime, tz: ZoneInfo) -> datetime:
+def _has_meridiem(text: str) -> bool:
+    return re.search(r"\b(?:am|pm)\b", text, re.IGNORECASE) is not None
+
+
+def next_occurrence(
+    dt: datetime,
+    tz: ZoneInfo,
+    *,
+    allow_twelve_hour: bool = False,
+) -> datetime:
+    """Pick the next future clock time in ``tz`` (not the server local zone).
+
+    When ``allow_twelve_hour`` is set (time had no am/pm), also consider the
+    opposite meridiem and take the sooner future instant — e.g. at 4:47pm PST,
+    ``5:30`` means 5:30pm today, not 5:30am tomorrow.
+    """
     now = datetime.now(tz)
-    candidate = dt.replace(
+    local = dt.astimezone(tz)
+    today = local.replace(
         year=now.year,
         month=now.month,
         day=now.day,
+        second=0,
+        microsecond=0,
     )
-    if candidate <= now:
-        candidate += timedelta(days=1)
-    return candidate
+    options = [today]
+    if allow_twelve_hour and 0 < today.hour < 12:
+        options.append(today + timedelta(hours=12))
+    future = [option + timedelta(days=1) if option <= now else option for option in options]
+    return min(future)
 
 
 def parse_expression(expr: str) -> int | None:
     tz = extract_timezone(expr)
     cleaned = _normalize_for_parse(remove_timezone(expr))
+    # Anchor relative phrases (today/tomorrow/future) to "now" in the *parsed*
+    # timezone. dateparser otherwise uses the process local clock (UTC in Docker),
+    # so "8 pm pst" near UTC midnight can land on the wrong civil day.
+    relative_base = datetime.now(tz).replace(tzinfo=None)
     dt = dateparser.parse(
         cleaned,
         settings={
             "TIMEZONE": tz.key,
             "RETURN_AS_TIMEZONE_AWARE": True,
             "PREFER_DATES_FROM": "future",
+            "RELATIVE_BASE": relative_base,
         },
     )
     if dt is None:
@@ -326,7 +351,11 @@ def parse_expression(expr: str) -> int | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=tz)
     if not has_explicit_date(expr):
-        dt = next_occurrence(dt.astimezone(tz), tz)
+        dt = next_occurrence(
+            dt.astimezone(tz),
+            tz,
+            allow_twelve_hour=not _has_meridiem(cleaned),
+        )
     return int(dt.astimezone(UTC).timestamp())
 
 
