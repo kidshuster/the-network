@@ -7,14 +7,7 @@ description: |
 fields:
   - name: What happens next
     value: |
-      After approval you get a client category with a **client-profile** card and network join buttons.
-      Each network adds setup cards in your channels:
-      • **Write mode** (default) — publish + subscribe instruction cards
-      • **Read-only** — subscribe only (toggle on the profile if you never need to announce)
-    inline: false
-  - name: Profile toggles
-    value: |
-      **Timecodes** — when On, times in your outgoing announcements (like `raid at 5:30 pst`) become Discord timestamps for every viewer.
-      **Read-only** — when On, the publish channel is removed and setup finishes after subscribe is confirmed.
+      After approval you receive a client category with a profile card and network buttons.
+      Open your profile and follow the setup cards for each network you join.
     inline: false
 footer: "The Network • join the network • v{version}"

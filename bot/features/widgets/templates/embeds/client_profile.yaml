@@ -2,11 +2,7 @@ kind: embed
 colour: '{colour}'
 description: 'Your client profile on **The Network** hub.
 
-  Use the network buttons to subscribe. Profile toggles:
-
-  • **Timecodes** — convert times in your outgoing announcements to Discord timestamps
-  • **Read-only** — receive-only mode (no publish channel; setup completes on subscribe confirm)
-
+  Use the network buttons to subscribe.
   '
 author_name: '{author_name}'
 author_icon_url: '{author_icon_url}'
@@ -23,6 +19,12 @@ fields:
 - name: Read-only
   value: '{read_only_status}'
   inline: true
+- name: Toggles
+  value: |
+    **Timecodes** — converts times in your outgoing announcements when On.
+    **Read-only** — receive-only clients (no publish channel).
+    **Write mode** — publishes announcements into the network. Requires a Discord Community server.
+  inline: false
 - name: Subscribed networks
   value: '{networks_value}'
   inline: false
