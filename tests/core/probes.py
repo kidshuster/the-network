@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.config import Settings
-from tests.core.client_readonly_probes import run_client_read_only_smoke_flow
 from tests.core.client_guard import assert_protected_clients_unchanged
+from tests.core.client_readonly_probes import run_client_read_only_smoke_flow
 from tests.core.hub_announcements_probes import run_hub_announcements_smoke_flow
 from tests.core.provision_flow import (
     ensure_smoke_network_key,
