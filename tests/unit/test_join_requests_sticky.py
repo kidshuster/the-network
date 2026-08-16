@@ -62,7 +62,9 @@ def test_build_how_to_join_embed_is_minimal_prejoin_cta() -> None:
     embed = build_how_to_join_embed()
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "Join Network" in body
-    assert "client-profile" in body
+    assert "profile card" in body.casefold()
+    assert "setup cards" in body.casefold()
+    assert "client-profile" not in body
     assert "Enable Community" not in body
     assert "Blacklist" not in body
     assert embed.footer is not None
