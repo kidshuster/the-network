@@ -55,6 +55,15 @@ async def test_run_migrations_creates_schema(tmp_path: Path) -> None:
     client_columns = {str(row[1]) for row in await cursor.fetchall()}
     await cursor.close()
     assert "timecode_enabled" in client_columns
+    assert "read_only" in client_columns
+
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    sub_info = await cursor.fetchall()
+    await cursor.close()
+    publish_notnull = next(
+        int(row[3]) for row in sub_info if str(row[1]) == "publish_channel_id"
+    )
+    assert publish_notnull == 0
 
     assert await count_networks(db) == 0
     total, enabled = await count_profiles(db)

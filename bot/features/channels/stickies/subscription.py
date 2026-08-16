@@ -439,12 +439,16 @@ async def sync_subscription_setup(
         guild,
         subscription,
         network_active=network_active,
+        read_only=client.read_only,
     )
 
     if network is not None and network_active and bot_user_id:
         publish_channel = await fetch_publish_channel(guild, subscription)
         subscribe_channel = await fetch_subscribe_channel(guild, subscription)
-        if isinstance(publish_channel, discord.TextChannel):
+        if (
+            not client.read_only
+            and isinstance(publish_channel, discord.TextChannel)
+        ):
             subscription = await _sync_publish_setup_sticky(
                 guild,
                 subscription,
@@ -458,6 +462,7 @@ async def sync_subscription_setup(
                 guild,
                 subscription,
                 network_active=network_active,
+                read_only=client.read_only,
             )
         if subscribe_channel is not None:
             subscription = await _sync_subscribe_setup_sticky(
@@ -475,6 +480,7 @@ async def sync_subscription_setup(
                 guild,
                 subscription,
                 network_active=network_active,
+                read_only=client.read_only,
             )
             # Welcomes are first-activation only. Relink/reconcile after network
             # recreate must not repost local or network-wide welcome messages.

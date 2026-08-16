@@ -88,9 +88,10 @@ def test_substituted_button_label_overflow_rejected() -> None:
     # YAML label is "Timecodes: {timecode_state}" (11 chars prefix) → 70 X's => 81 chars.
     with pytest.raises(TemplateRenderError, match="exceeds Discord limit"):
         (
-            view("network_profile", timecode_state="X" * 70)
+            view("network_profile", timecode_state="X" * 70, read_only_state="Off")
             .fill("network_actions", [])
             .bind("timecode_button", recipe_handler("client.toggle_timecode", client_id=1))
+            .bind("read_only_button", recipe_handler("client.toggle_read_only", client_id=1))
             .bind("edit_button", recipe_handler("client.edit.open", client_id=1))
             .bind("delete_button", recipe_handler("client.delete.confirm", client_id=1))
             .build(bot)

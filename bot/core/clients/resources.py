@@ -55,6 +55,8 @@ async def fetch_publish_channel(
     guild: discord.Guild,
     subscription: ClientSubscription,
 ) -> discord.TextChannel | None:
+    if not subscription.publish_channel_id:
+        return None
     channel = await fetch_guild_channel(guild, subscription.publish_channel_id)
     return channel if isinstance(channel, discord.TextChannel) else None
 

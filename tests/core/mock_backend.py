@@ -138,6 +138,8 @@ async def run_mock_probe(
         return ProbeOutcome("join approval", "accept, subscribe, cleanup, and deny passed")
     if name == "relay.setup_welcome":
         return ProbeOutcome("setup/welcome relay", "sticky and welcome delivery passed")
+    if name == "client.read_only":
+        return ProbeOutcome("client read-only", "publish strip/restore and welcome gate passed")
     if name == "relay.hub_announcement":
         if not state.announcement_channel_regular:
             raise RuntimeError("network-announcements is not a regular text channel")

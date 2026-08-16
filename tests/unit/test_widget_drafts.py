@@ -88,6 +88,7 @@ def test_unresolved_placeholder_rejected() -> None:
         view("network_profile")
         .fill("network_actions", [])
         .bind("timecode_button", recipe_handler("client.toggle_timecode", client_id=1))
+        .bind("read_only_button", recipe_handler("client.toggle_read_only", client_id=1))
         .bind("edit_button", recipe_handler("client.edit.open", client_id=1))
         .bind("delete_button", recipe_handler("client.delete.confirm", client_id=1))
     )

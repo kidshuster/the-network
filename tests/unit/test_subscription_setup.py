@@ -88,6 +88,35 @@ def test_subscription_setup_state_fully_configured() -> None:
     assert state.link_status == "Active"
 
 
+def test_read_only_setup_ignores_publish() -> None:
+    incomplete = SubscriptionSetupState(
+        publish_configured=False,
+        subscribe_confirmed=False,
+        network_active=True,
+        read_only=True,
+    )
+    assert incomplete.fully_configured is False
+    assert incomplete.link_status == "Not Configured"
+
+    ready = SubscriptionSetupState(
+        publish_configured=False,
+        subscribe_confirmed=True,
+        network_active=True,
+        read_only=True,
+    )
+    assert ready.fully_configured is True
+    assert ready.link_status == "Active"
+    assert (
+        derive_network_link_status(
+            network_active=True,
+            publish_configured=False,
+            subscribe_confirmed=True,
+            read_only=True,
+        )
+        == "Active"
+    )
+
+
 def _client() -> Client:
     return Client(
         id=1,
@@ -99,7 +128,7 @@ def _client() -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=True,
+        timecode_enabled=True, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

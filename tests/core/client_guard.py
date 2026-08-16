@@ -24,7 +24,7 @@ class ProtectedClient:
 @dataclass(frozen=True)
 class ProtectedSubscription:
     network_key: str
-    publish_channel_id: int
+    publish_channel_id: int | None
     subscribe_channel_id: int
 
 
@@ -106,6 +106,8 @@ async def assert_protected_clients_unchanged(
                 ("publish", expected_subscription.publish_channel_id),
                 ("subscribe", expected_subscription.subscribe_channel_id),
             ):
+                if channel_id is None:
+                    continue
                 channel = guild.get_channel(channel_id)
                 if not isinstance(channel, discord.TextChannel):
                     failures.append(

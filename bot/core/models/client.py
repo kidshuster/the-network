@@ -15,6 +15,7 @@ class Client:
     profile_message_id: int
     enabled: bool
     timecode_enabled: bool
+    read_only: bool
     emoji_id: int | None
     emoji_name: str | None
     image_hash: str | None

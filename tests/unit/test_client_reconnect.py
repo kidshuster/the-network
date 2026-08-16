@@ -23,7 +23,7 @@ def _stored_client(*, guild_id: int = 100, client_id: int = 1) -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

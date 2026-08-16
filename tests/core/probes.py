@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from bot.config import Settings
+from tests.core.client_readonly_probes import run_client_read_only_smoke_flow
 from tests.core.client_guard import assert_protected_clients_unchanged
 from tests.core.hub_announcements_probes import run_hub_announcements_smoke_flow
 from tests.core.provision_flow import (
@@ -115,6 +116,14 @@ async def relay_setup_welcome(context: LiveContext) -> ProbeOutcome:
         context.guild, context.bot, context.runtime
     )
     return ProbeOutcome("setup/welcome relay", result.network_key)
+
+
+@register("client.read_only")
+async def client_read_only(context: LiveContext) -> ProbeOutcome:
+    result = await run_client_read_only_smoke_flow(
+        context.guild, context.bot, context.runtime
+    )
+    return ProbeOutcome("client read-only", result.server_name)
 
 
 @register("relay.hub_announcement")

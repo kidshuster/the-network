@@ -29,6 +29,7 @@ SMOKE_CLIENT_SERVER_PREFIXES = (
     "Smoke Rebuild ",
     "Smoke HubSub ",
     "Smoke Welcome ",
+    "Smoke Readonly ",
 )
 # Join-approval smoke only during init probes — hub rebuild is cleaned explicitly at test end.
 SMOKE_CLIENT_ROLE_PREFIXES = (
@@ -37,6 +38,7 @@ SMOKE_CLIENT_ROLE_PREFIXES = (
     "Client: Smoke Rebuild ",
     "Client: Smoke HubSub ",
     "Client: Smoke Welcome ",
+    "Client: Smoke Readonly ",
 )
 SMOKE_REBUILD_ROLE_PREFIX = "Client: Smoke Rebuild "
 SMOKE_EMOJI_PREFIX = "tnprobe"
@@ -46,6 +48,7 @@ SMOKE_CATEGORY_NAME_PREFIXES = (
     "Smoke Deny ",
     "Smoke HubSub ",
     "Smoke Welcome ",
+    "Smoke Readonly ",
 )
 
 _DIAG_NAME = re.compile(r"^diag", re.IGNORECASE)
@@ -321,7 +324,8 @@ async def cleanup_orphan_smoke_subscription_channels(
     for client in await context.store.clients.list_all():
         referenced.add(client.profile_channel_id)
         for subscription in await context.store.clients.list_subscriptions_by_client(client.id):
-            referenced.add(subscription.publish_channel_id)
+            if subscription.publish_channel_id is not None:
+                referenced.add(subscription.publish_channel_id)
             referenced.add(subscription.subscribe_channel_id)
 
     manual: list[str] = []

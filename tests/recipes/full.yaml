@@ -13,6 +13,8 @@ steps:
     pause: true
   - probe: relay.setup_welcome
     pause: true
+  - probe: client.read_only
+    pause: true
   - probe: relay.hub_announcement
     pause: true
   - recipe: functional

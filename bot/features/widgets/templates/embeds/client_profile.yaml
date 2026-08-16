@@ -17,6 +17,9 @@ fields:
 - name: Timecodes
   value: '{timecode_status}'
   inline: true
+- name: Read-only
+  value: '{read_only_status}'
+  inline: true
 - name: Subscribed networks
   value: '{networks_value}'
   inline: false

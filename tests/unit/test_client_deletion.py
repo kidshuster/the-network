@@ -36,6 +36,7 @@ def test_network_profile_view_has_edit_and_delete_buttons() -> None:
     labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
     assert "Edit Profile" in labels
     assert "Delete Client" in labels
+    assert any(label.startswith("Read-only:") for label in labels)
 
 
 def test_network_profile_view_stays_within_discord_component_limit() -> None:
@@ -46,7 +47,7 @@ def test_network_profile_view_stays_within_discord_component_limit() -> None:
         bot,
         client_id=1,
         network_keys=network_keys,
-        timecode_enabled=True,
+        timecode_enabled=True, read_only=False,
     )
     assert len(view.children) <= 25
 

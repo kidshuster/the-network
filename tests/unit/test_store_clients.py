@@ -113,6 +113,30 @@ async def test_set_enabled_and_timecode_enabled(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_set_read_only_and_nullable_publish_channel(db) -> None:
+    client_repo = ClientStore(db)
+    network_repo = NetworkStore(db)
+    network = await create_test_network(network_repo)
+    client = await create_test_client(client_repo)
+    updated = await client_repo.set_read_only(client.id, True)
+    assert updated.read_only is True
+
+    sub = await client_repo.create_subscription(
+        client_id=client.id,
+        network_id=network.id,
+        network_key=network.key,
+        publish_channel_id=None,
+        subscribe_channel_id=501,
+    )
+    assert sub.publish_channel_id is None
+    cleared = await client_repo.update_publish_channel_id(sub.id, None)
+    assert cleared.publish_channel_id is None
+    restored = await client_repo.update_publish_channel_id(sub.id, 999)
+    assert restored.publish_channel_id == 999
+    assert await client_repo.get_subscription_by_publish_channel(0) is None
+
+
+@pytest.mark.asyncio
 async def test_delete_returns_deleted_or_none(db) -> None:
     repo = ClientStore(db)
     client = await create_test_client(repo)

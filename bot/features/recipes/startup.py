@@ -56,6 +56,7 @@ async def register_persistent_views(recipe_context: RecipeContext) -> None:
                 client_id=client.id,
                 network_keys=network_keys,
                 timecode_enabled=client.timecode_enabled,
+                read_only=client.read_only,
             )
         )
 

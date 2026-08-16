@@ -34,7 +34,7 @@ def _client(server_name: str = "acme") -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=True,
+        timecode_enabled=True, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

@@ -9,7 +9,7 @@ class ClientSubscription:
     client_id: int
     network_id: int | None
     network_key: str
-    publish_channel_id: int
+    publish_channel_id: int | None
     subscribe_channel_id: int
     moderation_message_id: int | None
     publish_setup_message_id: int | None

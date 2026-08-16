@@ -21,6 +21,11 @@ TRIGGERS: tuple[TriggerSpec, ...] = (
         kind=TriggerKind.BUTTON,
         recipe="client.toggle_timecode",
     ),
+    TriggerSpec(
+        id="client.toggle_read_only",
+        kind=TriggerKind.BUTTON,
+        recipe="client.toggle_read_only",
+    ),
     TriggerSpec(id="client.edit_profile", kind=TriggerKind.MODAL, recipe="client.edit_profile"),
     TriggerSpec(id="client.delete", kind=TriggerKind.BUTTON, recipe="client.delete"),
 )

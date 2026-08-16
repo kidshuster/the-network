@@ -266,6 +266,84 @@ async def toggle_client_timecode(
     )
     return updated
 
+
+@recipe("client.toggle_read_only")
+async def toggle_client_read_only(
+    recipe_context: RecipeContext,
+    *,
+    interaction: discord.Interaction,
+    client_id: int,
+) -> Any:
+    from bot.features.channels.stickies.subscription import sync_subscription_setup
+    from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
+    from bot.features.recipes.hub.clients.subscription import (
+        ensure_client_publish_channels,
+        strip_client_publish_channels,
+    )
+
+    guild = interaction_guild(recipe_context.bot, interaction)
+    member = interaction_actor(interaction)
+    client = await _require_client(recipe_context, client_id)
+    require_client_member(
+        guild, member, client, popup="client_role_required_edit", allow_non_member=True
+    )
+    enable_read_only = not client.read_only
+    updated = await recipe_context.core.store.clients.set_read_only(
+        client.id,
+        enable_read_only,
+    )
+    bot_member = guild.me
+    if bot_member is None:
+        raise UserFacingError("Bot member is unavailable.", code="bot_member_unavailable")
+
+    view_registry = interaction_view_registry(interaction)
+    if enable_read_only:
+        await strip_client_publish_channels(
+            guild,
+            client=updated,
+            client_repo=recipe_context.core.store.clients,
+        )
+    else:
+        await ensure_client_publish_channels(
+            guild,
+            bot_member,
+            client=updated,
+            client_repo=recipe_context.core.store.clients,
+            network_repo=recipe_context.core.store.networks,
+            access_role_name=recipe_context.bot.settings.network_access_role_name,
+        )
+
+    # Refresh after channel mutations so IDs/setup cards match Discord.
+    updated = await _require_client(recipe_context, client_id)
+    for subscription in await recipe_context.core.store.clients.list_subscriptions_by_client(
+        updated.id
+    ):
+        network = None
+        if subscription.network_id is not None:
+            network = await recipe_context.core.store.networks.get_by_id(subscription.network_id)
+        if network is None and subscription.network_key:
+            network = await recipe_context.core.store.networks.get_by_key(subscription.network_key)
+        await sync_subscription_setup(
+            recipe_context.bot,
+            recipe_context.core,
+            guild,
+            client=updated,
+            subscription=subscription,
+            network=network,
+            setup_mode="reconcile",
+            view_registry=view_registry,
+        )
+
+    await recipe_context.core.refresh_client_counts()
+    await refresh_client_profile_message(
+        recipe_context.bot,
+        recipe_context.core,
+        guild,
+        updated,
+        view_registry=view_registry,
+    )
+    return updated
+
 @recipe("admin.client.delete.open")
 async def open_admin_client_delete(
     recipe_context: RecipeContext,

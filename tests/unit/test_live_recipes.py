@@ -114,6 +114,7 @@ async def test_full_mock_recipe_preserves_real_clients_and_cleans_smoke_state() 
     assert all(not client.smoke for client in context.state.clients.values())
     assert "hub.rebuild" not in context.state.operations
     assert "relay.setup_welcome" in context.state.operations
+    assert "client.read_only" in context.state.operations
     assert "hub.leaders_drift" in context.state.operations
 
 

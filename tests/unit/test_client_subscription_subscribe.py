@@ -22,7 +22,7 @@ def _client() -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,
@@ -122,6 +122,91 @@ async def test_subscribe_client_creates_missing_channels(
     assert result.success is True
     assert result.created is True
     client_repo.create_subscription.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_client_read_only_skips_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild, bot, human_mod, access, _ = make_guild_with_roles()
+    client = _client()
+    client = Client(
+        id=client.id,
+        guild_id=client.guild_id,
+        server_name=client.server_name,
+        display_name=client.display_name,
+        category_id=client.category_id,
+        client_role_id=client.client_role_id,
+        profile_channel_id=client.profile_channel_id,
+        profile_message_id=client.profile_message_id,
+        enabled=client.enabled,
+        timecode_enabled=client.timecode_enabled,
+        read_only=True,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+    client_role = MagicMock(spec=discord.Role, id=20, position=1)
+    client_role.is_default.return_value = False
+    category = MagicMock(spec=discord.CategoryChannel, id=10)
+    category.channels = []
+
+    guild.get_role = MagicMock(return_value=client_role)
+    guild.get_channel = MagicMock(return_value=category)
+
+    subscribe = MagicMock(spec=discord.TextChannel, id=101)
+
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.resolve_human_moderator_role",
+        MagicMock(return_value=human_mod),
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.resolve_access_role",
+        MagicMock(return_value=access),
+    )
+    from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
+
+    apply_layout = AsyncMock(
+        return_value=BatchApplyResult(
+            results=[ResourceApplyResult("subscribe", True, channel=subscribe)]
+        )
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.apply_layout",
+        apply_layout,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.reorder_client_category_channels",
+        AsyncMock(),
+    )
+
+    created_sub = make_client_subscription(id=5, publish_channel_id=None)
+    client_repo = MagicMock()
+    client_repo.get_subscription = AsyncMock(return_value=None)
+    client_repo.create_subscription = AsyncMock(return_value=created_sub)
+    network_repo = MagicMock()
+
+    service = ClientSubscriptionService()
+    result = await service.subscribe_client(
+        guild,
+        bot,
+        client=client,
+        network_id=2,
+        network_key="stingers",
+        client_repo=client_repo,
+        network_repo=network_repo,
+        access_role_name="The Network",
+    )
+
+    assert result.success is True
+    assert result.created is True
+    kwargs = client_repo.create_subscription.await_args.kwargs
+    assert kwargs["publish_channel_id"] is None
+    assert kwargs["subscribe_channel_id"] == 101
+    resources = apply_layout.await_args.args[1]
+    assert "publish" not in {resource.id for resource in resources}
+    assert "subscribe" in {resource.id for resource in resources}
 
 
 @pytest.mark.asyncio

@@ -33,7 +33,7 @@ def _client() -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

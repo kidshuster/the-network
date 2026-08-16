@@ -133,6 +133,15 @@ async def present_timecode(
     state = "enabled" if getattr(value, "timecode_enabled", False) else "disabled"
     await _text(response, "timecode_toggle_updated", state=state)
 
+@recipe("present.client.toggle_read_only")
+async def present_read_only(
+    _ctx: RecipeContext, *, response: Any, value: object, **_: Any
+) -> None:
+    enabled = bool(getattr(value, "read_only", False))
+    state = "on" if enabled else "off"
+    detail = "removed" if enabled else "restored for setup"
+    await _text(response, "read_only_toggle_updated", state=state, detail=detail)
+
 @recipe("present.subscription.create")
 async def present_subscription_create(
     _ctx: RecipeContext, *, response: Any, value: object, **_: Any

@@ -206,7 +206,8 @@ async def cleanup_smoke_client(
     subscriptions = await context.store.clients.list_subscriptions_by_client(client.id)
     channel_ids: set[int] = {client.profile_channel_id}
     for subscription in subscriptions:
-        channel_ids.add(subscription.publish_channel_id)
+        if subscription.publish_channel_id is not None:
+            channel_ids.add(subscription.publish_channel_id)
         channel_ids.add(subscription.subscribe_channel_id)
 
     if client.emoji_id is not None:
@@ -467,6 +468,8 @@ async def run_join_approval_smoke_flow(
                     )
 
                 publish_channel_id = subscribe.subscription.publish_channel_id
+                if publish_channel_id is None:
+                    raise RuntimeError("Smoke publish channel id is missing.")
                 publish_channel = guild.get_channel(publish_channel_id)
                 if not isinstance(publish_channel, discord.TextChannel):
                     raise RuntimeError("Smoke publish channel is missing from the guild.")
@@ -681,6 +684,8 @@ async def provision_smoke_client_with_subscription(
     )
     if not subscribe.success or subscribe.subscription is None:
         raise RuntimeError(f"Smoke network subscribe failed: {subscribe.error or 'unknown error'}")
+    if subscribe.subscription.publish_channel_id is None:
+        raise RuntimeError("Smoke rebuild subscribe did not create a publish channel.")
 
     return HubRebuildSmokeState(
         client_id=client.id,

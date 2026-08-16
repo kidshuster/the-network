@@ -120,6 +120,7 @@ class ClientRow:
             timecode_enabled=(
                 bool(row["timecode_enabled"]) if "timecode_enabled" in row.keys() else True
             ),
+            read_only=(bool(row["read_only"]) if "read_only" in row.keys() else False),
             emoji_id=int(row["emoji_id"]) if row["emoji_id"] is not None else None,
             emoji_name=str(row["emoji_name"]) if row["emoji_name"] is not None else None,
             image_hash=str(row["image_hash"]) if row["image_hash"] is not None else None,
@@ -172,7 +173,9 @@ class ClientSubscriptionRow:
             client_id=int(row["client_id"]),
             network_id=int(network_id_raw) if network_id_raw is not None else None,
             network_key=str(row["network_key"]),
-            publish_channel_id=int(row["publish_channel_id"]),
+            publish_channel_id=(
+                int(row["publish_channel_id"]) if row["publish_channel_id"] is not None else None
+            ),
             subscribe_channel_id=int(row["subscribe_channel_id"]),
             moderation_message_id=(
                 int(row["moderation_message_id"])

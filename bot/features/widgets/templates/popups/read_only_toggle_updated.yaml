@@ -1,0 +1,2 @@
+kind: text
+content: "Read-only mode is now **{state}**. Publish channels are {detail}."

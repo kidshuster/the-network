@@ -78,7 +78,9 @@ def build_named_view(bot: Any, name: str, **ctx: Any) -> Any:
         cid = int(ctx["client_id"])
         subscribed = set(ctx.get("subscribed_keys") or ())
         draft = bot.templates_view(
-            name, timecode_state=("On" if ctx.get("timecode_enabled") else "Off")
+            name,
+            timecode_state=("On" if ctx.get("timecode_enabled") else "Off"),
+            read_only_state=("On" if ctx.get("read_only") else "Off"),
         )
         draft.fill(
             "network_actions",
@@ -90,11 +92,12 @@ def build_named_view(bot: Any, name: str, **ctx: Any) -> Any:
                     disabled=key in subscribed,
                     handler=_rh("subscription.create", client_id=cid, network_key=key),
                 )
-                for key in list(ctx.get("network_keys") or [])[:22]
+                for key in list(ctx.get("network_keys") or [])[:21]
             ],
         )
         for tag, recipe in (
             ("timecode_button", "client.toggle_timecode"),
+            ("read_only_button", "client.toggle_read_only"),
             ("edit_button", "client.edit.open"),
             ("delete_button", "client.delete.confirm"),
         ):

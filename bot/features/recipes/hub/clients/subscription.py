@@ -86,7 +86,11 @@ def resolve_subscription_channels_in_category(
     *,
     client: Client,
 ) -> tuple[discord.TextChannel | None, discord.abc.GuildChannel | None]:
-    publish = guild.get_channel(subscription.publish_channel_id)
+    publish = (
+        guild.get_channel(subscription.publish_channel_id)
+        if subscription.publish_channel_id
+        else None
+    )
     subscribe: discord.abc.GuildChannel | None = guild.get_channel(
         subscription.subscribe_channel_id
     )
@@ -260,10 +264,18 @@ async def subscribe_client(guild: discord.Guild,
         network_key,
         client=client,
     )
-    channels_preexisted = publish_channel is not None and subscribe_channel is not None
+    if client.read_only:
+        publish_channel = None
+    channels_preexisted = (
+        subscribe_channel is not None
+        if client.read_only
+        else publish_channel is not None and subscribe_channel is not None
+    )
     newly_created: list[discord.abc.GuildChannel] = []
 
-    if publish_channel is None or subscribe_channel is None:
+    need_publish = not client.read_only and publish_channel is None
+    need_subscribe = subscribe_channel is None
+    if need_publish or need_subscribe:
         try:
             from dataclasses import replace
 
@@ -278,14 +290,11 @@ async def subscribe_client(guild: discord.Guild,
                 network_key=network_key,
                 reason=f"Client {client.server_name} subscribed to {network_key}",
             )
-            wanted = {
-                rid
-                for rid, existing in (
-                    ("publish", publish_channel),
-                    ("subscribe", subscribe_channel),
-                )
-                if existing is None
-            }
+            wanted: set[str] = set()
+            if need_publish:
+                wanted.add("publish")
+            if need_subscribe:
+                wanted.add("subscribe")
             layout_resources = compile_client(
                 layout_ctx,
                 include_subscribed=True,
@@ -304,14 +313,14 @@ async def subscribe_client(guild: discord.Guild,
                 layout_resources,
                 mode=ApplyMode.ENSURE,
             )
-            if publish_channel is None:
+            if need_publish:
                 created = batch.resource("publish")
                 if not isinstance(created, discord.TextChannel):
                     detail = batch.failures[0] if batch.failures else "publish create failed"
                     raise RuntimeError(detail)
                 publish_channel = created
                 newly_created.append(publish_channel)
-            if subscribe_channel is None:
+            if need_subscribe:
                 created = batch.resource("subscribe")
                 if not isinstance(created, discord.TextChannel):
                     detail = batch.failures[0] if batch.failures else "subscribe create failed"
@@ -337,28 +346,29 @@ async def subscribe_client(guild: discord.Guild,
                 client_id=client.id,
                 network_id=network_id,
                 network_key=network_key,
-                publish_channel_id=publish_channel.id,
-                subscribe_channel_id=subscribe_channel.id,
+                publish_channel_id=publish_channel.id if publish_channel is not None else None,
+                subscribe_channel_id=subscribe_channel.id,  # type: ignore[union-attr]
                 moderation_message_id=None,
                 publish_setup_message_id=None,
                 subscribe_setup_message_id=None,
-        activation_welcome_message_id=None,
-        network_welcome_message_id=None,
-        network_welcome_complete=False,
-        subscribe_confirmed=False,
-        enabled=True,
-    ),
+                activation_welcome_message_id=None,
+                network_welcome_message_id=None,
+                network_welcome_complete=False,
+                subscribe_confirmed=False,
+                enabled=True,
+            ),
             access_role_name=access_role_name,
         )
 
-    assert publish_channel is not None
     assert subscribe_channel is not None
+    if not client.read_only:
+        assert publish_channel is not None
 
     subscription = await client_repo.create_subscription(
         client_id=client.id,
         network_id=network_id,
         network_key=network_key,
-        publish_channel_id=publish_channel.id,
+        publish_channel_id=None if client.read_only else publish_channel.id,  # type: ignore[union-attr]
         subscribe_channel_id=subscribe_channel.id,
     )
     reactivated = False
@@ -397,21 +407,10 @@ async def unsubscribe_client(guild: discord.Guild,
 
     publish = await fetch_publish_channel(guild, subscription)
     if isinstance(publish, discord.TextChannel):
-        try:
-            for webhook in await publish.webhooks():
-                try:
-                    await webhook.delete(reason=f"Left network {network_key}")
-                except discord.HTTPException:
-                    pass
-        except discord.HTTPException:
-            pass
-        try:
-            await publish.delete(reason=f"Left network {network_key}")
-        except discord.HTTPException:
-            logger.warning(
-                "Could not delete publish channel while leaving network",
-                extra={"channel_id": publish.id},
-            )
+        await _delete_publish_channel(
+            publish,
+            reason=f"Left network {network_key}",
+        )
 
     subscribe = await fetch_subscribe_channel(guild, subscription)
     if subscribe is not None:
@@ -438,9 +437,140 @@ async def unsubscribe_client(guild: discord.Guild,
 
     return UnsubscribeResult(success=True)
 
+
+async def _delete_publish_channel(
+    publish: discord.TextChannel,
+    *,
+    reason: str,
+) -> None:
+    try:
+        for webhook in await publish.webhooks():
+            try:
+                await webhook.delete(reason=reason)
+            except discord.HTTPException:
+                pass
+    except discord.HTTPException:
+        pass
+    try:
+        await publish.delete(reason=reason)
+    except discord.HTTPException:
+        logger.warning(
+            "Could not delete publish channel",
+            extra={"channel_id": publish.id, "reason": reason},
+        )
+
+
+async def strip_client_publish_channels(
+    guild: discord.Guild,
+    *,
+    client: Client,
+    client_repo: ClientStore,
+) -> None:
+    """Remove publish channels for every subscription (read-only mode)."""
+    reason = "Client switched to read-only"
+    for subscription in await client_repo.list_subscriptions_by_client(client.id):
+        publish = await fetch_publish_channel(guild, subscription)
+        if isinstance(publish, discord.TextChannel):
+            await _delete_publish_channel(publish, reason=reason)
+        if (
+            subscription.publish_channel_id is not None
+            or subscription.publish_setup_message_id is not None
+        ):
+            await client_repo.update_publish_setup_message_id(subscription.id, None)
+            await client_repo.update_publish_channel_id(subscription.id, None)
+
+
+async def ensure_client_publish_channels(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    *,
+    client: Client,
+    client_repo: ClientStore,
+    network_repo: NetworkStore,
+    access_role_name: str,
+) -> None:
+    """Create missing publish channels after leaving read-only mode."""
+    access_role = resolve_access_role(guild, role_name=access_role_name)
+    human_moderator_role = resolve_human_moderator_role(guild)
+    client_role = await fetch_client_role(guild, client)
+    if client_role is None:
+        return
+    category = await resolve_client_category(guild, client)
+    if category is None:
+        return
+
+    for subscription in await client_repo.list_subscriptions_by_client(client.id):
+        if subscription.publish_channel_id:
+            existing = await fetch_publish_channel(guild, subscription)
+            if existing is not None:
+                continue
+
+        network_key = subscription.network_key
+        if not network_key and subscription.network_id is not None:
+            network = await network_repo.get_by_id(subscription.network_id)
+            if network is not None:
+                network_key = network.key
+        if not network_key:
+            continue
+
+        found_publish, _found_subscribe = find_network_subscription_channels(
+            category,
+            network_key,
+            client=client,
+        )
+        if found_publish is not None:
+            await client_repo.update_publish_channel_id(subscription.id, found_publish.id)
+            continue
+
+        from dataclasses import replace
+
+        publish_name = build_client_publish_channel_base(client.server_name, network_key)
+        layout_ctx = LayoutContext(
+            guild=guild,
+            bot_member=bot_member,
+            access_role=access_role,
+            moderator_role=human_moderator_role,
+            client_role=client_role,
+            server_name=client.server_name,
+            slug=slugify_client_name(client.server_name),
+            network_key=network_key,
+            reason=f"Client {client.server_name} left read-only ({network_key})",
+        )
+        layout_resources = [
+            replace(resource, name=publish_name)
+            for resource in compile_client(
+                layout_ctx,
+                include_subscribed=True,
+                channel_ids={"publish"},
+            )
+        ]
+        batch = await apply_layout(layout_ctx, layout_resources, mode=ApplyMode.ENSURE)
+        created = batch.resource("publish")
+        if not isinstance(created, discord.TextChannel):
+            logger.warning(
+                "Could not recreate publish channel after leaving read-only",
+                extra={
+                    "client_id": client.id,
+                    "network_key": network_key,
+                    "failures": batch.failures,
+                },
+            )
+            continue
+        await client_repo.update_publish_channel_id(subscription.id, created.id)
+
+    await reorder_client_category_channels(
+        category,
+        client=client,
+        client_repo=client_repo,
+        network_repo=network_repo,
+    )
+
+
 class ClientSubscriptionService:
     subscribe_client = staticmethod(subscribe_client)
     unsubscribe_client = staticmethod(unsubscribe_client)
+    strip_client_publish_channels = staticmethod(strip_client_publish_channels)
+    ensure_client_publish_channels = staticmethod(ensure_client_publish_channels)
 
 def _category_channels(category: discord.CategoryChannel) -> list[discord.abc.GuildChannel]:
     return [
@@ -542,7 +672,8 @@ async def reorder_client_category_channels(
     for key in sorted(subs_by_network_key):
         sub = subs_by_network_key[key]
         order.append(sub.subscribe_channel_id)
-        order.append(sub.publish_channel_id)
+        if sub.publish_channel_id:
+            order.append(sub.publish_channel_id)
 
     channels_by_id = {ch.id: ch for ch in _category_channels(category)}
     ordered = [
@@ -642,14 +773,20 @@ async def resync_subscriptions_for_network(
             network.key,
             client=client,
         )
-        if publish_channel is None or subscribe_channel is None:
+        if client.read_only:
+            if subscribe_channel is None:
+                continue
+            publish_channel = None
+        elif publish_channel is None or subscribe_channel is None:
             continue
 
         subscription = await context.store.clients.create_subscription(
             client_id=client.id,
             network_id=network.id,
             network_key=network.key,
-            publish_channel_id=publish_channel.id,
+            publish_channel_id=(
+                None if client.read_only or publish_channel is None else publish_channel.id
+            ),
             subscribe_channel_id=subscribe_channel.id,
         )
         # Channels survived hub uninit: reconnect without setup/welcome spam.

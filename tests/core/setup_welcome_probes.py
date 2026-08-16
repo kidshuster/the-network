@@ -183,7 +183,11 @@ async def verify_setup_sticky_copy(
 
     expected_channel_name = f"🌐-{network.display_name}"
     subscribe_channel = guild.get_channel(subscription.subscribe_channel_id)
-    publish_channel = guild.get_channel(subscription.publish_channel_id)
+    publish_channel = (
+        guild.get_channel(subscription.publish_channel_id)
+        if subscription.publish_channel_id
+        else None
+    )
 
     if subscribe_channel is None:
         raise RuntimeError("Subscribe channel missing during setup sticky smoke.")

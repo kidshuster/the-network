@@ -651,6 +651,85 @@ async def _migration_v16(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v17(db: Database) -> None:
+    """Client read-only mode + nullable subscription publish channels."""
+    cursor = await db.connection.execute("PRAGMA table_info(clients)")
+    client_columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "read_only" not in client_columns:
+        await db.connection.execute(
+            "ALTER TABLE clients ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0"
+        )
+
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    sub_info = await cursor.fetchall()
+    await cursor.close()
+    publish_nullable = False
+    for row in sub_info:
+        # PRAGMA table_info: cid, name, type, notnull, dflt_value, pk
+        if str(row[1]) == "publish_channel_id" and int(row[3]) == 0:
+            publish_nullable = True
+            break
+
+    if not publish_nullable:
+        await db.connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            await db.connection.executescript(
+                """
+                CREATE TABLE client_subscriptions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER NOT NULL,
+                    network_id INTEGER,
+                    network_key TEXT NOT NULL,
+                    publish_channel_id INTEGER UNIQUE,
+                    subscribe_channel_id INTEGER NOT NULL UNIQUE,
+                    moderation_message_id INTEGER,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    subscribe_confirmed INTEGER NOT NULL DEFAULT 0,
+                    publish_setup_message_id INTEGER,
+                    subscribe_setup_message_id INTEGER,
+                    activation_welcome_message_id INTEGER,
+                    network_welcome_message_id INTEGER,
+                    network_welcome_complete INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (client_id) REFERENCES clients(id),
+                    FOREIGN KEY (network_id) REFERENCES networks(id),
+                    UNIQUE(client_id, network_key)
+                );
+                INSERT INTO client_subscriptions_new (
+                    id, client_id, network_id, network_key,
+                    publish_channel_id, subscribe_channel_id,
+                    moderation_message_id, enabled, created_at, updated_at,
+                    subscribe_confirmed, publish_setup_message_id,
+                    subscribe_setup_message_id, activation_welcome_message_id,
+                    network_welcome_message_id, network_welcome_complete
+                )
+                SELECT
+                    id, client_id, network_id, network_key,
+                    publish_channel_id, subscribe_channel_id,
+                    moderation_message_id, enabled, created_at, updated_at,
+                    COALESCE(subscribe_confirmed, 0),
+                    publish_setup_message_id,
+                    subscribe_setup_message_id,
+                    activation_welcome_message_id,
+                    network_welcome_message_id,
+                    COALESCE(network_welcome_complete, 0)
+                FROM client_subscriptions;
+                DROP TABLE client_subscriptions;
+                ALTER TABLE client_subscriptions_new RENAME TO client_subscriptions;
+                CREATE INDEX IF NOT EXISTS idx_client_subscriptions_network
+                    ON client_subscriptions(network_id);
+                CREATE INDEX IF NOT EXISTS idx_client_subscriptions_publish
+                    ON client_subscriptions(publish_channel_id);
+                """
+            )
+        finally:
+            await db.connection.execute("PRAGMA foreign_keys = ON")
+
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -668,6 +747,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     14: _migration_v14,
     15: _migration_v15,
     16: _migration_v16,
+    17: _migration_v17,
 }
 
 

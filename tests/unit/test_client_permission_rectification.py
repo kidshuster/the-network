@@ -43,7 +43,7 @@ async def test_rectify_client_permissions_syncs_category_and_profile(
         emoji_name=None,
         image_hash=None,
         degraded_reason=None,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
     )
     context = MagicMock()
     context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
@@ -94,7 +94,7 @@ async def test_rectify_client_permissions_skips_when_category_missing() -> None:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,
@@ -158,7 +158,7 @@ async def test_rectify_client_permissions_records_category_http_failure(
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,
@@ -267,7 +267,7 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,

@@ -26,6 +26,7 @@ class ViewRegistry(Protocol):
         *,
         subscribed_keys: set[str] | None = None,
         timecode_enabled: bool = False,
+        read_only: bool = False,
     ) -> discord.ui.View: ...
 
     def register_subscribe_setup_view(

@@ -786,6 +786,17 @@ class ClientStore:
             not_found="Client disappeared after timecode update",
         )
 
+    async def set_read_only(self, client_id: int, read_only: bool) -> Client:
+        now = _now_iso()
+        await self._db.execute(
+            "UPDATE clients SET read_only = ?, updated_at = ? WHERE id = ?",
+            (_enable_flag(read_only), now, client_id),
+        )
+        return await self._require_by_id(
+            client_id,
+            not_found="Client disappeared after read-only update",
+        )
+
     async def delete(self, client_id: int) -> Client | None:
         existing = await self.get_by_id(client_id)
         if existing is None:
@@ -838,7 +849,7 @@ class ClientStore:
         client_id: int,
         network_id: int,
         network_key: str,
-        publish_channel_id: int,
+        publish_channel_id: int | None,
         subscribe_channel_id: int,
         moderation_message_id: int | None = None,
         enabled: bool = True,
@@ -953,11 +964,32 @@ class ClientStore:
         self,
         publish_channel_id: int,
     ) -> ClientSubscription | None:
+        if publish_channel_id <= 0:
+            return None
         row = await self._db.fetchone(
             "SELECT * FROM client_subscriptions WHERE publish_channel_id = ?",
             (publish_channel_id,),
         )
         return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def update_publish_channel_id(
+        self,
+        subscription_id: int,
+        publish_channel_id: int | None,
+    ) -> ClientSubscription:
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET publish_channel_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (publish_channel_id, now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after publish channel update",
+        )
 
     async def list_subscriptions_by_network(
         self,

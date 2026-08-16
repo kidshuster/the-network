@@ -27,7 +27,7 @@ def _client() -> Client:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=True,
+        timecode_enabled=True, read_only=False,
         emoji_id=None,
         emoji_name=None,
         image_hash=None,
@@ -171,7 +171,7 @@ async def test_moderation_embed_reconcile_skips_when_fully_configured() -> None:
     profile_channel.fetch_message.assert_not_called()
 
 
-def test_moderation_setup_embed_points_at_instruction_cards() -> None:
+def test_moderation_setup_embed_hides_publish_when_read_only() -> None:
     embed = build_moderation_embed(
         network_display_name="Stingers",
         network_key="stingers",
@@ -180,13 +180,16 @@ def test_moderation_setup_embed_points_at_instruction_cards() -> None:
             publish_configured=False,
             subscribe_confirmed=False,
             network_active=True,
+            read_only=True,
         ),
         publish_mention="#publish",
         subscribe_mention="#subscribe",
     )
-    setup_fields = {field.name: field.value for field in embed.fields}
-    assert setup_fields["Publish setup"] == "Follow the instruction card in #publish."
-    assert "instruction card in #subscribe" in setup_fields["Subscribe setup"]
+    field_names = {field.name for field in embed.fields}
+    assert "Publish channel" not in field_names
+    assert "Publish setup" not in field_names
+    assert "Subscribe channel" in field_names
+    assert "subscribe" in (embed.description or "").casefold()
 
 
 def test_moderation_setup_embed_shows_both_steps_when_unconfigured() -> None:

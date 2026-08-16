@@ -30,6 +30,7 @@ async def _network_link_status_for_subscription(
     subscription: ClientSubscription,
     *,
     network: Network | None,
+    read_only: bool,
 ) -> str:
     network_active = network is not None and network.enabled
     if not network_active:
@@ -38,6 +39,7 @@ async def _network_link_status_for_subscription(
         guild,
         subscription,
         network_active=network_active,
+        read_only=read_only,
     )
     return state.link_status
 
@@ -73,6 +75,7 @@ async def refresh_client_profile_message(
             guild,
             sub,
             network=network,
+            read_only=client.read_only,
         )
         network_entries.append((key, status))
 
@@ -83,6 +86,7 @@ async def refresh_client_profile_message(
         network_keys,
         subscribed_keys=subscribed_keys,
         timecode_enabled=client.timecode_enabled,
+        read_only=client.read_only,
     )
 
     embed = build_client_profile_embed(
@@ -91,6 +95,7 @@ async def refresh_client_profile_message(
         enabled=client.enabled,
         emoji_id=client.emoji_id,
         timecode_enabled=client.timecode_enabled,
+        read_only=client.read_only,
         subscribed_networks=tuple(network_entries),
     )
 
@@ -128,8 +133,8 @@ def _setup_description(
     network_key: str,
     setup_state: SubscriptionSetupState,
 ) -> str:
-    needs_publish = not setup_state.publish_configured
     needs_subscribe = not setup_state.subscribe_confirmed
+    needs_publish = not setup_state.read_only and not setup_state.publish_configured
     if needs_publish and needs_subscribe:
         return f"Finish connecting **`{network_key}`** before relays can flow."
     if needs_publish:
@@ -153,7 +158,7 @@ def build_moderation_embed(
 
     client_slug = slugify_client_name(client_server_name)
     if setup_state is not None and not setup_state.fully_configured:
-        needs_publish = not setup_state.publish_configured
+        needs_publish = not setup_state.read_only and not setup_state.publish_configured
         needs_subscribe = not setup_state.subscribe_confirmed
         return render_embed(
             "subscription_moderation_setup",
@@ -220,6 +225,7 @@ async def post_subscription_moderation_embed(
             guild,
             subscription,
             network_active=network.enabled,
+            read_only=client.read_only,
         )
 
     if setup_mode == "reconcile" and setup_state.fully_configured:

@@ -270,7 +270,7 @@ async def test_client_relay_payload_still_uses_client_author() -> None:
         profile_channel_id=30,
         profile_message_id=40,
         enabled=True,
-        timecode_enabled=False,
+        timecode_enabled=False, read_only=False,
         emoji_id=55,
         emoji_name="acme",
         image_hash=None,

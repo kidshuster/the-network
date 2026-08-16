@@ -40,6 +40,7 @@ class PersistentViewRegistry:
         *,
         subscribed_keys: set[str] | None = None,
         timecode_enabled: bool = False,
+        read_only: bool = False,
     ) -> discord.ui.View:
         return self._register(
             "network_profile",
@@ -47,6 +48,7 @@ class PersistentViewRegistry:
             network_keys=network_keys,
             subscribed_keys=subscribed_keys or set(),
             timecode_enabled=timecode_enabled,
+            read_only=read_only,
         )
 
     def register_subscribe_setup_view(
@@ -83,4 +85,5 @@ class PersistentViewRegistry:
             client.id,
             network_keys,
             timecode_enabled=client.timecode_enabled,
+            read_only=client.read_only,
         )

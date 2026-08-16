@@ -33,6 +33,7 @@ def test_catalog_exposes_stable_public_operations() -> None:
         "client.edit_profile",
         "client.provision_from_request",
         "client.toggle_timecode",
+        "client.toggle_read_only",
         "clients.reconnect",
         "clients.rectify",
         "hub.ensure_installs",

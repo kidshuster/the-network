@@ -9,6 +9,11 @@ components:
     style: secondary
     row: 4
   - type: button
+    tag: read_only_button
+    label: "Read-only: {read_only_state}"
+    style: secondary
+    row: 4
+  - type: button
     tag: edit_button
     label: Edit Profile
     style: secondary
