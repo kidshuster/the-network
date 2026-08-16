@@ -68,30 +68,76 @@ def test_all_yaml_files_load() -> None:
 def test_join_the_network_embed() -> None:
     embed = render_embed("join_the_network", version=HOW_TO_JOIN_VERSION)
     assert embed.title == "Join The Network"
-    assert len(embed.fields) == 1
+    assert len(embed.fields) == 2
     assert embed.fields[0].name == "What happens next"
+    assert embed.fields[1].name == "Profile toggles"
+    body = " ".join(field.value or "" for field in embed.fields)
+    assert "Timecodes" in body
+    assert "Read-only" in body
     assert embed.footer
     assert f"v{HOW_TO_JOIN_VERSION}" in embed.footer.text
+    assert HOW_TO_JOIN_VERSION == 11
 
 
-def test_publish_setup_instructions_covers_community_and_follow() -> None:
+def test_publish_setup_instructions_covers_community_follow_and_timecodes() -> None:
     embed = render_embed("publish_setup_instructions", publish_mention="#publish")
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "Enable Community" in body
     assert "announcement channel" in body.lower()
     assert "#publish" in body
     assert "Discord desktop app" in body
+    assert "write" in body.casefold()
+    assert "Timecodes" in body
+    assert "5:30 pst" in body
 
 
-def test_subscribe_setup_instructions_suggests_network_channel_name() -> None:
+def test_subscribe_setup_instructions_write_mode_mentions_publish_and_timecodes() -> None:
     embed = render_embed(
         "subscribe_setup_instructions",
         subscribe_mention="#subscribe",
         network_channel_name="🌐-Stingers",
     )
-    body = " ".join(field.value or "" for field in embed.fields)
+    body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "🌐-Stingers" in body
     assert "#subscribe" in body
+    assert "publish" in body.casefold()
+    assert "Timecodes" in body
+    assert "write" in body.casefold()
+
+
+def test_subscribe_setup_instructions_readonly_omits_publish_step() -> None:
+    embed = render_embed(
+        "subscribe_setup_instructions_readonly",
+        subscribe_mention="#subscribe",
+        network_channel_name="🌐-Stingers",
+    )
+    body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
+    assert "read-only" in body.casefold()
+    assert "no publish" in body.casefold()
+    assert "#subscribe" in body
+    assert "Timecodes" in body
+    assert "complete the **publish**" not in body.casefold()
+
+
+def test_subscription_moderation_templates_split_by_mode() -> None:
+    write = render_embed(
+        "subscription_moderation",
+        network_display_name="Stingers",
+        network_key="stingers",
+        client_slug="acme",
+    )
+    readonly = render_embed(
+        "subscription_moderation_readonly",
+        network_display_name="Stingers",
+        network_key="stingers",
+        client_slug="acme",
+    )
+    assert "Write mode" in (write.description or "")
+    assert "publish" in (write.description or "").casefold()
+    assert "Read-only mode" in (readonly.description or "")
+    assert "no publish channel" in (readonly.description or "").casefold()
+    assert "Timecodes" in (write.description or "")
+    assert "Timecodes" in (readonly.description or "")
 
 
 def test_hub_rules_embed() -> None:

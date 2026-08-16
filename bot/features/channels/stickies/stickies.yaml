@@ -12,7 +12,7 @@ stickies:
   join-the-network:
     template: join_the_network
     settings_key: hub_join_the_network_sticky
-    version: 10
+    version: 11
     footer_marker: "The Network • join the network"
     strategy: replace
 

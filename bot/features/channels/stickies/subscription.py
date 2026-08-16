@@ -299,6 +299,7 @@ async def _sync_subscribe_setup_sticky(
     confirmed: bool,
     allow_create: bool,
     view_registry: ViewRegistry,
+    read_only: bool = False,
 ) -> ClientSubscription:
     if confirmed:
         result = await sync_footer_marker_embed_sticky(
@@ -323,8 +324,13 @@ async def _sync_subscribe_setup_sticky(
     if not _supports_setup_sticky(subscribe_channel):
         return subscription
 
+    template = (
+        "subscribe_setup_instructions_readonly"
+        if read_only
+        else _SUBSCRIBE_SPEC.template
+    )
     embed = render_embed(
-        _SUBSCRIBE_SPEC.template,
+        template,
         subscribe_mention=subscribe_channel.mention,
         network_channel_name=f"🌐-{network.display_name}",
     )
@@ -475,6 +481,7 @@ async def sync_subscription_setup(
                 confirmed=state.subscribe_confirmed,
                 allow_create=allow_create or subscription.subscribe_setup_message_id is None,
                 view_registry=view_registry,
+                read_only=client.read_only,
             )
             state = await resolve_setup_state(
                 guild,

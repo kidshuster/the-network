@@ -2,7 +2,10 @@ kind: embed
 colour: '{colour}'
 description: 'Your client profile on **The Network** hub.
 
-  Subscribe to networks with the buttons below.
+  Use the network buttons to subscribe. Profile toggles:
+
+  • **Timecodes** — convert times in your outgoing announcements to Discord timestamps
+  • **Read-only** — receive-only mode (no publish channel; setup completes on subscribe confirm)
 
   '
 author_name: '{author_name}'

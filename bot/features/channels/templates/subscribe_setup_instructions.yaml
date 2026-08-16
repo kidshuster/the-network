@@ -2,12 +2,24 @@ kind: embed
 title: "Connect your subscribe channel"
 colour: blurple
 description: |
-  This **announcement** channel relays network posts to servers that follow it.
+  This **announcement** channel is the hub side of your **incoming** network feed.
+
+  You are in **write** mode, so you also have a **publish** channel for sending into the network. Finish both setup cards to go Active.
 fields:
   - name: Steps
     value: |
-      1. On **your server**, create an announcement channel named **{network_channel_name}** (or pick an existing one that should receive network posts).
+      1. On **your server**, create an announcement channel named **{network_channel_name}** (or reuse one that should receive network posts).
       2. In **that channel**, click **Follow**, select **this hub server**, and choose {subscribe_mention}.
-      3. Click **Subscribed channel connected** below (also available on your **client-profile** moderation card).
+      3. Click **Subscribed channel connected** below (also on your **client-profile** moderation card).
+      4. Complete the **publish** instruction card in your publish channel as well.
+    inline: false
+  - name: Timecodes
+    value: |
+      Relayed posts can include Discord timestamps when the publisher has **Timecodes** enabled. On your profile, **Timecodes: On** converts times in *your* outgoing announcements the same way.
+    inline: false
+  - name: Profile toggles
+    value: |
+      **Read-only: Off** — you can publish and subscribe.
+      Switch **Read-only: On** only if this client should receive network posts and never publish (the publish channel is removed).
     inline: false
 footer: "The Network • subscribe setup • removed after you confirm"

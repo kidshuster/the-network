@@ -135,6 +135,11 @@ def _setup_description(
 ) -> str:
     needs_subscribe = not setup_state.subscribe_confirmed
     needs_publish = not setup_state.read_only and not setup_state.publish_configured
+    if setup_state.read_only and needs_subscribe:
+        return (
+            f"Confirm your **subscribe** channel for **`{network_key}`** "
+            "(read-only — no publish step)."
+        )
     if needs_publish and needs_subscribe:
         return f"Finish connecting **`{network_key}`** before relays can flow."
     if needs_publish:
@@ -160,6 +165,17 @@ def build_moderation_embed(
     if setup_state is not None and not setup_state.fully_configured:
         needs_publish = not setup_state.read_only and not setup_state.publish_configured
         needs_subscribe = not setup_state.subscribe_confirmed
+        subscribe_hint = (
+            (
+                f"Follow the read-only instruction card in {subscribe_mention}, then click "
+                "**Subscribed channel connected** here or there."
+            )
+            if setup_state.read_only
+            else (
+                f"Follow the instruction card in {subscribe_mention}, then click "
+                "**Subscribed channel connected** here or there."
+            )
+        )
         return render_embed(
             "subscription_moderation_setup",
             network_display_name=network_display_name,
@@ -174,17 +190,15 @@ def build_moderation_embed(
             subscribe_channel_value=(
                 f"{subscribe_mention} — **not connected**" if needs_subscribe else ""
             ),
-            subscribe_setup_value=(
-                (
-                    f"Follow the instruction card in {subscribe_mention}, then click "
-                    "**Subscribed channel connected** here or there."
-                )
-                if needs_subscribe
-                else ""
-            ),
+            subscribe_setup_value=subscribe_hint if needs_subscribe else "",
         )
+    template = (
+        "subscription_moderation_readonly"
+        if setup_state is not None and setup_state.read_only
+        else "subscription_moderation"
+    )
     return render_embed(
-        "subscription_moderation",
+        template,
         network_display_name=network_display_name,
         network_key=network_key,
         client_slug=client_slug,

@@ -15,6 +15,8 @@ def test_build_client_profile_embed_shows_network_status_per_line() -> None:
         ),
     )
 
+    assert "Timecodes" in (embed.description or "")
+    assert "Read-only" in (embed.description or "")
     networks_field = next(field for field in embed.fields if field.name == "Subscribed networks")
     assert "`stingers` — Active" in networks_field.value
     assert "`beta` — Disabled" in networks_field.value

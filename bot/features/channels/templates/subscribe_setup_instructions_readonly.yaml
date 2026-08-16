@@ -1,0 +1,25 @@
+kind: embed
+title: "Connect your subscribe channel (read-only)"
+colour: blurple
+description: |
+  This client is **read-only**: you only **receive** network announcements.
+
+  There is **no publish channel**. Setup is complete after you connect and confirm this subscribe feed.
+fields:
+  - name: Steps
+    value: |
+      1. On **your server**, create an announcement channel named **{network_channel_name}** (or reuse one that should receive network posts).
+      2. In **that channel**, click **Follow**, select **this hub server**, and choose {subscribe_mention}.
+      3. Click **Subscribed channel connected** below (also on your **client-profile** moderation card).
+    inline: false
+  - name: Timecodes
+    value: |
+      Incoming posts may already include Discord timestamps from publishers with Timecodes enabled.
+      Your profile **Timecodes** toggle only affects messages *you* would publish — it stays available if you later turn **Read-only** off.
+    inline: false
+  - name: Profile toggles
+    value: |
+      **Read-only: On** — receive-only; no publish setup.
+      Turn **Read-only: Off** on the profile card if this client should also announce into the network (a publish channel is created and its setup card appears).
+    inline: false
+footer: "The Network • subscribe setup • removed after you confirm"

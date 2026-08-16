@@ -189,7 +189,25 @@ def test_moderation_setup_embed_hides_publish_when_read_only() -> None:
     assert "Publish channel" not in field_names
     assert "Publish setup" not in field_names
     assert "Subscribe channel" in field_names
-    assert "subscribe" in (embed.description or "").casefold()
+    assert "read-only" in (embed.description or "").casefold()
+    setup_fields = {field.name: field.value for field in embed.fields}
+    assert "read-only instruction card" in setup_fields["Subscribe setup"].casefold()
+
+
+def test_moderation_active_embed_uses_readonly_template() -> None:
+    embed = build_moderation_embed(
+        network_display_name="Stingers",
+        network_key="stingers",
+        client_server_name="acme",
+        setup_state=SubscriptionSetupState(
+            publish_configured=True,
+            subscribe_confirmed=True,
+            network_active=True,
+            read_only=True,
+        ),
+    )
+    assert "Read-only mode" in (embed.description or "")
+    assert "no publish channel" in (embed.description or "").casefold()
 
 
 def test_moderation_setup_embed_shows_both_steps_when_unconfigured() -> None:

@@ -287,9 +287,50 @@ async def test_reconcile_subscribe_sticky_does_not_create_new() -> None:
         allow_create=False,
         view_registry=make_test_view_registry(),
     )
-
-    subscribe_channel.send.assert_not_called()
     assert result.subscribe_setup_message_id is None
+    subscribe_channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_sticky_uses_readonly_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bot.features.channels.stickies import subscription as module
+
+    captured: dict[str, object] = {}
+
+    def _capture_render(template: str, **kwargs: object) -> discord.Embed:
+        captured["template"] = template
+        embed = discord.Embed(title="t", description="d")
+        embed.set_footer(text="The Network • subscribe setup")
+        return embed
+
+    monkeypatch.setattr(module, "render_embed", _capture_render)
+    monkeypatch.setattr(
+        module,
+        "sync_footer_marker_embed_sticky",
+        AsyncMock(
+            return_value=MagicMock(message=MagicMock(id=42), removed=False),
+        ),
+    )
+
+    context = MagicMock()
+    context.store.clients.update_subscribe_setup_message_id = AsyncMock(
+        side_effect=lambda _sid, mid: _subscription(subscribe_setup_message_id=mid)
+    )
+    await _sync_subscribe_setup_sticky(
+        MagicMock(spec=discord.Guild),
+        _subscription(),
+        subscribe_channel=MagicMock(spec=discord.TextChannel, mention="#sub"),
+        context=context,
+        network=_network(),
+        bot_user_id=1,
+        confirmed=False,
+        allow_create=True,
+        view_registry=make_test_view_registry(),
+        read_only=True,
+    )
+    assert captured["template"] == "subscribe_setup_instructions_readonly"
 
 
 @pytest.mark.asyncio

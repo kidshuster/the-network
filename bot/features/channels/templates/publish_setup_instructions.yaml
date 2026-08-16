@@ -2,13 +2,20 @@ kind: embed
 title: "Connect your publish channel"
 colour: blurple
 description: |
-  This channel receives announcements from **your server** via Channel Follow.
+  This channel is how **your server announces into the network**.
+
+  You are in **write** mode (Read-only is **Off** on your client profile), so this publish channel exists alongside subscribe.
 fields:
   - name: Steps
     value: |
-      1. On **your server**, open **Server Settings → Enable Community** and complete the setup checklist (rules, verification, and a public updates channel).
-      2. Create an **announcement channel** (megaphone icon).
-      3. In that announcement channel, click **Follow**, select **this hub server**, and choose {publish_mention}. **Channel Follow is only available in the Discord desktop app** (not mobile or web).
-      4. Post a test message in your announcement channel to verify it appears here.
+      1. On **your server**, open **Server Settings → Enable Community** and finish the checklist (rules, verification, and a public updates channel).
+      2. Create an **announcement channel** (megaphone icon) for posts that should go to the network.
+      3. In that announcement channel, click **Follow**, select **this hub server**, and choose {publish_mention}. **Channel Follow works only in the Discord desktop app** (not mobile or web).
+      4. Post a short test message there and confirm it appears in {publish_mention}.
+    inline: false
+  - name: Timecodes
+    value: |
+      When **Timecodes** is **On** on your client profile, natural times in your announcements (for example `raid at 5:30 pst` or `Saturday at 10am est`) are converted to Discord timestamps so every viewer sees the correct local time.
+      Toggle **Timecodes: On/Off** on your profile card anytime.
     inline: false
 footer: "The Network • publish setup • remove this card automatically when connected"
