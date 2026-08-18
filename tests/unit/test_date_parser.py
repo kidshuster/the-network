@@ -226,7 +226,7 @@ class TestFormattingResilience:
         assert "_" not in result
         assert "|" not in result
         assert result.startswith("Official end time will be <t:")
-        assert result.endswith(">.")
+        assert result.endswith("> .")
 
 
 class TestRealWorldSmoke:
@@ -240,7 +240,16 @@ class TestRealWorldSmoke:
             preserved=("/mirror id:1535347363604865105 mirrorkey:stinghublive.",),
         )
         assert result.startswith("Garden of Corpses <t:")
+        assert "> !" in result
         assert "mirrorkey" not in result.split("!\n\n")[0]
+
+    def test_injects_space_after_timestamp_before_glued_chars(self) -> None:
+        result = _assert_converts("raid today at 8 pm pst!")
+        assert TIMECODE.search(result) is not None
+        assert result.endswith("> !")
+        # Already-spaced followers must not get a double space.
+        spaced = _assert_converts("raid today at 8 pm pst tonight")
+        assert ">  " not in spaced
 
     def test_multiple_times_in_one_message(self) -> None:
         result = replace_dates("Meet at 4 pm pst and again tomorrow at noon")

@@ -397,7 +397,10 @@ def replace_dates(text: str) -> str:
         if ts is None:
             continue
         start, end = sanitized.original_span(match.start, match.end)
-        replacements.append((start, end, f"<t:{ts}>"))
+        # Discord timestamp chips need a trailing space when the next character
+        # would otherwise glue (e.g. ``<t:…>!`` / ``<t:…>.``), or rendering breaks.
+        suffix = " " if end < len(source) and not source[end].isspace() else ""
+        replacements.append((start, end, f"<t:{ts}>{suffix}"))
 
     result = source
     for start, end, replacement in sorted(replacements, reverse=True):

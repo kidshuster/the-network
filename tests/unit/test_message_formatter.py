@@ -71,7 +71,7 @@ def test_build_relay_embed_converts_dates_when_timecodes_enabled() -> None:
     parts = build_relay_embed_from_client(message, client)
     assert parts.embed.description is not None
     assert parts.embed.description.startswith("Official end time will be <t:")
-    assert parts.embed.description.endswith(">.")
+    assert parts.embed.description.endswith("> .")
 
 
 @pytest.mark.asyncio
