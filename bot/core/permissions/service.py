@@ -177,6 +177,21 @@ def _overwrite_for(
     return None
 
 
+def _discard_awaitable(value: object) -> bool:
+    """Close awaitable test doubles without awaiting; return True when discarded.
+
+    ``AsyncMock`` channel doubles make ``permissions_for`` return a coroutine.
+    Detecting that with ``inspect.isawaitable`` still emits RuntimeWarning unless
+    the coroutine is closed.
+    """
+    if not inspect.isawaitable(value):
+        return False
+    close = getattr(value, "close", None)
+    if callable(close):
+        close()
+    return True
+
+
 def _clamp_overwrite(
     bot_perms: discord.Permissions,
     overwrite: discord.PermissionOverwrite,
@@ -208,7 +223,7 @@ def _clamp_desired_map(
     desired: OverwriteMap,
 ) -> dict[Target, discord.PermissionOverwrite]:
     perms = target.permissions_for(bot_member)
-    if inspect.isawaitable(perms):
+    if _discard_awaitable(perms):
         return dict(desired)
     current = _current_map(target)
     return {
@@ -224,7 +239,7 @@ def _clamp_desired_map(
 def _bot_can_rectify(target: ReconcileTarget, bot_member: discord.Member) -> bool:
     """True when the bot can edit this resource's permission overwrites."""
     perms = target.permissions_for(bot_member)
-    if inspect.isawaitable(perms):
+    if _discard_awaitable(perms):
         # permissions_for is synchronous in discord.py; async test doubles should not
         # force bootstrap. Treat as accessible and let the edit path surface real errors.
         return True
@@ -233,9 +248,9 @@ def _bot_can_rectify(target: ReconcileTarget, bot_member: discord.Member) -> boo
     # Discord requires Manage Roles (channel Manage Permissions) to edit overwrites.
     manage_roles = getattr(perms, "manage_roles", False)
     if (
-        inspect.isawaitable(view)
-        or inspect.isawaitable(manage_channels)
-        or inspect.isawaitable(manage_roles)
+        _discard_awaitable(view)
+        or _discard_awaitable(manage_channels)
+        or _discard_awaitable(manage_roles)
     ):
         return True
     return bool(view and manage_channels and manage_roles)

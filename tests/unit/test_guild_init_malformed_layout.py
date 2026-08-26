@@ -12,6 +12,14 @@ from bot.core.models.client import Client
 from bot.features.recipes.hub.initialize import initialize_guild
 
 
+def _full_channel_permissions() -> discord.Permissions:
+    return discord.Permissions(
+        view_channel=True,
+        manage_channels=True,
+        manage_roles=True,
+    )
+
+
 def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
     categories: dict[str, MagicMock] = {}
     for name in ("Moderation", "The Network", "Leaders"):
@@ -21,9 +29,35 @@ def _hub_categories(guild: MagicMock) -> dict[str, MagicMock]:
         cat.channels = []
         cat.overwrites = {}
         cat.edit = AsyncMock()
+        cat.permissions_for = MagicMock(return_value=_full_channel_permissions())
         categories[name] = cat
         guild.categories.append(cat)
     return categories
+
+
+def _mock_created_category(**kwargs: object) -> MagicMock:
+    cat = MagicMock(spec=discord.CategoryChannel)
+    cat.id = id(kwargs.get("name", "category"))
+    cat.name = str(kwargs.get("name", "category"))
+    cat.channels = []
+    cat.overwrites = dict(kwargs.get("overwrites") or {})  # type: ignore[arg-type]
+    cat.edit = AsyncMock()
+    cat.set_permissions = AsyncMock()
+    cat.permissions_for = MagicMock(return_value=_full_channel_permissions())
+    return cat
+
+
+def _mock_created_text_channel(**kwargs: object) -> MagicMock:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = id(kwargs.get("name", "channel"))
+    channel.name = str(kwargs.get("name", "channel"))
+    channel.mention = f"#{channel.name}"
+    channel.category_id = getattr(kwargs.get("category"), "id", None)
+    channel.overwrites = dict(kwargs.get("overwrites") or {})  # type: ignore[arg-type]
+    channel.edit = AsyncMock()
+    channel.set_permissions = AsyncMock()
+    channel.permissions_for = MagicMock(return_value=_full_channel_permissions())
+    return channel
 
 
 def _stored_client() -> Client:
@@ -61,25 +95,16 @@ async def test_init_moves_channel_from_wrong_category(
     join_requests.category_id = wrong_cat.id
     join_requests.overwrites = {}
     join_requests.edit = AsyncMock(return_value=None)
+    join_requests.permissions_for = MagicMock(return_value=_full_channel_permissions())
     guild.text_channels = [join_requests]
-    guild.create_text_channel = AsyncMock(
-        side_effect=lambda **kwargs: MagicMock(
-            spec=discord.TextChannel,
-            id=801,
-            name=str(kwargs.get("name", "channel")),
-            mention=f"#{kwargs.get('name', 'channel')}",
-            category_id=getattr(kwargs.get("category"), "id", None),
-            overwrites={},
-            edit=AsyncMock(),
-        )
-    )
+    guild.create_text_channel = AsyncMock(side_effect=_mock_created_text_channel)
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
         "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
-    guild.create_category = AsyncMock()
+    guild.create_category = AsyncMock(side_effect=_mock_created_category)
 
     result = await initialize_guild(
         guild,
@@ -109,27 +134,17 @@ async def test_init_removes_retired_commands_channel(
     commands.overwrites = {}
     commands.edit = AsyncMock()
     commands.delete = AsyncMock()
+    commands.permissions_for = MagicMock(return_value=_full_channel_permissions())
     guild.text_channels = [commands]
     guild.get_channel.side_effect = lambda channel_id: commands if channel_id == 801 else None
-    guild.create_text_channel = AsyncMock(
-        side_effect=lambda **kwargs: MagicMock(
-            spec=discord.TextChannel,
-            id=802,
-            name=str(kwargs.get("name", "channel")),
-            mention=f"#{kwargs.get('name', 'channel')}",
-            category_id=getattr(kwargs.get("category"), "id", None),
-            overwrites={},
-            edit=AsyncMock(),
-        )
-    )
+    guild.create_text_channel = AsyncMock(side_effect=_mock_created_text_channel)
+    guild.create_category = AsyncMock(side_effect=_mock_created_category)
 
     _patch_init_roles(monkeypatch, access, operator, human_mod)
     monkeypatch.setattr(
         "bot.features.recipes.hub.reconcilers._ensure_human_moderator_role",
         AsyncMock(return_value=human_mod),
     )
-    guild.create_text_channel = AsyncMock()
-    guild.create_category = AsyncMock()
 
     result = await initialize_guild(
         guild,
@@ -156,6 +171,8 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
 
     client_category = MagicMock(spec=discord.CategoryChannel, id=600, name="Acme")
     client_category.edit = AsyncMock()
+    client_category.overwrites = {}
+    client_category.permissions_for = MagicMock(return_value=_full_channel_permissions())
     guild.categories.append(client_category)
     guild.get_role = MagicMock(return_value=client_role)
     guild.get_channel = MagicMock(
@@ -186,8 +203,8 @@ async def test_init_with_clients_triggers_reconnect_without_failure(
             )
         ),
     )
-    guild.create_text_channel = AsyncMock()
-    guild.create_category = AsyncMock()
+    guild.create_text_channel = AsyncMock(side_effect=_mock_created_text_channel)
+    guild.create_category = AsyncMock(side_effect=_mock_created_category)
 
     context = MagicMock()
     context.client_cache.load_cache = AsyncMock()
