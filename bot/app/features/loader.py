@@ -26,6 +26,7 @@ RECIPE_MODULES: tuple[str, ...] = (
     "bot.features.recipes.hub.installs",
     "bot.features.recipes.hub.data_reset",
     "bot.features.recipes.hub.announcements",
+    "bot.features.recipes.hub.client_announcements",
 )
 
 

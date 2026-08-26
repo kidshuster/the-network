@@ -5,7 +5,11 @@ from typing import Any, Literal, cast
 
 import discord
 
-from bot.core.clients.resources import fetch_publish_channel, fetch_subscribe_channel
+from bot.core.clients.resources import (
+    fetch_announcements_channel,
+    fetch_publish_channel,
+    fetch_subscribe_channel,
+)
 from bot.core.clients.setup_state import SubscriptionSetupState, resolve_setup_state
 from bot.core.models.client import Client
 from bot.core.models.client_subscription import ClientSubscription
@@ -32,8 +36,10 @@ SetupMode = Literal["create", "reconcile"]
 
 _PUBLISH_SPEC = sticky_spec("subscription-publish")
 _SUBSCRIBE_SPEC = sticky_spec("subscription-subscribe")
+_ANNOUNCEMENTS_SPEC = sticky_spec("subscription-announcements")
 _PUBLISH_SETUP_FOOTER = _PUBLISH_SPEC.footer_marker
 _SUBSCRIBE_SETUP_FOOTER = _SUBSCRIBE_SPEC.footer_marker
+_ANNOUNCEMENTS_FOOTER = _ANNOUNCEMENTS_SPEC.footer_marker
 _SETUP_HISTORY_LIMIT = SETUP_STICKY_HISTORY_LIMIT
 
 
@@ -288,6 +294,77 @@ async def _sync_publish_setup_sticky(
     return subscription
 
 
+async def _sync_announcements_guide_sticky(
+    guild: discord.Guild,
+    subscription: ClientSubscription,
+    *,
+    announcements_channel: discord.TextChannel,
+    context: Any,
+    bot_user_id: int,
+    allow_create: bool,
+) -> ClientSubscription:
+    del guild
+    result = await sync_footer_marker_embed_sticky(
+        announcements_channel,
+        bot_user_id=bot_user_id,
+        stored_message_id=subscription.announcements_sticky_message_id,
+        footer_marker=_ANNOUNCEMENTS_FOOTER,
+        embed=render_embed(_ANNOUNCEMENTS_SPEC.template),
+        allow_create=allow_create,
+        remove=False,
+    )
+    if result.message is None:
+        return subscription
+    if subscription.announcements_sticky_message_id != result.message.id:
+        return cast(
+            ClientSubscription,
+            await context.store.clients.update_announcements_sticky_message_id(
+                subscription.id,
+                result.message.id,
+            ),
+        )
+    return subscription
+
+
+async def bump_announcements_sticky(
+    *,
+    channel: discord.TextChannel,
+    subscription: ClientSubscription,
+    context: Any,
+    bot_user_id: int,
+) -> ClientSubscription:
+    """Delete and re-post the announcements guide so it stays the newest message."""
+    existing = await resolve_embed_sticky_message(
+        channel,
+        bot_user_id=bot_user_id,
+        message_id=subscription.announcements_sticky_message_id,
+        footer_marker=_ANNOUNCEMENTS_FOOTER,
+    )
+    if existing is not None:
+        try:
+            await existing.delete()
+        except discord.HTTPException:
+            pass
+    try:
+        message = await channel.send(
+            embed=render_embed(_ANNOUNCEMENTS_SPEC.template),
+            silent=True,
+        )
+    except discord.HTTPException:
+        logger.warning(
+            "Could not bump announcements sticky",
+            extra={"channel_id": channel.id},
+        )
+        return subscription
+    return cast(
+        ClientSubscription,
+        await context.store.clients.update_announcements_sticky_message_id(
+            subscription.id,
+            message.id,
+        ),
+    )
+
+
 async def _sync_subscribe_setup_sticky(
     guild: discord.Guild,
     subscription: ClientSubscription,
@@ -470,6 +547,19 @@ async def sync_subscription_setup(
                 network_active=network_active,
                 read_only=client.read_only,
             )
+        if client.read_only:
+            announcements_channel = await fetch_announcements_channel(guild, subscription)
+            if isinstance(announcements_channel, discord.TextChannel):
+                subscription = await _sync_announcements_guide_sticky(
+                    guild,
+                    subscription,
+                    announcements_channel=announcements_channel,
+                    context=context,
+                    bot_user_id=bot_user_id,
+                    allow_create=(
+                        allow_create or subscription.announcements_sticky_message_id is None
+                    ),
+                )
         if subscribe_channel is not None:
             subscription = await _sync_subscribe_setup_sticky(
                 guild,

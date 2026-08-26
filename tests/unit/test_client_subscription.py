@@ -7,6 +7,7 @@ import pytest
 from view_registry_helpers import make_test_view_registry
 
 from bot.core.clients.names import (
+    build_client_announcements_channel_base,
     build_client_profile_channel_base,
     build_client_publish_channel_base,
     build_client_subscribe_channel_base,
@@ -44,41 +45,60 @@ def _client(server_name: str = "acme") -> Client:
 
 def test_slugify_client_name() -> None:
     assert slugify_client_name("My Server") == "my-server"
-    assert build_client_profile_channel_base("My Server") == "my-server-profile"
+    assert build_client_profile_channel_base("My Server") == "📚-my-server-profile"
     assert build_client_publish_channel_base("My Server", "stingers") == (
-        "my-server-stingers-publish"
+        "📤-my-server-stingers-publish"
     )
     assert build_client_subscribe_channel_base("My Server", "stingers") == (
-        "my-server-stingers-subscribe"
+        "🌐-my-server-stingers-subscribe"
     )
+    assert build_client_announcements_channel_base("My Server", "stingers") == (
+        "📢-my-server-stingers-announcements"
+    )
+    from bot.core.clients.names import client_publish_channel_name_candidates
+
+    assert client_publish_channel_name_candidates("My Server", "stingers") == (
+        "📤-my-server-stingers-publish",
+        "🌐-my-server-stingers-publish",
+        "my-server-stingers-publish",
+    )
+
+
+def test_build_client_category_channel_order_read_only() -> None:
+    client = _client()
+    assert build_client_category_channel_order(client, ["stingers"], read_only=True) == [
+        "📚-acme-profile",
+        "🌐-acme-stingers-subscribe",
+        "📢-acme-stingers-announcements",
+    ]
 
 
 def test_build_client_category_channel_order_single_network() -> None:
     client = _client()
     assert build_client_category_channel_order(client, ["stingers"]) == [
-        "acme-profile",
-        "acme-stingers-subscribe",
-        "acme-stingers-publish",
+        "📚-acme-profile",
+        "🌐-acme-stingers-subscribe",
+        "📤-acme-stingers-publish",
     ]
 
 
 def test_build_client_category_channel_order_sorts_network_keys() -> None:
     client = _client()
     assert build_client_category_channel_order(client, ["zebra", "alpha"]) == [
-        "acme-profile",
-        "acme-alpha-subscribe",
-        "acme-alpha-publish",
-        "acme-zebra-subscribe",
-        "acme-zebra-publish",
+        "📚-acme-profile",
+        "🌐-acme-alpha-subscribe",
+        "📤-acme-alpha-publish",
+        "🌐-acme-zebra-subscribe",
+        "📤-acme-zebra-publish",
     ]
 
 
 def test_find_network_subscription_channels_matches_configured_names() -> None:
     category = MagicMock(spec=discord.CategoryChannel)
     publish = MagicMock(spec=discord.TextChannel)
-    publish.name = "acme-stingers-publish"
+    publish.name = "📤-acme-stingers-publish"
     subscribe = MagicMock(spec=discord.TextChannel)
-    subscribe.name = "acme-stingers-subscribe"
+    subscribe.name = "🌐-acme-stingers-subscribe"
     other = MagicMock(spec=discord.TextChannel)
     other.name = "acme-profile"
     category.channels = [other, subscribe, publish]

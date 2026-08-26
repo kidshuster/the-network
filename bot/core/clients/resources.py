@@ -68,6 +68,16 @@ async def fetch_subscribe_channel(
     return await fetch_guild_channel(guild, subscription.subscribe_channel_id)
 
 
+async def fetch_announcements_channel(
+    guild: discord.Guild,
+    subscription: ClientSubscription,
+) -> discord.TextChannel | None:
+    if not subscription.announcements_channel_id:
+        return None
+    channel = await fetch_guild_channel(guild, subscription.announcements_channel_id)
+    return channel if isinstance(channel, discord.TextChannel) else None
+
+
 @dataclass(frozen=True)
 class ClientResources:
     role: discord.Role | None

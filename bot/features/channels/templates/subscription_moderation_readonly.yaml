@@ -2,9 +2,9 @@ kind: embed
 title: "Moderation — {network_display_name}"
 colour: dark_grey
 description: |
-  Manage **`{network_key}`** from **`{client_slug}-profile`**.
+  Manage **`{network_key}`** from **`📚-{client_slug}-profile`**.
 
-  **Read-only mode:** this client only receives via **`{client_slug}-{network_key}-subscribe`** (no publish channel).
+  **Read-only mode:** receive via **`🌐-{client_slug}-{network_key}-subscribe`**, and post via **`📢-{client_slug}-{network_key}-announcements`**.
   Use **Blacklist** to hide specific clients, or **Leave {network_key}** to unsubscribe.
 
-  Turn **Read-only: Off** on the profile if you need to announce into the network. **Timecodes** applies to outgoing posts once publishing is enabled.
+  Turn **Read-only: Off** on the profile to swap announcements for a Channel Follow publish channel. **Timecodes** applies to outgoing posts from the announcements channel.

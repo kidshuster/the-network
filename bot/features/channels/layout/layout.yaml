@@ -21,6 +21,10 @@ permission_profiles:
     roles: [everyone, client_owner, moderator, bot_access]
     overrides:
       client_owner: {manage_webhooks: true}
+  client_announcements:
+    roles: [everyone, client_owner, moderator, bot_access]
+    overrides:
+      client_owner: {send_messages: true, embed_links: true, attach_files: true}
 
 layout:
   categories:
@@ -45,9 +49,11 @@ layout:
           topic: Pending client join requests
           position: 1
         network_announcements:
-          name: network-announcements
+          name: "📢-network-announcements"
           type: text
           position: 2
+          legacy_names:
+            - network-announcements
           installs:
             - guide: announcements
     network:
@@ -93,18 +99,24 @@ layout:
     profile: client_private
     channels:
       profile:
-        name: "{slug}-profile"
+        name: "📚-{slug}-profile"
         topic: "Profile and network subscriptions for {server_name}"
         instances: per_client
         position: 0
       publish:
-        name: "{slug}-{network_key}-publish"
+        name: "📤-{slug}-{network_key}-publish"
         topic: "Publish channel for network {network_key}"
         instances: per_subscription
         profile: client_publish
         position: 11
       subscribe:
-        name: "{slug}-{network_key}-subscribe"
+        name: "🌐-{slug}-{network_key}-subscribe"
         type: announcement
         instances: per_subscription
         position: 10
+      announcements:
+        name: "📢-{slug}-{network_key}-announcements"
+        topic: "Announcements channel for network {network_key}"
+        instances: per_subscription
+        profile: client_announcements
+        position: 12

@@ -194,6 +194,24 @@ async def test_cleanup_orphan_smoke_subscription_channels() -> None:
     orphan_subscribe.id = 1002
     orphan_subscribe.delete = AsyncMock(side_effect=discord.Forbidden(MagicMock(), {}))
 
+    emoji_publish = MagicMock(spec=discord.TextChannel)
+    emoji_publish.category = None
+    emoji_publish.name = "📤-smoke-accept-abc-stingers-publish"
+    emoji_publish.id = 1003
+    emoji_publish.delete = AsyncMock()
+
+    emoji_announcements = MagicMock(spec=discord.TextChannel)
+    emoji_announcements.category = None
+    emoji_announcements.name = "📢-smoke-readonly-abc-stingers-announcements"
+    emoji_announcements.id = 1004
+    emoji_announcements.delete = AsyncMock()
+
+    emoji_profile = MagicMock(spec=discord.TextChannel)
+    emoji_profile.category = None
+    emoji_profile.name = "📚-smoke-accept-abc-profile"
+    emoji_profile.id = 1005
+    emoji_profile.delete = AsyncMock()
+
     live_publish = MagicMock(spec=discord.TextChannel)
     live_publish.category = None
     live_publish.name = "live-publish"
@@ -206,21 +224,132 @@ async def test_cleanup_orphan_smoke_subscription_channels() -> None:
     unrelated_orphan.id = 2003
     unrelated_orphan.delete = AsyncMock()
 
+    emoji_partner = MagicMock(spec=discord.TextChannel)
+    emoji_partner.category = None
+    emoji_partner.name = "📤-partner-stingers-publish"
+    emoji_partner.id = 2004
+    emoji_partner.delete = AsyncMock()
+
+    referenced_announcements = MagicMock(spec=discord.TextChannel)
+    referenced_announcements.category = None
+    referenced_announcements.name = "📢-smoke-live-abc-stingers-announcements"
+    referenced_announcements.id = 2005
+    referenced_announcements.delete = AsyncMock()
+
     guild = MagicMock(spec=discord.Guild)
-    guild.channels = [orphan_publish, orphan_subscribe, live_publish, unrelated_orphan]
+    guild.channels = [
+        orphan_publish,
+        orphan_subscribe,
+        emoji_publish,
+        emoji_announcements,
+        emoji_profile,
+        live_publish,
+        unrelated_orphan,
+        emoji_partner,
+        referenced_announcements,
+    ]
 
     context = MagicMock()
     client = MagicMock()
     client.profile_channel_id = 3001
     context.store.clients.list_all = AsyncMock(return_value=[client])
     context.store.clients.list_subscriptions_by_client = AsyncMock(
-        return_value=[MagicMock(publish_channel_id=2001, subscribe_channel_id=2002)],
+        return_value=[
+            MagicMock(
+                publish_channel_id=2001,
+                subscribe_channel_id=2002,
+                announcements_channel_id=2005,
+            )
+        ],
     )
 
     manual = await cleanup_orphan_smoke_subscription_channels(guild, context)
 
     orphan_publish.delete.assert_awaited_once()
     orphan_subscribe.delete.assert_awaited_once()
+    emoji_publish.delete.assert_awaited_once()
+    emoji_announcements.delete.assert_awaited_once()
+    emoji_profile.delete.assert_awaited_once()
     live_publish.delete.assert_not_called()
     unrelated_orphan.delete.assert_not_called()
+    emoji_partner.delete.assert_not_called()
+    referenced_announcements.delete.assert_not_called()
     assert manual == ["#smoke-rebuild-abc-stingers-subscribe (1002)"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_orphan_smoke_empty_misnamed_categories() -> None:
+    from tests.core.resource_guard import cleanup_orphan_smoke_subscription_channels
+
+    empty_emoji_cat = MagicMock(spec=discord.CategoryChannel)
+    empty_emoji_cat.name = "📢-smoke-accept-abc-stingers-announcements"
+    empty_emoji_cat.id = 5001
+    empty_emoji_cat.channels = []
+    empty_emoji_cat.delete = AsyncMock()
+
+    stale_emoji_cat = MagicMock(spec=discord.CategoryChannel)
+    stale_emoji_cat.name = "📤-smoke-accept-abc-stingers-publish"
+    stale_emoji_cat.id = 5002
+    ghost = MagicMock(spec=discord.TextChannel, id=9999)
+    stale_emoji_cat.channels = [ghost]
+    stale_emoji_cat.delete = AsyncMock()
+
+    nonempty_emoji_cat = MagicMock(spec=discord.CategoryChannel)
+    nonempty_emoji_cat.name = "📚-smoke-accept-abc-profile"
+    nonempty_emoji_cat.id = 5003
+    live_child = MagicMock(spec=discord.TextChannel, id=6001)
+    nonempty_emoji_cat.channels = [live_child]
+    nonempty_emoji_cat.delete = AsyncMock()
+
+    real_client_cat = MagicMock(spec=discord.CategoryChannel)
+    real_client_cat.name = "Smoke Accept abc"
+    real_client_cat.id = 5004
+    real_client_cat.channels = []
+    real_client_cat.delete = AsyncMock()
+
+    partner_cat = MagicMock(spec=discord.CategoryChannel)
+    partner_cat.name = "📤-partner-stingers-publish"
+    partner_cat.id = 5005
+    partner_cat.channels = []
+    partner_cat.delete = AsyncMock()
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.channels = [
+        empty_emoji_cat,
+        stale_emoji_cat,
+        nonempty_emoji_cat,
+        real_client_cat,
+        partner_cat,
+    ]
+    guild.get_channel = MagicMock(
+        side_effect=lambda channel_id: live_child if channel_id == 6001 else None
+    )
+
+    context = MagicMock()
+    context.store.clients.list_all = AsyncMock(return_value=[])
+    context.store.clients.list_subscriptions_by_client = AsyncMock(return_value=[])
+
+    manual = await cleanup_orphan_smoke_subscription_channels(guild, context)
+
+    empty_emoji_cat.delete.assert_awaited_once()
+    stale_emoji_cat.delete.assert_awaited_once()
+    nonempty_emoji_cat.delete.assert_not_called()
+    real_client_cat.delete.assert_not_called()
+    partner_cat.delete.assert_not_called()
+    assert manual == []
+
+
+def test_is_orphan_smoke_subscription_channel_name() -> None:
+    from tests.core.resource_guard import is_orphan_smoke_subscription_channel_name
+
+    assert is_orphan_smoke_subscription_channel_name("smoke-rebuild-abc-stingers-publish")
+    assert is_orphan_smoke_subscription_channel_name("🌐-smoke-accept-abc-stingers-subscribe")
+    assert is_orphan_smoke_subscription_channel_name("📤-smoke-accept-abc-stingers-publish")
+    assert is_orphan_smoke_subscription_channel_name("🌐-smoke-accept-abc-stingers-publish")
+    assert is_orphan_smoke_subscription_channel_name(
+        "📢-smoke-readonly-abc-stingers-announcements"
+    )
+    assert is_orphan_smoke_subscription_channel_name("📚-smoke-accept-abc-profile")
+    assert not is_orphan_smoke_subscription_channel_name("📤-partner-stingers-publish")
+    assert not is_orphan_smoke_subscription_channel_name("smoke-wh-probe")
+    assert not is_orphan_smoke_subscription_channel_name("admin")

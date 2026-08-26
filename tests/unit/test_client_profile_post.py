@@ -19,7 +19,7 @@ def test_build_client_profile_embed_shows_network_status_per_line() -> None:
     toggles = next(field for field in embed.fields if field.name == "Toggles")
     assert "Timecodes" in toggles.value
     assert "Read-only" in toggles.value
-    assert "receive-only" in toggles.value.casefold()
+    assert "receive via subscribe" in toggles.value.casefold()
     assert "Write mode" in toggles.value
     assert "Community" in toggles.value
     assert "Community" not in toggles.value.split("**Read-only**")[1].split("**Write mode**")[0]

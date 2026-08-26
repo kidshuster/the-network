@@ -69,6 +69,16 @@ class RoutingService:
             return None
         return self._client_cache.get_enabled_subscription_by_publish(publish_channel_id)
 
+    def resolve_announcements_subscription(
+        self,
+        announcements_channel_id: int,
+    ) -> ClientSubscription | None:
+        if self._client_cache is None:
+            return None
+        return self._client_cache.get_enabled_subscription_by_announcements(
+            announcements_channel_id
+        )
+
     def list_network_subscriptions(self, network_id: int) -> list[ClientSubscription]:
         if self._client_cache is None:
             return []

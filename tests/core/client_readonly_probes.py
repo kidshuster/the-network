@@ -24,6 +24,7 @@ from bot.features.recipes.hub.onboarding.service import ServerRequestService
 from tests.core.permission_probe import PROBE_PNG
 from tests.core.provision_flow import (
     _SmokeProfileAttachment,
+    assert_client_channels_under_category,
     cleanup_smoke_client,
     ensure_smoke_network_key,
 )
@@ -167,12 +168,37 @@ async def run_client_read_only_smoke_flow(
             publish_before = guild.get_channel(subscription.publish_channel_id)
             if publish_before is None:
                 raise RuntimeError("Publish channel missing after subscribe.")
+            assert_client_channels_under_category(
+                guild,
+                client_category_id=client.category_id,
+                client_server_name=client.server_name,
+                channel_ids={
+                    "profile": client.profile_channel_id,
+                    "publish": subscription.publish_channel_id,
+                    "subscribe": subscription.subscribe_channel_id,
+                },
+            )
 
             client = await context.store.clients.set_read_only(client.id, True)
             await strip_client_publish_channels(
                 guild,
                 client=client,
                 client_repo=context.store.clients,
+            )
+            from bot.features.recipes.hub.clients.subscription import (
+                ensure_client_announcements_channels,
+            )
+
+            bot_member_for_announcements = guild.me
+            if bot_member_for_announcements is None:
+                raise RuntimeError("Bot member unavailable for announcements ensure.")
+            await ensure_client_announcements_channels(
+                guild,
+                bot_member_for_announcements,
+                client=client,
+                client_repo=context.store.clients,
+                network_repo=context.store.networks,
+                access_role_name=bot.settings.network_access_role_name,
             )
             refreshed = await context.store.clients.get_subscription_by_id(subscription.id)
             if refreshed is None:
@@ -182,6 +208,20 @@ async def run_client_read_only_smoke_flow(
                 raise RuntimeError("publish_channel_id should be cleared in read-only mode.")
             if guild.get_channel(publish_before.id) is not None:
                 raise RuntimeError("Publish channel should be deleted in read-only mode.")
+            if not subscription.announcements_channel_id:
+                raise RuntimeError("announcements_channel_id should be set in read-only mode.")
+            if guild.get_channel(subscription.announcements_channel_id) is None:
+                raise RuntimeError("Announcements channel missing after read-only enable.")
+            assert_client_channels_under_category(
+                guild,
+                client_category_id=client.category_id,
+                client_server_name=client.server_name,
+                channel_ids={
+                    "profile": client.profile_channel_id,
+                    "subscribe": subscription.subscribe_channel_id,
+                    "announcements": subscription.announcements_channel_id,
+                },
+            )
 
             subscription = await context.store.clients.set_subscribe_confirmed(
                 subscription.id,
@@ -225,6 +265,16 @@ async def run_client_read_only_smoke_flow(
                 )
 
             client = await context.store.clients.set_read_only(client.id, False)
+            from bot.features.recipes.hub.clients.subscription import (
+                strip_client_announcements_channels,
+            )
+
+            announcements_id = subscription.announcements_channel_id
+            await strip_client_announcements_channels(
+                guild,
+                client=client,
+                client_repo=context.store.clients,
+            )
             await ensure_client_publish_channels(
                 guild,
                 bot_member,
@@ -236,10 +286,28 @@ async def run_client_read_only_smoke_flow(
             restored = await context.store.clients.get_subscription_by_id(subscription.id)
             if restored is None or restored.publish_channel_id is None:
                 raise RuntimeError("Publish channel was not restored after leaving read-only.")
+            if restored.announcements_channel_id is not None:
+                raise RuntimeError(
+                    "announcements_channel_id should clear when leaving read-only."
+                )
+            if announcements_id is not None and guild.get_channel(announcements_id) is not None:
+                raise RuntimeError(
+                    "Announcements channel should be deleted when leaving read-only."
+                )
             subscription = restored
             publish_id = restored.publish_channel_id
             if guild.get_channel(publish_id) is None:
                 raise RuntimeError("Restored publish channel id is missing in Discord.")
+            assert_client_channels_under_category(
+                guild,
+                client_category_id=client.category_id,
+                client_server_name=client.server_name,
+                channel_ids={
+                    "profile": client.profile_channel_id,
+                    "publish": publish_id,
+                    "subscribe": subscription.subscribe_channel_id,
+                },
+            )
 
             await sync_subscription_setup(
                 bot,

@@ -16,7 +16,11 @@ from bot.core.networks.roles import (
 )
 from bot.features.channels.layout import LayoutContext, compile_client, compile_hub
 from bot.features.channels.layout.compiler import ResourceKind
-from bot.features.channels.layout.managed import hub_category_names, preserved_channel_names
+from bot.features.channels.layout.managed import (
+    hub_category_names,
+    hub_channel_aliases,
+    preserved_channel_names,
+)
 from bot.features.channels.resolve import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
@@ -239,6 +243,17 @@ def _channel_by_name(guild: discord.Guild, name: str) -> discord.TextChannel | N
     return None
 
 
+def _channel_by_names(
+    guild: discord.Guild,
+    names: tuple[str, ...] | list[str],
+) -> discord.TextChannel | None:
+    for name in names:
+        found = _channel_by_name(guild, name)
+        if found is not None:
+            return found
+    return None
+
+
 def _overwrite_matches(
     channel: discord.abc.GuildChannel,
     role: discord.Role,
@@ -271,7 +286,7 @@ async def probe_hub_layout(
         )
 
     # Prefer compiled names when roles are available; fall back to YAML names.
-    channel_names: set[str] = set()
+    expected_channels: list[tuple[str, tuple[str, ...]]] = []
     community_missing: list[str] = []
     if bot_member is not None and settings is not None:
         try:
@@ -279,9 +294,10 @@ async def probe_hub_layout(
             for resource in compile_hub(ctx):
                 if resource.kind is ResourceKind.CATEGORY:
                     continue
-                channel_names.add(resource.name.casefold())
+                aliases = hub_channel_aliases(resource.id)
+                expected_channels.append((resource.name, aliases))
                 if resource.community_slot is not None:
-                    found = _channel_by_name(guild, resource.name)
+                    found = _channel_by_names(guild, aliases)
                     if found is None:
                         community_missing.append(resource.name)
                     elif (
@@ -298,13 +314,16 @@ async def probe_hub_layout(
         from bot.features.channels.layout.loader import load_layout
 
         for category in load_layout().layout.categories.values():
-            for channel in category.channels.values():
-                channel_names.add(channel.name.casefold())
+            for channel_id, channel in category.channels.items():
+                aliases = hub_channel_aliases(channel_id)
+                expected_channels.append((channel.name, aliases))
 
     missing_channels = [
-        name for name in sorted(channel_names) if _channel_by_name(guild, name) is None
+        name
+        for name, aliases in expected_channels
+        if _channel_by_names(guild, aliases) is None
     ]
-    # Allow legacy leaders name
+    # Allow legacy leaders name (retired alias, not in layout.legacy_names).
     if "leaders-channel" in missing_channels and _channel_by_name(guild, "leaders"):
         missing_channels.remove("leaders-channel")
 
@@ -322,7 +341,7 @@ async def probe_hub_layout(
 
     preserved = preserved_channel_names()
     detail = (
-        f"{len(expected_categories)} hub categories, {len(channel_names)} channels; "
+        f"{len(expected_categories)} hub categories, {len(expected_channels)} channels; "
         f"preserved/community={', '.join(sorted(preserved)) or 'none'}"
     )
     return ProbeResult("hub layout", True, detail)
@@ -334,7 +353,9 @@ async def probe_hub_announcements(
     settings: Settings,
 ) -> ProbeResult:
     del context, settings
+    from bot.features.channels.layout.managed import hub_channel_name
     from bot.features.channels.resolve import (
+        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
         resolve_moderation_category,
         resolve_network_announcements_channel,
     )
@@ -345,19 +366,22 @@ async def probe_hub_announcements(
         return ProbeResult(
             "hub announcements channel",
             False,
-            "#network-announcements missing — run `/server init`",
+            f"#{hub_channel_name(HUB_CHANNEL_NETWORK_ANNOUNCEMENTS)} missing — run `/server init`",
         )
     if mod_category is not None and mod_channel.category_id != mod_category.id:
         return ProbeResult(
             "hub announcements channel",
             False,
-            "#network-announcements is outside Moderation",
+            f"#{hub_channel_name(HUB_CHANNEL_NETWORK_ANNOUNCEMENTS)} is outside Moderation",
         )
     if mod_channel.is_news():
         return ProbeResult(
             "hub announcements channel",
             False,
-            "#network-announcements must be a regular text channel — run `/server init`",
+            (
+                f"#{hub_channel_name(HUB_CHANNEL_NETWORK_ANNOUNCEMENTS)} "
+                "must be a regular text channel — run `/server init`"
+            ),
         )
     return ProbeResult(
         "hub announcements wiring",

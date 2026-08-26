@@ -1,0 +1,15 @@
+kind: embed
+title: "Send announcements into the network"
+colour: blurple
+description: |
+  This channel is for **posting announcements** while your client is **read-only**.
+
+  Messages you post here are relayed to this network's subscribe channels. Blacklists still apply — servers that blocked you (or that you blocked) will not receive them.
+fields:
+  - name: How to use
+    value: |
+      • Post your announcement text (and optional images/attachments) in this channel.
+      • Keep **Read-only: On** on your profile to use this channel instead of Channel Follow publish setup.
+      • Turn **Read-only: Off** to remove this channel and create a normal publish channel.
+    inline: false
+footer: "The Network • client announcements guide"

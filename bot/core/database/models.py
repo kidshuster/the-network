@@ -168,6 +168,19 @@ class ClientSubscriptionRow:
             if "network_welcome_complete" in keys
             else False
         )
+        announcements_channel_id = (
+            int(row["announcements_channel_id"])
+            if "announcements_channel_id" in keys and row["announcements_channel_id"] is not None
+            else None
+        )
+        announcements_sticky_message_id = (
+            int(row["announcements_sticky_message_id"])
+            if (
+                "announcements_sticky_message_id" in keys
+                and row["announcements_sticky_message_id"] is not None
+            )
+            else None
+        )
         return ClientSubscription(
             id=int(row["id"]),
             client_id=int(row["client_id"]),
@@ -177,6 +190,7 @@ class ClientSubscriptionRow:
                 int(row["publish_channel_id"]) if row["publish_channel_id"] is not None else None
             ),
             subscribe_channel_id=int(row["subscribe_channel_id"]),
+            announcements_channel_id=announcements_channel_id,
             moderation_message_id=(
                 int(row["moderation_message_id"])
                 if row["moderation_message_id"] is not None
@@ -184,6 +198,7 @@ class ClientSubscriptionRow:
             ),
             publish_setup_message_id=publish_setup_message_id,
             subscribe_setup_message_id=subscribe_setup_message_id,
+            announcements_sticky_message_id=announcements_sticky_message_id,
             activation_welcome_message_id=activation_welcome_message_id,
             network_welcome_message_id=network_welcome_message_id,
             network_welcome_complete=network_welcome_complete,

@@ -277,7 +277,9 @@ async def toggle_client_read_only(
     from bot.features.channels.stickies.subscription import sync_subscription_setup
     from bot.features.recipes.hub.clients.profile_sync import refresh_client_profile_message
     from bot.features.recipes.hub.clients.subscription import (
+        ensure_client_announcements_channels,
         ensure_client_publish_channels,
+        strip_client_announcements_channels,
         strip_client_publish_channels,
     )
 
@@ -303,7 +305,20 @@ async def toggle_client_read_only(
             client=updated,
             client_repo=recipe_context.core.store.clients,
         )
+        await ensure_client_announcements_channels(
+            guild,
+            bot_member,
+            client=updated,
+            client_repo=recipe_context.core.store.clients,
+            network_repo=recipe_context.core.store.networks,
+            access_role_name=recipe_context.bot.settings.network_access_role_name,
+        )
     else:
+        await strip_client_announcements_channels(
+            guild,
+            client=updated,
+            client_repo=recipe_context.core.store.clients,
+        )
         await ensure_client_publish_channels(
             guild,
             bot_member,
@@ -334,7 +349,7 @@ async def toggle_client_read_only(
             view_registry=view_registry,
         )
 
-    await recipe_context.core.refresh_client_counts()
+    await recipe_context.core.refresh_projections()
     await refresh_client_profile_message(
         recipe_context.bot,
         recipe_context.core,

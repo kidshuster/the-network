@@ -43,9 +43,11 @@ def _subscription(*, moderation_message_id: int | None = None) -> ClientSubscrip
         network_key="stingers",
         publish_channel_id=201,
         subscribe_channel_id=501,
+        announcements_channel_id=None,
         moderation_message_id=moderation_message_id,
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
+        announcements_sticky_message_id=None,
         activation_welcome_message_id=None,
         network_welcome_message_id=None,
         network_welcome_complete=False,
@@ -207,7 +209,7 @@ def test_moderation_active_embed_uses_readonly_template() -> None:
         ),
     )
     assert "Read-only mode" in (embed.description or "")
-    assert "no publish channel" in (embed.description or "").casefold()
+    assert "announcements" in (embed.description or "").casefold()
 
 
 def test_moderation_setup_embed_shows_both_steps_when_unconfigured() -> None:
@@ -296,9 +298,11 @@ async def test_deleted_network_shows_disabled_without_join_button(
         network_key="stingers",
         publish_channel_id=201,
         subscribe_channel_id=501,
+        announcements_channel_id=None,
         moderation_message_id=None,
         publish_setup_message_id=None,
         subscribe_setup_message_id=None,
+        announcements_sticky_message_id=None,
         activation_welcome_message_id=None,
         network_welcome_message_id=None,
         network_welcome_complete=False,

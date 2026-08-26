@@ -156,6 +156,7 @@ async def test_subscribe_client_read_only_skips_publish(
     guild.get_channel = MagicMock(return_value=category)
 
     subscribe = MagicMock(spec=discord.TextChannel, id=101)
+    announcements = MagicMock(spec=discord.TextChannel, id=102)
 
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.resolve_human_moderator_role",
@@ -169,7 +170,10 @@ async def test_subscribe_client_read_only_skips_publish(
 
     apply_layout = AsyncMock(
         return_value=BatchApplyResult(
-            results=[ResourceApplyResult("subscribe", True, channel=subscribe)]
+            results=[
+                ResourceApplyResult("subscribe", True, channel=subscribe),
+                ResourceApplyResult("announcements", True, channel=announcements),
+            ]
         )
     )
     monkeypatch.setattr(
@@ -181,7 +185,11 @@ async def test_subscribe_client_read_only_skips_publish(
         AsyncMock(),
     )
 
-    created_sub = make_client_subscription(id=5, publish_channel_id=None)
+    created_sub = make_client_subscription(
+        id=5,
+        publish_channel_id=None,
+        announcements_channel_id=102,
+    )
     client_repo = MagicMock()
     client_repo.get_subscription = AsyncMock(return_value=None)
     client_repo.create_subscription = AsyncMock(return_value=created_sub)
@@ -204,9 +212,14 @@ async def test_subscribe_client_read_only_skips_publish(
     kwargs = client_repo.create_subscription.await_args.kwargs
     assert kwargs["publish_channel_id"] is None
     assert kwargs["subscribe_channel_id"] == 101
+    assert kwargs["announcements_channel_id"] == 102
     resources = apply_layout.await_args.args[1]
     assert "publish" not in {resource.id for resource in resources}
     assert "subscribe" in {resource.id for resource in resources}
+    assert "announcements" in {resource.id for resource in resources}
+    assert apply_layout.await_args.kwargs.get("bound_ids") == {"client": 10}
+    client_resource = next(resource for resource in resources if resource.id == "client")
+    assert client_resource.name == "Acme"
 
 
 @pytest.mark.asyncio

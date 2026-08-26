@@ -107,6 +107,7 @@ def test_hub_matches_expected_structure_and_channel_types() -> None:
     categories = [item.name for item in resources if item.kind is ResourceKind.CATEGORY]
     assert categories == ["Moderation", "The Network", "Leaders"]
     assert _resource(resources, "network_announcements").kind is ResourceKind.TEXT
+    assert _resource(resources, "network_announcements").name == "📢-network-announcements"
     assert _resource(resources, "rules").community_slot == "rules"
     assert _resource(resources, "admin").community_slot == "public_updates"
     assert _resource(resources, "rules").preserve_on_uninit
@@ -174,10 +175,17 @@ def test_client_layout_has_one_profile_and_subscription_pair() -> None:
     base = compile_client(ctx, include_subscribed=False)
     assert [item.id for item in base] == ["client", "profile"]
     subscribed = compile_client(ctx, include_subscribed=True)
-    assert [item.id for item in subscribed] == ["client", "profile", "publish", "subscribe"]
-    assert _resource(subscribed, "profile").name == "acme-profile"
-    assert _resource(subscribed, "publish").name == "acme-stingers-publish"
-    assert _resource(subscribed, "subscribe").name == "acme-stingers-subscribe"
+    assert [item.id for item in subscribed] == [
+        "client",
+        "profile",
+        "publish",
+        "subscribe",
+        "announcements",
+    ]
+    assert _resource(subscribed, "profile").name == "📚-acme-profile"
+    assert _resource(subscribed, "publish").name == "📤-acme-stingers-publish"
+    assert _resource(subscribed, "subscribe").name == "🌐-acme-stingers-subscribe"
+    assert _resource(subscribed, "announcements").name == "📢-acme-stingers-announcements"
     assert _resource(subscribed, "subscribe").kind is ResourceKind.ANNOUNCEMENT
 
 
@@ -196,12 +204,14 @@ def test_compile_client_emits_all_subscriptions_in_one_pass() -> None:
         "profile",
         "publish:stingers",
         "subscribe:stingers",
+        "announcements:stingers",
         "publish:wasps",
         "subscribe:wasps",
+        "announcements:wasps",
     ]
     assert _resource(resources, "client").position == 3
-    assert _resource(resources, "publish:stingers").name == "acme-stingers-publish"
-    assert _resource(resources, "publish:wasps").name == "acme-wasps-publish"
+    assert _resource(resources, "publish:stingers").name == "📤-acme-stingers-publish"
+    assert _resource(resources, "publish:wasps").name == "📤-acme-wasps-publish"
 
 
 def test_client_category_defaults_propagate_until_profile_replacement() -> None:

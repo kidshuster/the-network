@@ -10,6 +10,7 @@ from discord.abc import Messageable
 from bot.constants import RelayStatus
 from bot.core.clients.cache import ClientCache
 from bot.core.database.store import RelayStore
+from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.errors import RelayError
 from bot.core.models.relay_record import RelayResult
 from bot.core.networks.routing import RoutingService
@@ -53,6 +54,13 @@ class RelayService:
             return False
         return self._routing.resolve_publish_subscription(message.channel.id) is not None
 
+    def is_potential_announcements_message(self, message: discord.Message) -> bool:
+        if message.guild is None or message.guild.id != self._settings.guild_id:
+            return False
+        if message.author.bot:
+            return False
+        return self._routing.resolve_announcements_subscription(message.channel.id) is not None
+
     def feed_reject_reason(self, message: discord.Message) -> str | None:
         if message.guild is None or message.guild.id != self._settings.guild_id:
             return None
@@ -60,10 +68,58 @@ class RelayService:
             return None
         return self._filter_reject_reason(message)
 
+    def announcements_reject_reason(self, message: discord.Message) -> str | None:
+        if message.guild is None or message.guild.id != self._settings.guild_id:
+            return None
+        if self._routing.resolve_announcements_subscription(message.channel.id) is None:
+            return None
+        return self._announcements_filter_reject_reason(message)
+
     @staticmethod
     def _is_followed_message(message: discord.Message) -> bool:
         webhook_id = message.webhook_id
         return webhook_id is not None and webhook_id != 0
+
+    def _announcements_filter_reject_reason(self, message: discord.Message) -> str | None:
+        subscription = self._routing.resolve_announcements_subscription(message.channel.id)
+        if subscription is None:
+            return "announcements channel not registered"
+
+        network = (
+            self._routing.get_by_id(subscription.network_id)
+            if subscription.network_id is not None
+            else None
+        )
+        if network is None:
+            return "network not found"
+        if not network.enabled:
+            return f"network '{network.key}' is disabled"
+
+        client = self._clients.get_client(subscription.client_id)
+        if client is None:
+            return "client not found"
+        if not client.enabled:
+            return "client is disabled"
+        if not client.read_only:
+            return "client is not read-only"
+
+        if message.author.bot:
+            return "message author is a bot"
+
+        if not isinstance(message.author, discord.Member):
+            return "message author is not a guild member"
+
+        role = message.guild.get_role(client.client_role_id) if message.guild else None
+        if role is None or role not in message.author.roles:
+            if not message.author.guild_permissions.manage_guild:
+                return "author lacks client role"
+
+        from bot.features.recipes.hub.relay.formatter import has_relayable_content
+
+        if not has_relayable_content(message):
+            return "message has no relayable text, embed, or attachment content"
+
+        return None
 
     def _filter_reject_reason(self, message: discord.Message) -> str | None:
         subscription = self._routing.resolve_publish_subscription(message.channel.id)
@@ -116,16 +172,44 @@ class RelayService:
                 return None
             return await self._relay_locked(message)
 
+    async def relay_announcements_message(self, message: discord.Message) -> RelayResult | None:
+        if message.guild is None or message.guild.id != self._settings.guild_id:
+            return None
+        if self._announcements_filter_reject_reason(message) is not None:
+            return None
+
+        lock = self._locks.setdefault(message.id, asyncio.Lock())
+        async with lock:
+            if await self._relay_records.exists(message.id):
+                logger.debug(
+                    "Skipping duplicate announcements relay",
+                    extra={"source_message_id": message.id},
+                )
+                return None
+            return await self._relay_announcements_locked(message)
+
     def _passes_filters(self, message: discord.Message) -> bool:
         if message.guild is None or message.guild.id != self._settings.guild_id:
             return False
         return self._filter_reject_reason(message) is None
 
+    async def _relay_announcements_locked(self, message: discord.Message) -> RelayResult | None:
+        publisher_sub = self._routing.resolve_announcements_subscription(message.channel.id)
+        if publisher_sub is None:
+            return None
+        return await self._deliver_client_relay(message, publisher_sub)
+
     async def _relay_locked(self, message: discord.Message) -> RelayResult | None:
         publisher_sub = self._routing.resolve_publish_subscription(message.channel.id)
         if publisher_sub is None:
             return None
+        return await self._deliver_client_relay(message, publisher_sub)
 
+    async def _deliver_client_relay(
+        self,
+        message: discord.Message,
+        publisher_sub: ClientSubscription,
+    ) -> RelayResult | None:
         publisher = self._clients.get_client(publisher_sub.client_id)
         if publisher is None:
             return None

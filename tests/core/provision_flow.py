@@ -40,6 +40,53 @@ def _is_smoke_server_name(server_name: str) -> bool:
     return server_name.startswith(_SMOKE_JOIN_REQUEST_PREFIXES)
 
 
+def assert_client_channels_under_category(
+    guild: discord.Guild,
+    *,
+    client_category_id: int,
+    client_server_name: str,
+    channel_ids: dict[str, int | None],
+) -> None:
+    """Fail smoke if subscription/profile channels are not under the client category.
+
+    Catches the class of bug where layout ensure renames the category resource to a
+    channel name and creates sibling categories (or uncategorized channels) instead
+    of nesting under the real client category.
+    """
+    category = guild.get_channel(client_category_id)
+    if not isinstance(category, discord.CategoryChannel):
+        raise RuntimeError(
+            f"Client category {client_category_id} missing for {client_server_name!r}."
+        )
+    if category.name != client_server_name:
+        raise RuntimeError(
+            f"Client category name {category.name!r} does not match server_name "
+            f"{client_server_name!r}."
+        )
+
+    for label, channel_id in channel_ids.items():
+        if channel_id is None:
+            continue
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            raise RuntimeError(f"Client {label} channel {channel_id} missing in Discord.")
+        if isinstance(channel, discord.CategoryChannel):
+            raise RuntimeError(
+                f"Client {label} id {channel_id} resolved to a category named "
+                f"{channel.name!r}; expected a text/announcement channel under "
+                f"{client_server_name!r}."
+            )
+        parent_id = getattr(channel, "category_id", None)
+        if parent_id != client_category_id:
+            parent = channel.category
+            parent_name = parent.name if parent is not None else "none"
+            raise RuntimeError(
+                f"Client {label} channel #{channel.name} is under category "
+                f"{parent_name!r} (id={parent_id}), expected client category "
+                f"{client_server_name!r} (id={client_category_id})."
+            )
+
+
 def _is_smoke_join_request_message(
     message: discord.Message,
     bot_member: discord.Member,
@@ -209,6 +256,8 @@ async def cleanup_smoke_client(
         if subscription.publish_channel_id is not None:
             channel_ids.add(subscription.publish_channel_id)
         channel_ids.add(subscription.subscribe_channel_id)
+        if subscription.announcements_channel_id is not None:
+            channel_ids.add(subscription.announcements_channel_id)
 
     if client.emoji_id is not None:
         emoji = guild.get_emoji(client.emoji_id)
@@ -247,17 +296,13 @@ async def cleanup_smoke_client(
                 reason=_PROBE_REASON,
                 bot_member=bot_member,
             )
-        if category.channels:
-            logger.warning(
-                "Smoke cleanup: client category still has channels; skipping category delete",
-                extra={"category_id": category.id, "remaining": len(category.channels)},
-            )
-        else:
-            try:
-                await category.delete(reason=_PROBE_REASON)
-            except discord.HTTPException:
-                logger.warning("Smoke cleanup: could not delete client category")
-            category = None
+        # Do not trust category.channels after deletes — discord.py cache can keep
+        # stale members and skip the category forever. Let the API decide.
+        try:
+            await category.delete(reason=_PROBE_REASON)
+        except discord.HTTPException:
+            logger.warning("Smoke cleanup: could not delete client category")
+        category = None
 
     for channel_id in channel_ids:
         await _delete_smoke_channel(
@@ -473,6 +518,17 @@ async def run_join_approval_smoke_flow(
                 publish_channel = guild.get_channel(publish_channel_id)
                 if not isinstance(publish_channel, discord.TextChannel):
                     raise RuntimeError("Smoke publish channel is missing from the guild.")
+                assert_client_channels_under_category(
+                    guild,
+                    client_category_id=client.category_id,
+                    client_server_name=client.server_name,
+                    channel_ids={
+                        "profile": client.profile_channel_id,
+                        "publish": publish_channel_id,
+                        "subscribe": subscribe.subscription.subscribe_channel_id,
+                        "announcements": subscribe.subscription.announcements_channel_id,
+                    },
+                )
 
                 if guard_role is None or guard_role not in bot_member.roles:
                     raise RuntimeError(

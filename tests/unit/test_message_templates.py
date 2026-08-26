@@ -113,7 +113,7 @@ def test_subscribe_setup_instructions_readonly_omits_publish_step() -> None:
     )
     body = (embed.description or "") + " ".join(field.value or "" for field in embed.fields)
     assert "read-only" in body.casefold()
-    assert "no publish" in body.casefold()
+    assert "announcements" in body.casefold()
     assert "#subscribe" in body
     assert "Timecodes" in body
     assert "complete the **publish**" not in body.casefold()
@@ -135,7 +135,7 @@ def test_subscription_moderation_templates_split_by_mode() -> None:
     assert "Write mode" in (write.description or "")
     assert "publish" in (write.description or "").casefold()
     assert "Read-only mode" in (readonly.description or "")
-    assert "no publish channel" in (readonly.description or "").casefold()
+    assert "announcements" in (readonly.description or "").casefold()
     assert "Timecodes" in (write.description or "")
     assert "Timecodes" in (readonly.description or "")
 

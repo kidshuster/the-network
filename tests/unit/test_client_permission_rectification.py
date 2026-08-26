@@ -214,7 +214,7 @@ async def test_rectify_client_permissions_syncs_subscription_channels(
         mode: object = None,
     ) -> BatchApplyResult:
         ids = [getattr(r, "id", None) for r in resources]
-        assert ids == ["client", "profile", "publish", "subscribe"]
+        assert ids == ["client", "profile", "publish", "subscribe", "announcements"]
         return BatchApplyResult(
             results=[
                 ResourceApplyResult("client", True, channel=category),

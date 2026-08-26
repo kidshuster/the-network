@@ -142,7 +142,7 @@ async def run_mock_probe(
         return ProbeOutcome("client read-only", "publish strip/restore and welcome gate passed")
     if name == "relay.hub_announcement":
         if not state.announcement_channel_regular:
-            raise RuntimeError("network-announcements is not a regular text channel")
+            raise RuntimeError("📢-network-announcements is not a regular text channel")
         return ProbeOutcome("hub announcement relay", "fan-out dispatch passed")
     if name == "hub.rebuild":
         smoke = MockClient("Smoke Rebuild mock", smoke=True, subscriptions={"smoke"})
@@ -179,7 +179,7 @@ async def run_mock_probe(
         return ProbeOutcome("hub layout", "compiled layout matches simulated guild")
     if name == "hub.announcement_channel":
         if not state.announcement_channel_regular:
-            raise RuntimeError("network-announcements must be a regular text channel")
+            raise RuntimeError("📢-network-announcements must be a regular text channel")
         return ProbeOutcome("hub announcements wiring", "direct relay dispatch configured")
     if name == "hub.leaders_access":
         if not state.leaders_access or "leaders-channel" in state.stale_permission_targets:

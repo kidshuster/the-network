@@ -139,7 +139,11 @@ async def present_read_only(
 ) -> None:
     enabled = bool(getattr(value, "read_only", False))
     state = "on" if enabled else "off"
-    detail = "removed" if enabled else "restored for setup"
+    detail = (
+        "Publish channels were removed and announcements channels created."
+        if enabled
+        else "Announcements channels were removed and publish channels restored for setup."
+    )
     await _text(response, "read_only_toggle_updated", state=state, detail=detail)
 
 @recipe("present.subscription.create")

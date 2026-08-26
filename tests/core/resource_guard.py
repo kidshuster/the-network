@@ -9,6 +9,12 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bot.core.clients.names import (
+    CHANNEL_PREFIX_ANNOUNCEMENTS,
+    CHANNEL_PREFIX_NETWORK,
+    CHANNEL_PREFIX_PROFILE,
+    CHANNEL_PREFIX_PUBLISH,
+)
 from tests.core.constants import TEST_CLEANUP_REASON
 
 if TYPE_CHECKING:
@@ -50,12 +56,43 @@ SMOKE_CATEGORY_NAME_PREFIXES = (
     "Smoke Welcome ",
     "Smoke Readonly ",
 )
+_SMOKE_CHANNEL_NAME_PREFIXES = (
+    CHANNEL_PREFIX_PROFILE,
+    CHANNEL_PREFIX_PUBLISH,
+    CHANNEL_PREFIX_NETWORK,
+    CHANNEL_PREFIX_ANNOUNCEMENTS,
+)
+_SMOKE_CHANNEL_SUFFIXES = (
+    "-publish",
+    "-subscribe",
+    "-announcements",
+    "-profile",
+)
 
 _DIAG_NAME = re.compile(r"^diag", re.IGNORECASE)
 
 
 def is_smoke_client_server_name(server_name: str) -> bool:
     return server_name.startswith(SMOKE_CLIENT_SERVER_PREFIXES)
+
+
+def _smoke_channel_name_stem(name: str) -> str:
+    for prefix in _SMOKE_CHANNEL_NAME_PREFIXES:
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name
+
+
+def is_orphan_smoke_subscription_channel_name(name: str) -> bool:
+    """True for uncategorized smoke publish/subscribe/announcements/profile channels.
+
+    Accepts legacy ``smoke-…-publish`` names and emoji-prefixed product names
+    such as ``📤-smoke-accept-…-publish``.
+    """
+    stem = _smoke_channel_name_stem(name).casefold()
+    if not stem.startswith("smoke-"):
+        return False
+    return any(stem.endswith(suffix) for suffix in _SMOKE_CHANNEL_SUFFIXES)
 
 
 def is_test_channel_name(name: str) -> bool:
@@ -289,12 +326,7 @@ async def cleanup_hub_rebuild_smoke_artifacts(
             name = getattr(channel, "name", "")
             await _delete_channel(channel, bot_member=bot_member)
             removed.append(f"channel:{name}")
-        if category.channels:
-            logger.warning(
-                "Hub-rebuild cleanup: smoke category still has channels; skipping category delete",
-                extra={"category": category.name, "remaining": len(category.channels)},
-            )
-            continue
+        # Stale discord.py cache may still list deleted children; try delete anyway.
         try:
             await category.delete(reason=CLEANUP_REASON)
             removed.append(f"category:{category.name}")
@@ -316,28 +348,48 @@ async def cleanup_orphan_smoke_subscription_channels(
     guild: discord.Guild,
     context: BotContext,
 ) -> list[str]:
-    """Remove uncategorized publish/subscribe channels not owned by any live client.
+    """Remove uncategorized smoke client channels not owned by any live client.
+
+    Also deletes empty categories whose names look like mis-created smoke channel
+    names (emoji-prefixed publish/subscribe/announcements/profile), left behind when
+    ensure paths accidentally named categories after channels.
 
     Returns channel names the bot could not delete (requires manual removal in Discord).
     """
     referenced: set[int] = set()
     for client in await context.store.clients.list_all():
         referenced.add(client.profile_channel_id)
+        referenced.add(client.category_id)
         for subscription in await context.store.clients.list_subscriptions_by_client(client.id):
             if subscription.publish_channel_id is not None:
                 referenced.add(subscription.publish_channel_id)
             referenced.add(subscription.subscribe_channel_id)
+            if subscription.announcements_channel_id is not None:
+                referenced.add(subscription.announcements_channel_id)
 
     manual: list[str] = []
     for channel in list(guild.channels):
         if isinstance(channel, discord.CategoryChannel):
+            name = getattr(channel, "name", "")
+            if channel.id in referenced:
+                continue
+            if not is_orphan_smoke_subscription_channel_name(name):
+                continue
+            # Only delete empty (or stale-empty) misnamed categories.
+            live_children = [
+                child for child in channel.channels if guild.get_channel(child.id) is not None
+            ]
+            if live_children:
+                continue
+            try:
+                await channel.delete(reason=CLEANUP_REASON)
+            except discord.HTTPException:
+                manual.append(f"category:{name} ({channel.id})")
             continue
         if channel.category is not None:
             continue
         name = getattr(channel, "name", "")
-        if not name.casefold().startswith("smoke-"):
-            continue
-        if not (name.endswith("-publish") or name.endswith("-subscribe")):
+        if not is_orphan_smoke_subscription_channel_name(name):
             continue
         if channel.id in referenced:
             continue

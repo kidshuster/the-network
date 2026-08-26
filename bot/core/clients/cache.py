@@ -16,6 +16,7 @@ class ClientCache:
         self._client_repo = client_repo
         self._by_id: dict[int, Client] = {}
         self._by_publish_channel: dict[int, ClientSubscription] = {}
+        self._by_announcements_channel: dict[int, ClientSubscription] = {}
         self._by_subscription_id: dict[int, ClientSubscription] = {}
         self._subscriptions_by_network: dict[int, list[ClientSubscription]] = {}
 
@@ -40,6 +41,11 @@ class ClientCache:
             for sub in subscriptions
             if sub.publish_channel_id is not None
         }
+        self._by_announcements_channel = {
+            sub.announcements_channel_id: sub
+            for sub in subscriptions
+            if sub.announcements_channel_id is not None
+        }
         self._by_subscription_id = {sub.id: sub for sub in subscriptions}
         self._subscriptions_by_network = {}
         for sub in subscriptions:
@@ -59,6 +65,9 @@ class ClientCache:
     def get_by_publish_channel(self, channel_id: int) -> ClientSubscription | None:
         return self._by_publish_channel.get(channel_id)
 
+    def get_by_announcements_channel(self, channel_id: int) -> ClientSubscription | None:
+        return self._by_announcements_channel.get(channel_id)
+
     def get_subscription(self, subscription_id: int) -> ClientSubscription | None:
         return self._by_subscription_id.get(subscription_id)
 
@@ -70,6 +79,18 @@ class ClientCache:
         channel_id: int,
     ) -> ClientSubscription | None:
         sub = self._by_publish_channel.get(channel_id)
+        if sub is None or not sub.enabled:
+            return None
+        client = self._by_id.get(sub.client_id)
+        if client is None or not client.enabled:
+            return None
+        return sub
+
+    def get_enabled_subscription_by_announcements(
+        self,
+        channel_id: int,
+    ) -> ClientSubscription | None:
+        sub = self._by_announcements_channel.get(channel_id)
         if sub is None or not sub.enabled:
             return None
         client = self._by_id.get(sub.client_id)

@@ -32,3 +32,8 @@ stickies:
     template: subscribe_setup_instructions
     footer_marker: subscribe setup
     strategy: scoped
+
+  subscription-announcements:
+    template: client_announcements_guide
+    footer_marker: client announcements guide
+    strategy: scoped

@@ -4,7 +4,7 @@ leaders_access: false
 announcement_channel_regular: true
 missing_channels: [changelog]
 misplaced_channels: [admin, leaders-channel]
-wrong_channel_types: [network-announcements]
+wrong_channel_types: ["📢-network-announcements"]
 duplicate_channels: [leaders-channel]
 stale_permission_targets: [leaders-channel, changelog]
 stale_roles: [deleted-client-role]

@@ -851,6 +851,7 @@ class ClientStore:
         network_key: str,
         publish_channel_id: int | None,
         subscribe_channel_id: int,
+        announcements_channel_id: int | None = None,
         moderation_message_id: int | None = None,
         enabled: bool = True,
     ) -> ClientSubscription:
@@ -861,9 +862,10 @@ class ClientStore:
                 """
                 INSERT INTO client_subscriptions (
                     client_id, network_id, network_key, publish_channel_id,
-                    subscribe_channel_id, moderation_message_id,
+                    subscribe_channel_id, announcements_channel_id,
+                    moderation_message_id,
                     enabled, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     client_id,
@@ -871,6 +873,7 @@ class ClientStore:
                     normalized_key,
                     publish_channel_id,
                     subscribe_channel_id,
+                    announcements_channel_id,
                     moderation_message_id,
                     _enable_flag(enabled),
                     now,
@@ -989,6 +992,56 @@ class ClientStore:
         return await self._require_subscription_by_id(
             subscription_id,
             not_found="Subscription disappeared after publish channel update",
+        )
+
+    async def get_subscription_by_announcements_channel(
+        self,
+        announcements_channel_id: int,
+    ) -> ClientSubscription | None:
+        if announcements_channel_id <= 0:
+            return None
+        row = await self._db.fetchone(
+            "SELECT * FROM client_subscriptions WHERE announcements_channel_id = ?",
+            (announcements_channel_id,),
+        )
+        return ClientSubscriptionRow.from_row(row) if row else None
+
+    async def update_announcements_channel_id(
+        self,
+        subscription_id: int,
+        announcements_channel_id: int | None,
+    ) -> ClientSubscription:
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET announcements_channel_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (announcements_channel_id, now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after announcements channel update",
+        )
+
+    async def update_announcements_sticky_message_id(
+        self,
+        subscription_id: int,
+        message_id: int | None,
+    ) -> ClientSubscription:
+        now = _now_iso()
+        await self._db.execute(
+            """
+            UPDATE client_subscriptions
+            SET announcements_sticky_message_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (message_id, now, subscription_id),
+        )
+        return await self._require_subscription_by_id(
+            subscription_id,
+            not_found="Subscription disappeared after announcements sticky update",
         )
 
     async def list_subscriptions_by_network(

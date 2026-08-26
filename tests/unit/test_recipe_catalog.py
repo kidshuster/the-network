@@ -38,6 +38,7 @@ def test_catalog_exposes_stable_public_operations() -> None:
         "clients.rectify",
         "hub.ensure_installs",
         "hub.handle_announcement",
+        "hub.handle_client_announcement",
         "hub.initialize",
         "hub.migrate",
         "hub.reset_data",

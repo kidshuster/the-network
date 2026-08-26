@@ -2,9 +2,9 @@ kind: embed
 title: "Connect your subscribe channel (read-only)"
 colour: blurple
 description: |
-  This client is **read-only**: you only **receive** network announcements.
+  This client is **read-only**: you **receive** network announcements on subscribe, and can still **post** via the **`📢-…-announcements`** channel (blacklist rules apply).
 
-  There is **no publish channel**. Setup is complete after you connect and confirm this subscribe feed.
+  Setup is complete after you connect and confirm this subscribe feed.
 fields:
   - name: Steps
     value: |
@@ -15,11 +15,11 @@ fields:
   - name: Timecodes
     value: |
       Incoming posts may already include Discord timestamps from publishers with Timecodes enabled.
-      Your profile **Timecodes** toggle only affects messages *you* would publish — it stays available if you later turn **Read-only** off.
+      Your profile **Timecodes** toggle also converts times in posts you send from the announcements channel.
     inline: false
   - name: Profile toggles
     value: |
-      **Read-only: On** — receive-only; no publish setup.
-      Turn **Read-only: Off** on the profile card if this client should also announce into the network (a publish channel is created and its setup card appears).
+      **Read-only: On** — subscribe + hub announcements channel (no Channel Follow publish).
+      Turn **Read-only: Off** on the profile card to remove announcements and create a normal publish channel.
     inline: false
 footer: "The Network • subscribe setup • removed after you confirm"

@@ -37,5 +37,6 @@ async def deliver_relay_message(
 @recipe("relay.on_message")
 async def on_message(recipe_context: RecipeContext, *, message: discord.Message) -> Any:
     await recipe_context.run("hub.handle_announcement", message=message)
+    await recipe_context.run("hub.handle_client_announcement", message=message)
     return await recipe_context.run("relay.deliver", message=message)
 

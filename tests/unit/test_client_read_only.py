@@ -9,6 +9,7 @@ from subscription_helpers import make_client_subscription
 
 from bot.core.models.client import Client
 from bot.features.recipes.hub.clients.subscription import (
+    ensure_client_announcements_channels,
     ensure_client_publish_channels,
     strip_client_publish_channels,
 )
@@ -77,6 +78,11 @@ async def test_ensure_client_publish_channels_creates_missing(
     publish = MagicMock(spec=discord.TextChannel, id=777)
     from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
+    apply_layout = AsyncMock(
+        return_value=BatchApplyResult(
+            results=[ResourceApplyResult("publish", True, channel=publish)]
+        )
+    )
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
@@ -87,11 +93,7 @@ async def test_ensure_client_publish_channels_creates_missing(
     )
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.apply_layout",
-        AsyncMock(
-            return_value=BatchApplyResult(
-                results=[ResourceApplyResult("publish", True, channel=publish)]
-            )
-        ),
+        apply_layout,
     )
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.reorder_client_category_channels",
@@ -115,6 +117,85 @@ async def test_ensure_client_publish_channels_creates_missing(
     )
 
     client_repo.update_publish_channel_id.assert_awaited_once_with(5, 777)
+    _assert_apply_keeps_client_category(apply_layout, client.server_name, category_id=10)
+
+
+@pytest.mark.asyncio
+async def test_ensure_client_announcements_channels_keeps_category_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild, bot, human_mod, access, _ = make_guild_with_roles()
+    client = _client(read_only=True)
+    subscription = make_client_subscription(
+        id=5,
+        publish_channel_id=None,
+        announcements_channel_id=None,
+    )
+
+    client_role = MagicMock(spec=discord.Role, id=20, position=1)
+    client_role.is_default.return_value = False
+    category = MagicMock(spec=discord.CategoryChannel, id=10)
+    category.channels = []
+    guild.get_role = MagicMock(return_value=client_role)
+    guild.get_channel = MagicMock(return_value=category)
+
+    announcements = MagicMock(spec=discord.TextChannel, id=888)
+    from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
+
+    apply_layout = AsyncMock(
+        return_value=BatchApplyResult(
+            results=[ResourceApplyResult("announcements", True, channel=announcements)]
+        )
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.resolve_human_moderator_role",
+        MagicMock(return_value=human_mod),
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.resolve_access_role",
+        MagicMock(return_value=access),
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.apply_layout",
+        apply_layout,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.reorder_client_category_channels",
+        AsyncMock(),
+    )
+
+    client_repo = MagicMock()
+    client_repo.list_subscriptions_by_client = AsyncMock(return_value=[subscription])
+    client_repo.update_announcements_channel_id = AsyncMock(
+        return_value=make_client_subscription(id=5, announcements_channel_id=888)
+    )
+    network_repo = MagicMock()
+
+    await ensure_client_announcements_channels(
+        guild,
+        bot,
+        client=client,
+        client_repo=client_repo,
+        network_repo=network_repo,
+        access_role_name="The Network",
+    )
+
+    client_repo.update_announcements_channel_id.assert_awaited_once_with(5, 888)
+    _assert_apply_keeps_client_category(apply_layout, client.server_name, category_id=10)
+
+
+def _assert_apply_keeps_client_category(
+    apply_layout: AsyncMock,
+    server_name: str,
+    *,
+    category_id: int,
+) -> None:
+    assert apply_layout.await_count == 1
+    _args, kwargs = apply_layout.await_args
+    resources = _args[1]
+    client_resource = next(resource for resource in resources if resource.id == "client")
+    assert client_resource.name == server_name
+    assert kwargs.get("bound_ids") == {"client": category_id}
 
 
 @pytest.mark.asyncio
@@ -147,7 +228,7 @@ async def test_toggle_read_only_recipe_strips_then_ensures(
         ),
         core=SimpleNamespace(
             store=SimpleNamespace(clients=store_clients, networks=MagicMock()),
-            refresh_client_counts=AsyncMock(),
+            refresh_projections=AsyncMock(),
         ),
     )
 
@@ -167,15 +248,25 @@ async def test_toggle_read_only_recipe_strips_then_ensures(
         "bot.features.recipes.client.interaction_view_registry",
         MagicMock(return_value=MagicMock()),
     )
-    strip = AsyncMock()
-    ensure = AsyncMock()
+    strip_publish = AsyncMock()
+    ensure_publish = AsyncMock()
+    strip_announcements = AsyncMock()
+    ensure_announcements = AsyncMock()
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.strip_client_publish_channels",
-        strip,
+        strip_publish,
     )
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.subscription.ensure_client_publish_channels",
-        ensure,
+        ensure_publish,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.strip_client_announcements_channels",
+        strip_announcements,
+    )
+    monkeypatch.setattr(
+        "bot.features.recipes.hub.clients.subscription.ensure_client_announcements_channels",
+        ensure_announcements,
     )
     monkeypatch.setattr(
         "bot.features.recipes.hub.clients.profile_sync.refresh_client_profile_message",
@@ -197,5 +288,7 @@ async def test_toggle_read_only_recipe_strips_then_ensures(
         )
 
     assert result.read_only is True
-    strip.assert_awaited_once()
-    ensure.assert_not_awaited()
+    strip_publish.assert_awaited_once()
+    ensure_announcements.assert_awaited_once()
+    ensure_publish.assert_not_awaited()
+    strip_announcements.assert_not_awaited()

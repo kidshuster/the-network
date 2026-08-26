@@ -20,6 +20,6 @@ fields:
   - name: Profile toggles
     value: |
       **Read-only: Off** — you can publish and subscribe.
-      Switch **Read-only: On** only if this client should receive network posts and never publish (the publish channel is removed).
+      Switch **Read-only: On** to remove the publish channel and create an announcements channel for hub-side posts (blacklists still apply).
     inline: false
 footer: "The Network • subscribe setup • removed after you confirm"

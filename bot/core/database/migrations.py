@@ -730,6 +730,29 @@ async def _migration_v17(db: Database) -> None:
     await db.connection.commit()
 
 
+async def _migration_v18(db: Database) -> None:
+    """Read-only announcements channel + sticky message ids on subscriptions."""
+    cursor = await db.connection.execute("PRAGMA table_info(client_subscriptions)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    await cursor.close()
+    if "announcements_channel_id" not in columns:
+        await db.connection.execute(
+            "ALTER TABLE client_subscriptions ADD COLUMN announcements_channel_id INTEGER"
+        )
+    if "announcements_sticky_message_id" not in columns:
+        await db.connection.execute(
+            "ALTER TABLE client_subscriptions "
+            "ADD COLUMN announcements_sticky_message_id INTEGER"
+        )
+    await db.connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_client_subscriptions_announcements
+            ON client_subscriptions(announcements_channel_id)
+        """
+    )
+    await db.connection.commit()
+
+
 MIGRATIONS: dict[int, MigrationFn] = {
     1: _migration_v1,
     2: _migration_v2,
@@ -748,6 +771,7 @@ MIGRATIONS: dict[int, MigrationFn] = {
     15: _migration_v15,
     16: _migration_v16,
     17: _migration_v17,
+    18: _migration_v18,
 }
 
 
