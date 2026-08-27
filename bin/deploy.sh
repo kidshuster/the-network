@@ -230,10 +230,16 @@ if [[ "${SKIP_IMAGE_PUSH}" -eq 0 ]]; then
   require_docker_buildx || exit 1
 
   BUILDER="${THE_NETWORK_BUILDX_BUILDER:-the-network-builder}"
-  if ! docker buildx inspect "${BUILDER}" >/dev/null 2>&1; then
-    docker buildx create --name "${BUILDER}" --use
+  if docker buildx inspect "${BUILDER}" >/dev/null 2>&1; then
+    if ! docker buildx inspect --bootstrap "${BUILDER}" >/dev/null 2>&1; then
+      echo "Buildx builder ${BUILDER} is stale (common after WSL remount); recreating..."
+      docker buildx rm -f "${BUILDER}" >/dev/null 2>&1 || true
+      docker buildx create --name "${BUILDER}" --use
+    else
+      docker buildx use "${BUILDER}"
+    fi
   else
-    docker buildx use "${BUILDER}"
+    docker buildx create --name "${BUILDER}" --use
   fi
 
   docker buildx build \

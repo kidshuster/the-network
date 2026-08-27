@@ -1,4 +1,14 @@
 releases:
+  "1.3.2":
+    post: true
+    summary: "Read-only clients, emoji channel naming, and Blacklist sticky refresh."
+    changes:
+      - "Add Read-only profile toggle: subscribe-only setup, no publish channel, welcome not resent when leaving read-only."
+      - "Read-only clients get blacklist-aware 📢 announcements channels; publish/subscribe/profile use distinct emoji prefixes."
+      - "Retool join, setup, and profile copy for read-only vs write mode and Timecodes guidance."
+      - "Fix Blacklist on moderation stickies: reconcile now refreshes fully configured cards after publish connects."
+      - "Space Discord timecodes when the next character would glue; date parser uses the expression timezone for next-occurrence."
+      - "Gate #changelog posts with post: true; add UI inventory tests so button/select regressions fail in ./test --dev."
   "1.3.1":
     summary: "Harden slash replies when the deferred thinking message is dismissed."
     changes:
