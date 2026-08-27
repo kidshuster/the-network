@@ -68,6 +68,20 @@ def test_subscription_moderation_view_subscribe_connected_button() -> None:
     assert labels == {SUBSCRIBED_CHANNEL_CONNECTED_LABEL, "Leave stingers"}
 
 
+def test_subscription_moderation_view_includes_blacklist_when_enabled() -> None:
+    bot = wire_widget_bot()
+    view = render_view(
+        "subscription_moderation",
+        bot,
+        subscription_id=3,
+        network_key="stingers",
+        show_subscribe_connected=False,
+        show_blacklist=True,
+    )
+    labels = {child.label for child in view.children if isinstance(child, discord.ui.Button)}
+    assert labels == {"Blacklist", "Leave stingers"}
+
+
 def test_subscription_moderation_view_not_configured_includes_leave() -> None:
     bot = wire_widget_bot()
     view = render_view(

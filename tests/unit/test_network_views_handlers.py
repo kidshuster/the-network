@@ -367,10 +367,11 @@ async def test_delete_button_shows_confirm_prompt_for_client_role_holder() -> No
     view = render_view("network_profile", bot, client_id=client.id, network_keys=["stingers"])
     await _click_label(view, "Delete Client", interaction)
 
-    kwargs = interaction.response.send_message.await_args.kwargs
+    assert interaction.followup.send.await_count == 1
+    kwargs = interaction.followup.send.await_args.kwargs
     prompt = kwargs.get("content") or (
-        interaction.response.send_message.await_args.args[0]
-        if interaction.response.send_message.await_args.args
+        interaction.followup.send.await_args.args[0]
+        if interaction.followup.send.await_args.args
         else ""
     )
     assert client.server_name in prompt
@@ -481,6 +482,73 @@ async def test_blacklist_button_reports_no_targets() -> None:
     await _click_label(view, "Blacklist", interaction)
 
     assert _user_message(interaction) == render_text("no_blacklist_targets")
+
+
+@pytest.mark.asyncio
+async def test_blacklist_button_opens_select_and_replace_updates() -> None:
+    guild, _, _, _, _ = make_guild_with_roles()
+    client = _client()
+    peer = Client(
+        id=2,
+        guild_id=100,
+        server_name="PeerCo",
+        display_name="PeerCo",
+        category_id=11,
+        client_role_id=21,
+        profile_channel_id=31,
+        profile_message_id=41,
+        enabled=True,
+        timecode_enabled=False,
+        read_only=False,
+        emoji_id=None,
+        emoji_name=None,
+        image_hash=None,
+        degraded_reason=None,
+    )
+    client_role = MagicMock(spec=discord.Role, id=20)
+    member = make_member(guild=guild, roles=[client_role])
+    subscription = make_client_subscription(id=5, client_id=1, network_id=2)
+    peer_sub = make_client_subscription(id=6, client_id=2, network_id=2)
+
+    context = MagicMock()
+    context.store.clients.get_subscription_by_id = AsyncMock(return_value=subscription)
+    context.store.clients.get_by_id = AsyncMock(side_effect=lambda i: {1: client, 2: peer}[i])
+    context.store.clients.list_subscriptions_by_network = AsyncMock(
+        return_value=[subscription, peer_sub]
+    )
+    context.store.clients.list_blacklisted_client_ids = AsyncMock(return_value=[])
+    context.store.clients.add_blacklist = AsyncMock()
+    context.store.clients.remove_blacklist = AsyncMock()
+    context.store.networks.get_by_id = AsyncMock(return_value=MagicMock(id=2, key="stingers"))
+
+    bot = _bot(context)
+    guild.get_role = MagicMock(return_value=client_role)
+
+    open_interaction = make_interaction(guild=guild, user=member)
+    view = render_view(
+        "subscription_moderation",
+        bot,
+        subscription_id=subscription.id,
+        network_key="stingers",
+        show_blacklist=True,
+    )
+    await _click_label(view, "Blacklist", open_interaction)
+
+    assert open_interaction.followup.send.await_count == 1
+    kwargs = open_interaction.followup.send.await_args.kwargs
+    assert "block" in str(kwargs.get("content") or "").casefold()
+    select_view = kwargs["view"]
+    select = next(
+        child for child in select_view.children if isinstance(child, discord.ui.Select)
+    )
+    assert [(opt.label, opt.value) for opt in select.options] == [("PeerCo", "2")]
+
+    submit = make_interaction(guild=guild, user=member)
+    submit.data = {"values": ["2"]}
+    await select.callback(submit)
+
+    context.store.clients.add_blacklist.assert_awaited_once_with(5, 2)
+    assert _user_message(submit) == render_text("blacklist_updated", count="1")
 
 
 @pytest.mark.asyncio

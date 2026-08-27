@@ -17,12 +17,18 @@ def make_interaction(
     interaction.user = user
     interaction.channel = channel
     interaction.response = MagicMock()
-    interaction.response.is_done.return_value = deferred
-    interaction.response.defer = AsyncMock()
+    done = {"value": deferred}
+    interaction.response.is_done = MagicMock(side_effect=lambda: done["value"])
+
+    async def _defer(**_kwargs: object) -> None:
+        done["value"] = True
+
+    interaction.response.defer = AsyncMock(side_effect=_defer)
     interaction.response.send_message = AsyncMock()
     interaction.response.send_modal = AsyncMock()
     interaction.followup = MagicMock()
     interaction.followup.send = AsyncMock()
+    interaction.data = {}
     return interaction
 
 

@@ -53,7 +53,7 @@ def validate_template_triggers(catalog: TriggerCatalog | None = None) -> None:
     """Fail fast when YAML ``trigger:`` ids are missing from the app catalog."""
     resolved = catalog if catalog is not None else build_trigger_catalog()
     known = resolved.ids()
-    ui_kinds = {TriggerKind.BUTTON, TriggerKind.MODAL}
+    ui_kinds = {TriggerKind.BUTTON, TriggerKind.SELECT, TriggerKind.MODAL}
     errors: list[str] = []
     for location, trigger_id in _iter_trigger_refs():
         if trigger_id not in known:
@@ -66,7 +66,8 @@ def validate_template_triggers(catalog: TriggerCatalog | None = None) -> None:
             continue
         if spec.kind not in ui_kinds:
             errors.append(
-                f"{location}: trigger {trigger_id!r} is {spec.kind.value}, expected button/modal"
+                f"{location}: trigger {trigger_id!r} is {spec.kind.value}, "
+                f"expected button/select/modal"
             )
     if errors:
         raise TriggerCatalogError("Invalid template triggers:\n" + "\n".join(errors))

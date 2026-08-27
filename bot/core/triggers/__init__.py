@@ -11,6 +11,7 @@ class TriggerKind(StrEnum):
     DISCORD_EVENT = "discord_event"
     APP_EVENT = "app_event"
     BUTTON = "button"
+    SELECT = "select"
     MODAL = "modal"
 
 

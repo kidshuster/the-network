@@ -141,10 +141,14 @@ async def test_moderation_embed_edits_prior_message_in_profile() -> None:
 
 
 @pytest.mark.asyncio
-async def test_moderation_embed_reconcile_skips_when_fully_configured() -> None:
+async def test_moderation_embed_reconcile_refreshes_when_fully_configured() -> None:
+    """Reconcile must refresh views so Blacklist appears after publish connects."""
     profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.id = 30
+    prior = MagicMock(spec=discord.Message)
+    prior.edit = AsyncMock()
+    profile_channel.fetch_message = AsyncMock(return_value=prior)
     profile_channel.send = AsyncMock()
-    profile_channel.fetch_message = AsyncMock()
 
     guild = MagicMock(spec=discord.Guild)
     guild.get_channel = MagicMock(return_value=profile_channel)
@@ -160,6 +164,41 @@ async def test_moderation_embed_reconcile_skips_when_fully_configured() -> None:
         client=_client(),
         network=_network(),
         subscription=_subscription(moderation_message_id=888),
+        setup_state=SubscriptionSetupState(
+            publish_configured=True,
+            subscribe_confirmed=True,
+            network_active=True,
+        ),
+        setup_mode="reconcile",
+        view_registry=make_test_view_registry(),
+    )
+
+    profile_channel.fetch_message.assert_awaited_once_with(888)
+    prior.edit.assert_awaited_once()
+    profile_channel.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_moderation_embed_reconcile_does_not_create_when_missing() -> None:
+    profile_channel = MagicMock(spec=discord.TextChannel)
+    profile_channel.id = 30
+    profile_channel.fetch_message = AsyncMock()
+    profile_channel.send = AsyncMock()
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.get_channel = MagicMock(return_value=profile_channel)
+
+    bot = MagicMock()
+    bot.add_view = MagicMock()
+    context = MagicMock()
+
+    await post_subscription_moderation_embed(
+        bot,
+        context,
+        guild,
+        client=_client(),
+        network=_network(),
+        subscription=_subscription(moderation_message_id=None),
         setup_state=SubscriptionSetupState(
             publish_configured=True,
             subscribe_confirmed=True,

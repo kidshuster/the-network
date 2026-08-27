@@ -242,8 +242,10 @@ async def post_subscription_moderation_embed(
             read_only=client.read_only,
         )
 
-    if setup_mode == "reconcile" and setup_state.fully_configured:
-        return
+    # Always refresh an existing moderation card on reconcile (including when the
+    # subscription just became fully configured). Skipping that left stickies without
+    # Blacklist after publish connected, and froze pre-tn1 custom IDs forever.
+    # Reconcile still must not create a new moderation message if none exists.
 
     publish_channel = await fetch_publish_channel(guild, subscription)
     subscribe_channel = await fetch_subscribe_channel(guild, subscription)
