@@ -20,7 +20,7 @@ from bot.features.channels.layout.inventory import gather_guild_inventory
 from bot.features.channels.layout.loader import clear_layout_cache
 from bot.features.channels.layout.managed import hub_channel_aliases, hub_channel_name
 from bot.features.channels.layout.roles import LayoutContext
-from bot.features.channels.resolve import HUB_CHANNEL_ADMIN
+from bot.features.channels.resources import HUB_CHANNEL_ADMIN
 from bot.features.recipes.hub.migrate import HubMigrationResult, desired_hub_migration_resources
 
 

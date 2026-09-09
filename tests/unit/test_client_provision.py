@@ -54,7 +54,7 @@ async def test_provision_client_creates_role_category_profile(
         AsyncMock(return_value=bot_access),
     )
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.roles.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(

@@ -1,0 +1,93 @@
+# Behavioral fixtures for the staged temporal pipeline.
+# Production recognition no longer loads this file.
+
+valid:
+  - "Saturday at 10am pst"
+  - "this Saturday at 10am pst"
+  - "Sat at 10am pst"
+  - "tomorrow at noon"
+  - "Friday at 3 pm"
+  - "Jan 15, 2026 at 8 pm"
+  - "today at 8 pm pst"
+  - "next friday at 7 pm cst"
+  - "4 pm pst"
+  - "16:00 utc"
+  - "2026-08-07 14:30"
+  - "3/15/2026 4:00 pm"
+  - "march 3 2026 6 pm"
+  - "noon"
+  - "Can we do the raid around eight tomorrow night?"
+  - "Let's meet a little after 7 on Friday evening."
+  - "I should be online by quarter past nine tonight."
+  - "How about this coming Sunday around noon?"
+  - "The run is planned for the evening of September 14."
+  - "Raid should start sometime around 8 tomorrow."
+  - "Can everyone make next Friday at about 7 PM PST?"
+  - "We'll probably go Saturday evening around nine."
+  - "Let's try the 14th at noon."
+  - "Maybe tomorrow night at eight eastern."
+  - "half past eight tonight"
+  - "8 pm pt"
+  - "20:00 gmt"
+  - "Patch 1.4.2 drops Friday at 7 pm pst"
+
+invalid:
+  - "8 players"
+  - "15 million morale"
+  - "version 1.3.2"
+  - "1535347363604865105"
+  - "Check the pinned message for rules"
+  - "There are 8 players in the raid."
+  - "Boss 2 has 15 million morale."
+  - "Version 2026.8.7 is deployed."
+  - "/mirror id:1535347363604865105 mirrorkey:stinghublive."
+  - "Use </network status:123456789012345678> after the raid."
+  - "See https://example.com/2026/09/14 for details."
+  - "My ID is 1535347363604865105."
+  - "Patch 1.4.2 should release soon."
+  - "Welcome to the server!"
+  - "See you at never o'clock"
+  - "Ping 8.8.8.8 before the raid."
+  - "Build number 2026 alone is not a date."
+
+multi_match:
+  - input: "Meet at 4 pm pst and again tomorrow at noon"
+    count: 2
+  - input: "Friday at 8 works, otherwise Saturday at 9"
+    count: 2
+  - input: "Doors open at 7 PM and the event starts at 8 PM"
+    count: 2
+  - input: "A at 1 pm pst, B at 2 pm pst, C at 3 pm pst"
+    count: 3
+  - input: "Raid ||Saturday at 10am pst|| and backup `Sunday at noon`"
+    count: 2
+
+formatting:
+  - "**Saturday at 10am pst**"
+  - "_Saturday at 10am pst_"
+  - "||Saturday at 10am pst||"
+  - "SATURDAY AT 10AM PST"
+
+# Phrases that may fail extraction or interpretation; documented for hardness.
+# status: converts | extractor_failure | interpretation_failure
+documented_soft:
+  - phrase: "Can we do the raid around eight tomorrow night?"
+    status: converts
+  - phrase: "Let's meet a little after 7 on Friday evening."
+    status: converts
+  - phrase: "I should be online by quarter past nine tonight."
+    status: converts
+  - phrase: "How about this coming Sunday around noon?"
+    status: converts
+  - phrase: "The run is planned for the evening of September 14."
+    status: converts
+  - phrase: "Raid should start sometime around 8 tomorrow."
+    status: converts
+  - phrase: "Can everyone make next Friday at about 7 PM PST?"
+    status: converts
+  - phrase: "We'll probably go Saturday evening around nine."
+    status: converts
+  - phrase: "Let's try the 14th at noon."
+    status: converts
+  - phrase: "Maybe tomorrow night at eight eastern."
+    status: converts

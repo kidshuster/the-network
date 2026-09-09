@@ -259,7 +259,7 @@ async def sync_changelog_on_ready(
         return
 
     from bot.core.networks.roles import resolve_operator_role_by_name
-    from bot.features.channels.resolve import resolve_human_moderator_role
+    from bot.features.channels.roles import resolve_human_moderator_role
 
     human_moderator_role = resolve_human_moderator_role(guild)
     operator_role = resolve_operator_role_by_name(

@@ -15,7 +15,7 @@ from bot.core.networks.roles import (
 from bot.features.channels.layout import LayoutContext, compile_hub
 from bot.features.channels.layout.compiler import ResourceKind
 from bot.features.channels.layout.managed import hub_category_name, hub_channel_name
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_LEADERS,
     HUB_CATEGORY_MODERATION,
     HUB_CATEGORY_NETWORK,
@@ -28,8 +28,8 @@ from bot.features.channels.resolve import (
     HUB_CHANNEL_RULES,
     resolve_hub_category,
     resolve_hub_channel,
-    resolve_human_moderator_role,
 )
+from bot.features.channels.roles import resolve_human_moderator_role
 
 
 @dataclass(frozen=True)

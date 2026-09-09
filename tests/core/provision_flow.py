@@ -331,7 +331,7 @@ async def cleanup_smoke_join_request_messages(
     if not request_ids:
         return
 
-    from bot.features.channels.resolve import resolve_join_requests_channel
+    from bot.features.channels.resources import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     for request_id in request_ids:
@@ -361,7 +361,7 @@ async def cleanup_join_requests_smoke_artifacts(
     bot_member: discord.Member,
 ) -> None:
     """Remove smoke join-request messages and DB rows from `#join-requests`."""
-    from bot.features.channels.resolve import resolve_join_requests_channel
+    from bot.features.channels.resources import resolve_join_requests_channel
 
     channel = resolve_join_requests_channel(guild)
     if channel is not None:
@@ -765,7 +765,7 @@ async def run_hub_rebuild_smoke_flow(
 ) -> HubRebuildSmokeState:
     """Provision client, uninit hub, init hub, recreate network, verify relink."""
     from bot.app.widgets import PersistentViewRegistry
-    from bot.features.channels.resolve import resolve_join_requests_channel
+    from bot.features.channels.resources import resolve_join_requests_channel
     from bot.features.recipes.hub.data_reset import reset_hub_layout_data
     from bot.features.recipes.hub.initialize import initialize_guild
     from bot.features.recipes.hub.network.service import create_network
@@ -947,7 +947,7 @@ async def run_hub_rebuild_smoke_flow(
             resolve_operator_role_by_name,
         )
         from bot.features.channels.layout import LayoutContext, compile_client
-        from bot.features.channels.resolve import resolve_human_moderator_role
+        from bot.features.channels.roles import resolve_human_moderator_role
 
         access = resolve_access_role(
             guild,

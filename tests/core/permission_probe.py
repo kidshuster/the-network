@@ -158,7 +158,7 @@ async def verify_provision_permissions_live(
         validate_provision_permissions,
     )
     from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
-    from bot.features.channels.resolve import resolve_human_moderator_role
+    from bot.features.channels.roles import resolve_human_moderator_role
 
     _ = access_role_name
     suffix = secrets.token_hex(3)

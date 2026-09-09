@@ -7,10 +7,8 @@ import discord
 from bot.constants import LEGACY_MODERATOR_ROLE_NAME
 from bot.core.discord.step_runner import run_guild_step
 from bot.features.channels.layout.managed import hub_channel_name
-from bot.features.channels.resolve import (
-    HUB_CHANNEL_JOIN_REQUESTS,
-    resolve_human_moderator_role,
-)
+from bot.features.channels.resources import HUB_CHANNEL_JOIN_REQUESTS
+from bot.features.channels.roles import resolve_human_moderator_role
 from bot.features.recipes.hub.result import GuildInitResult
 
 _MODERATOR_GUILD_PERMISSIONS = discord.Permissions(

@@ -16,7 +16,7 @@ from bot.core.models.client_subscription import ClientSubscription
 from bot.core.models.network import Network
 from bot.core.templates import render_embed, render_text
 from bot.core.views import ViewRegistry
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_MODERATION,
     HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
     resolve_hub_category,

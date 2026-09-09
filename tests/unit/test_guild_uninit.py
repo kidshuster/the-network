@@ -10,7 +10,10 @@ from bot.constants import (
     DEFAULT_NETWORK_OPERATOR_ROLE_NAME,
     LEGACY_MODERATOR_ROLE_NAME,
 )
-from bot.features.channels.resolve import CHANNEL_ADMIN, CHANNEL_RULES
+from bot.features.channels.resources import (
+    CHANNEL_ADMIN,
+    CHANNEL_RULES,
+)
 from bot.features.recipes.hub.uninitialize import (
     collect_uninit_targets,
     is_deletable_hub_role,

@@ -11,7 +11,7 @@ from bot.contracts.recipes import RecipeContext, recipe
 from bot.core.views import ViewRegistry
 from bot.features.channels.layout.loader import load_layout
 from bot.features.channels.layout.schema import ChannelInstallSpec
-from bot.features.channels.resolve import resolve_hub_channel
+from bot.features.channels.resources import resolve_hub_channel
 from bot.features.channels.stickies.loader import sticky_spec
 from bot.features.recipes.hub.result import GuildInitResult
 

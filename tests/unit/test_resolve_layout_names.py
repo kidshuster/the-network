@@ -11,7 +11,7 @@ from bot.features.channels.layout.managed import (
     hub_channel_aliases,
     hub_channel_name,
 )
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_MODERATION,
     HUB_CATEGORY_NETWORK,
     HUB_CHANNEL_ADMIN,

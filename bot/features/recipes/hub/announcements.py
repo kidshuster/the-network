@@ -11,7 +11,7 @@ from bot.config import Settings
 from bot.contracts.recipes import recipe
 from bot.core.networks.roles import resolve_operator_role_by_name
 from bot.core.templates import render_embed
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_MODERATION,
     HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
     resolve_hub_category,
@@ -69,7 +69,7 @@ def can_post_hub_announcement(
     guild: discord.Guild,
     settings: Settings,
 ) -> bool:
-    from bot.features.channels.resolve import resolve_human_moderator_role
+    from bot.features.channels.roles import resolve_human_moderator_role
 
     operator = resolve_operator_role_by_name(
         guild,

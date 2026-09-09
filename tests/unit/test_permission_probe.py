@@ -203,7 +203,7 @@ async def test_verify_provision_permissions_live_runs_and_cleans_up(
     guild.create_text_channel = AsyncMock(side_effect=[channel, publish_channel])
 
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.roles.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(
@@ -303,7 +303,7 @@ async def test_verify_provision_permissions_live_fails_at_profile_channel_50013(
     from bot.features.channels.layout.applier import BatchApplyResult, ResourceApplyResult
 
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.roles.resolve_human_moderator_role",
         MagicMock(return_value=human_mod),
     )
     monkeypatch.setattr(

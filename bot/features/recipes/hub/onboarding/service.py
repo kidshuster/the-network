@@ -17,7 +17,7 @@ from bot.core.models.errors import ProfileValidationError
 from bot.core.models.profile_image import ProfileImage, ProfileImageAttachment
 from bot.core.models.server_request import ServerRequest, ServerRequestStatus
 from bot.core.views import ViewRegistry
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_MODERATION,
     HUB_CHANNEL_JOIN_REQUESTS,
     resolve_hub_category,
@@ -220,7 +220,7 @@ class ServerRequestService:
         )
         try:
             from bot.core.relay.delivery import build_moderator_join_request_send_kwargs
-            from bot.features.channels.resolve import resolve_human_moderator_role
+            from bot.features.channels.roles import resolve_human_moderator_role
 
             send_kwargs = build_moderator_join_request_send_kwargs(
                 resolve_human_moderator_role(guild),

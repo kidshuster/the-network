@@ -5,13 +5,15 @@ Architecture (extract → interpret → validate → replace):
 1. ``sanitize_for_dates`` — normalize text; keep an index map to the original
 2. ``protect_non_temporal_spans`` — mask IDs, URLs, versions, slash commands
 3. ``find_temporal_candidates`` — broad extraction via ``dateparser.search``
-   (``strategy="ngram"``) plus a tiny high-precision regex fallback
-4. ``parse_expression`` — Network timezone / next-occurrence interpretation
-5. ``validate_temporal_candidate`` — drop false positives
-6–7. ``replace_dates`` — map spans back and stitch ``<t:UNIX>`` chips
+4. ``find_strict_temporal_candidates`` — tiny high-precision regex fallback
+5. ``merge_temporal_candidates`` — prefer broader spans; drop overlaps
+6. ``parse_expression`` — Network timezone / next-occurrence interpretation
+7. ``validate_temporal_candidate`` — drop false positives
+8. ``replace_dates`` — map spans back and stitch ``<t:UNIX>`` chips
 
-The search extractor is intentionally swappable later (e.g. ctparse) without
-changing interpretation, validation, or replacement.
+Extraction locates likely temporal substrings. Interpretation decides what
+they mean. Validation decides whether to trust them. Keep those separate so
+the extractor stays swappable (e.g. ctparse) without rewriting Network rules.
 """
 
 from __future__ import annotations
@@ -46,8 +48,8 @@ TZ_MAP = {
 
 TZ_PATTERN = "(?:pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt)"
 
-# Explicit-date cues for next_occurrence gating (not a candidate catalog).
-_DATE_HINTS: tuple[re.Pattern[str], ...] = (
+# Explicit-date cues for next_occurrence gating (interpretation only).
+_EXPLICIT_DATE_HINTS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\d{4}-\d{1,2}-\d{1,2}"),
     re.compile(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?"),
     re.compile(
@@ -63,7 +65,7 @@ _DATE_HINTS: tuple[re.Pattern[str], ...] = (
 )
 
 # Tiny high-precision fallback when search_dates misses reliable clock/ISO forms.
-_FALLBACK_PATTERNS: tuple[re.Pattern[str], ...] = (
+_STRICT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         rf"\b\d{{1,2}}(?::\d{{2}})?\s*(?:am|pm)(?:\s+{TZ_PATTERN})?\b",
         re.IGNORECASE,
@@ -85,29 +87,37 @@ _PROTECT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"/mirror\b[^\n]*", re.IGNORECASE),
 )
 
-_TEMPORAL_CUE = re.compile(
-    r"""
-    \b(?:
-        am|pm|noon|midnight|morning|evening|night|tonight|today|tomorrow|
-        monday|tuesday|wednesday|thursday|friday|saturday|sunday|
-        mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|
-        jan[a-z]*|feb[a-z]*|mar[a-z]*|apr[a-z]*|may|jun[a-z]*|jul[a-z]*|
-        aug[a-z]*|sep[a-z]*|oct[a-z]*|nov[a-z]*|dec[a-z]*|
-        next|quarter|past|after|around|coming|eight|nine|ten|eleven|twelve|
-        one|two|three|four|five|six|seven
-    )\b
-    | \b\d{1,2}:\d{2}\b
-    | \b\d{1,2}\s*(?:am|pm)\b
-    | \b\d{4}-\d{1,2}-\d{1,2}\b
-    | \b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b
-    | \b(?:pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt)\b
-    """,
-    re.IGNORECASE | re.VERBOSE,
+_WEEKDAY_RE = re.compile(
+    r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b",
+    re.IGNORECASE,
+)
+_MONTH_RE = re.compile(
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b",
+    re.IGNORECASE,
+)
+_MERIDIEM_RE = re.compile(r"(?<![a-z])(?:am|pm)\b", re.IGNORECASE)
+_TZ_WORD_RE = re.compile(rf"\b(?:{TZ_PATTERN})\b", re.IGNORECASE)
+_RELATIVE_DAY_RE = re.compile(
+    r"\b(?:today|tomorrow|tonight|noon|midnight)\b",
+    re.IGNORECASE,
+)
+_COLON_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}\b")
+_PREPOSITION_RE = re.compile(r"\b(?:at|around|by|after|before|on)\b", re.IGNORECASE)
+_THIS_NEXT_WEEKDAY_RE = re.compile(
+    r"\b(?:this|next|coming)\s+(?:monday|tuesday|wednesday|thursday|friday|"
+    r"saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b",
+    re.IGNORECASE,
+)
+_QUANTITY_UNIT_RE = re.compile(
+    r"\b\d+\s+(?:players?|members?|people|million|billion|morale|kills?|"
+    r"deaths?|levels?|slots?|seats?|tickets?)\b",
+    re.IGNORECASE,
 )
 
 _EXPAND_TOKEN = re.compile(
     r"^(?:"
-    r"quarter|half|past|to|after|before|at|on|of|around|"
+    r"quarter|half|past|to|after|before|at|on|of|around|about|"
     r"evening|morning|night|tonight|today|tomorrow|noon|midnight|"
     r"am|pm|"
     r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
@@ -115,6 +125,7 @@ _EXPAND_TOKEN = re.compile(
     r"jan[a-z]*|feb[a-z]*|mar[a-z]*|apr[a-z]*|may|jun[a-z]*|jul[a-z]*|"
     r"aug[a-z]*|sep[a-z]*|oct[a-z]*|nov[a-z]*|dec[a-z]*|"
     r"next|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"eastern|pacific|central|mountain|"
     r"\d{1,2}(?::\d{2})?|"
     r"pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt"
     r")$",
@@ -142,6 +153,7 @@ _LEAD_PUNCT = frozenset("\"'([{<")
 _BARE_INTEGER = re.compile(r"^\d{1,4}$")
 _VERSION_LIKE = re.compile(r"^v?\d+\.\d+(?:\.\d+)*$", re.IGNORECASE)
 _IP_LIKE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+_ISOLATED_YEAR = re.compile(r"^(?:19|20)\d{2}$")
 _DENYLIST_PHRASES = frozenset(
     {
         "we",
@@ -181,6 +193,10 @@ _ABBREV_WEEKDAY = {
     "sun": "sunday",
 }
 
+_SOURCE_SEARCH = "search_dates"
+_SOURCE_STRICT = "strict"
+_SOURCE_MERGED = "merged"
+
 
 @dataclass(frozen=True)
 class SanitizedText:
@@ -213,12 +229,21 @@ class SanitizedText:
 
 
 @dataclass(frozen=True)
+class ProtectedText:
+    """Length-preserving mask of non-temporal machine syntax."""
+
+    text: str
+    protected_spans: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
 class TemporalCandidate:
     """A candidate temporal phrase located in sanitized/protected text."""
 
     start: int
     end: int
     text: str
+    source: str
 
     @property
     def length(self) -> int:
@@ -263,26 +288,28 @@ def sanitize_for_dates(text: str) -> SanitizedText:
     )
 
 
-def protect_non_temporal_spans(text: str) -> str:
+def protect_non_temporal_spans(text: str) -> ProtectedText:
     """Mask non-temporal syntax with same-length placeholders (index-preserving)."""
 
     chars = list(text)
     occupied = [False] * len(chars)
+    spans: list[tuple[int, int]] = []
 
     def _mask_span(start: int, end: int) -> None:
         for index in range(start, end):
             if 0 <= index < len(chars) and not occupied[index]:
                 chars[index] = "#"
                 occupied[index] = True
+        spans.append((start, end))
 
     for pattern in _PROTECT_PATTERNS:
         for match in pattern.finditer(text):
             _mask_span(match.start(), match.end())
-    return "".join(chars)
+    return ProtectedText(text="".join(chars), protected_spans=tuple(spans))
 
 
 def has_explicit_date(text: str) -> bool:
-    return any(pattern.search(text) for pattern in _DATE_HINTS)
+    return any(pattern.search(text) for pattern in _EXPLICIT_DATE_HINTS)
 
 
 def extract_timezone(text: str) -> ZoneInfo:
@@ -324,7 +351,7 @@ def _normalize_for_parse(text: str) -> str:
 
 
 def _has_meridiem(text: str) -> bool:
-    return re.search(r"\b(?:am|pm)\b", text, re.IGNORECASE) is not None
+    return _MERIDIEM_RE.search(text) is not None
 
 
 def next_occurrence(
@@ -369,13 +396,11 @@ def _hour_token_to_int(token: str) -> int | None:
 def _soft_normalize(text: str) -> str:
     """Rewrite softer natural-language time phrases into dateparser-friendly forms."""
     normalized = text.strip()
-    normalized = re.sub(
-        r"\b(?:this|coming|a|an|the|about|around|little|by|for)\s+",
-        "",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    normalized = re.sub(r"\s+", " ", normalized).strip()
+    # Zone names before filler stripping so they stay attached to the phrase.
+    normalized = re.sub(r"\beastern\b", "et", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bpacific\b", "pt", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bcentral\b", "ct", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bmountain\b", "mt", normalized, flags=re.IGNORECASE)
 
     def _quarter_past(match: re.Match[str]) -> str:
         hour = _hour_token_to_int(match.group(1))
@@ -401,6 +426,54 @@ def _soft_normalize(text: str) -> str:
         normalized,
         flags=re.IGNORECASE,
     )
+    # Clock produced by quarter/half past still needs night → evening meridiem.
+    normalized = re.sub(
+        r"\b(\d{1,2}:\d{2})\s+(?:tonight|evening|night)\b",
+        r"today at \1 pm",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    # "saturday evening around nine" → "saturday at 9 pm"
+    def _weekday_evening_clock(match: re.Match[str]) -> str:
+        weekday = match.group(1)
+        hour = _hour_token_to_int(match.group(2))
+        if hour is None:
+            return match.group(0)
+        meridiem = "pm" if hour < 12 else ""
+        return f"{weekday} at {hour} {meridiem}".strip()
+
+    normalized = re.sub(
+        r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)"
+        r"\s+(?:evening|night)(?:\s+(?:around|about))?\s+"
+        r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"
+        r"(?!\s*(?:am|pm|:))",
+        _weekday_evening_clock,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    # "tomorrow night at eight" / "tonight at eight"
+    def _day_night_at_clock(match: re.Match[str]) -> str:
+        day = match.group(1).lower()
+        if day == "tonight":
+            day = "today"
+        hour = _hour_token_to_int(match.group(2))
+        if hour is None:
+            return match.group(0)
+        meridiem = "pm" if hour < 12 else ""
+        return f"{day} at {hour} {meridiem}".strip()
+
+    normalized = re.sub(
+        r"\b(today|tomorrow|tonight)(?:\s+(?:night|evening))?\s+at\s+"
+        r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"
+        r"(?!\s*(?:am|pm|:))",
+        _day_night_at_clock,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
     normalized = re.sub(
         r"\b(?:evening|morning|night)\s+of\s+",
         "",
@@ -455,6 +528,28 @@ def _soft_normalize(text: str) -> str:
         normalized,
         flags=re.IGNORECASE,
     )
+
+    def _ordinal_day(match: re.Match[str]) -> str:
+        day = int(match.group(1))
+        now = datetime.now(DEFAULT_TZ)
+        month = now.strftime("%B")
+        year = now.year
+        return f"{month} {day} {year}"
+
+    normalized = re.sub(
+        r"\b(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b",
+        _ordinal_day,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    # Drop filler words last so earlier rewrites still see "around" / "about".
+    normalized = re.sub(
+        r"\b(?:this|coming|a|an|the|about|around|little|by|for|sometime)\s+",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     return re.sub(r"\s+", " ", normalized).strip()
 
 
@@ -497,15 +592,27 @@ def parse_expression(expr: str) -> int | None:
     return None
 
 
-def validate_temporal_candidate(phrase: str) -> bool:
-    """Reject false-positive search hits before replacement."""
-    text = phrase.strip().strip(".,;:!?\"'()[]{}")
+def validate_temporal_candidate(
+    candidate: TemporalCandidate,
+    timestamp: int,
+    *,
+    context: str,
+) -> bool:
+    """Reject false-positive search hits before replacement.
+
+    ``timestamp`` is produced by ``parse_expression``; this layer does not
+    re-interpret the phrase. ``context`` is the sanitized (unprotected) message.
+    """
+    del timestamp  # Reserved for future absolute-range checks; keep signature stable.
+    text = candidate.text.strip().strip(".,;:!?\"'()[]{}")
     if not text:
         return False
     lowered = text.lower()
     if lowered in _DENYLIST_PHRASES:
         return False
     if _BARE_INTEGER.fullmatch(text):
+        return False
+    if _ISOLATED_YEAR.fullmatch(text):
         return False
     if _VERSION_LIKE.fullmatch(text):
         return False
@@ -515,16 +622,56 @@ def validate_temporal_candidate(phrase: str) -> bool:
         return False
     if "#" in text:
         return False
-    if not _TEMPORAL_CUE.search(text):
-        return False
-    return parse_expression(text) is not None
+    if _QUANTITY_UNIT_RE.search(context) and _BARE_INTEGER.search(text):
+        # "8 players" / "15 million" — numeric token alone is not temporal.
+        window_start = max(0, candidate.start - 24)
+        window_end = min(len(context), candidate.end + 24)
+        window = context[window_start:window_end]
+        if _QUANTITY_UNIT_RE.search(window):
+            return False
+
+    score = 0
+    if _WEEKDAY_RE.search(text):
+        score += 3
+    if _MONTH_RE.search(text):
+        score += 3
+    if _MERIDIEM_RE.search(text):
+        score += 2
+    if _TZ_WORD_RE.search(text):
+        score += 2
+    if _RELATIVE_DAY_RE.search(text):
+        score += 3
+    if _COLON_TIME_RE.search(text):
+        score += 2
+    if _THIS_NEXT_WEEKDAY_RE.search(text):
+        score += 3
+    if _PREPOSITION_RE.search(text):
+        score += 1
+    if re.search(
+        r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        score += 1
+    if _BARE_INTEGER.fullmatch(text):
+        score -= 5
+    if re.fullmatch(r"\d{1,2}", text):
+        score -= 3
+
+    return score >= 2
 
 
-def _locate_phrase(haystack: str, needle: str, *, used: list[bool]) -> tuple[int, int] | None:
-    """Find the next unused occurrence of ``needle`` in ``haystack``."""
+def _locate_phrase(
+    haystack: str,
+    needle: str,
+    *,
+    used: list[bool],
+    search_from: int = 0,
+) -> tuple[int, int] | None:
+    """Find the next unused occurrence of ``needle`` starting at ``search_from``."""
     if not needle:
         return None
-    start = 0
+    start = max(0, search_from)
     while True:
         index = haystack.find(needle, start)
         if index < 0:
@@ -533,20 +680,6 @@ def _locate_phrase(haystack: str, needle: str, *, used: list[bool]) -> tuple[int
         if not any(used[index:end]):
             return (index, end)
         start = index + 1
-
-
-def _dedupe_candidates(candidates: list[TemporalCandidate]) -> list[TemporalCandidate]:
-    candidates.sort(key=lambda item: (item.start, -item.length))
-    final: list[TemporalCandidate] = []
-    for candidate in candidates:
-        overlap = False
-        for existing in final:
-            if candidate.start < existing.end and candidate.end > existing.start:
-                overlap = True
-                break
-        if not overlap:
-            final.append(candidate)
-    return final
 
 
 def _trim_candidate_bounds(text: str, protected: str, start: int, end: int) -> tuple[int, int]:
@@ -572,18 +705,7 @@ def _expand_candidate(text: str, start: int, end: int) -> tuple[int, int]:
     if not tokens:
         return start, end
     left = 0
-    while left < len(tokens) and tokens[left][1] <= start:
-        left += 1
-    if left >= len(tokens):
-        # start lands inside a token
-        left = next((i for i, (s, e, _) in enumerate(tokens) if s <= start < e), 0)
-    right = left
-    while right + 1 < len(tokens) and tokens[right][1] < end:
-        right += 1
-    if not (tokens[left][0] <= start < tokens[left][1] or tokens[left][0] >= start):
-        return start, end
-
-    # Align to covering token indices.
+    right = 0
     for index, (tok_start, tok_end, _) in enumerate(tokens):
         if tok_start <= start < tok_end:
             left = index
@@ -607,40 +729,105 @@ def _normalize_search_phrase(phrase: str) -> str:
     return cleaned.strip("".join(_TRAIL_PUNCT | _LEAD_PUNCT))
 
 
-def _merge_nearby_candidates(
+def merge_temporal_candidates(
     text: str,
     candidates: list[TemporalCandidate],
 ) -> list[TemporalCandidate]:
-    """Merge candidates separated only by connector tokens (e.g. sunday around noon)."""
-    if len(candidates) < 2:
-        return candidates
+    """Merge connector-separated fragments, then keep non-overlapping broader spans."""
+    if not candidates:
+        return []
+
     ordered = sorted(candidates, key=lambda item: item.start)
-    merged: list[TemporalCandidate] = [ordered[0]]
+    bridged: list[TemporalCandidate] = [ordered[0]]
     punct = "".join(_TRAIL_PUNCT | _LEAD_PUNCT)
     for candidate in ordered[1:]:
-        prev = merged[-1]
+        prev = bridged[-1]
         gap = text[prev.end : candidate.start].strip()
         gap_tokens = [token.strip(punct) for token in gap.split() if token.strip(punct)]
         if gap_tokens and all(_EXPAND_TOKEN.match(token) for token in gap_tokens):
             start, end = prev.start, candidate.end
-            merged[-1] = TemporalCandidate(start=start, end=end, text=text[start:end])
+            bridged[-1] = TemporalCandidate(
+                start=start,
+                end=end,
+                text=text[start:end],
+                source=_SOURCE_MERGED,
+            )
         else:
-            merged.append(candidate)
-    return merged
+            bridged.append(candidate)
+
+    bridged.sort(key=lambda item: (item.start, -item.length))
+    final: list[TemporalCandidate] = []
+    for candidate in bridged:
+        overlap = False
+        for existing in final:
+            if candidate.start < existing.end and candidate.end > existing.start:
+                overlap = True
+                break
+        if not overlap:
+            final.append(candidate)
+    return final
 
 
-def find_temporal_candidates(text: str) -> list[TemporalCandidate]:
-    """Broad candidate extraction (search_dates + tiny regex fallback)."""
+def find_strict_temporal_candidates(
+    text: str,
+    *,
+    protected: str | None = None,
+    used: list[bool] | None = None,
+) -> list[TemporalCandidate]:
+    """Tiny deterministic fallback for clock/ISO forms search_dates may miss."""
+    masked = protected if protected is not None else protect_non_temporal_spans(text).text
+    occupied = list(used) if used is not None else [False] * len(text)
+    raw: list[TemporalCandidate] = []
+    for pattern in _STRICT_PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = _trim_candidate_bounds(text, masked, match.start(), match.end())
+            if start >= end:
+                continue
+            if any(occupied[start:end]):
+                continue
+            if masked[start:end] and set(masked[start:end]) <= {"#"}:
+                continue
+            raw.append(
+                TemporalCandidate(
+                    start=start,
+                    end=end,
+                    text=text[start:end],
+                    source=_SOURCE_STRICT,
+                )
+            )
+    # Prefer broader spans when patterns nest (ISO date+time over bare HH:MM).
+    raw.sort(key=lambda item: (item.start, -item.length))
+    found: list[TemporalCandidate] = []
+    for candidate in raw:
+        if any(occupied[candidate.start : candidate.end]):
+            continue
+        for index in range(candidate.start, candidate.end):
+            occupied[index] = True
+        found.append(candidate)
+    return found
+
+
+def find_temporal_candidates(
+    text: str,
+    *,
+    protected: str | None = None,
+) -> list[TemporalCandidate]:
+    """Broad candidate extraction via ``search_dates`` (ngram).
+
+    Operates on protected text for matching; phrase ``text`` is sliced from the
+    unprotected ``text`` argument so interpretation sees real words.
+    """
     if not text.strip():
         return []
 
-    protected = protect_non_temporal_spans(text)
-    used = [False] * len(protected)
+    masked = protected if protected is not None else protect_non_temporal_spans(text).text
+    used = [False] * len(masked)
     found: list[TemporalCandidate] = []
+    cursor = 0
 
     try:
         hits = search_dates(
-            protected,
+            masked,
             languages=["en"],
             settings={
                 "PREFER_DATES_FROM": "future",
@@ -652,68 +839,96 @@ def find_temporal_candidates(text: str) -> list[TemporalCandidate]:
         hits = None
 
     for item in hits or ():
+        # Intentionally ignore item[1] (search_dates datetime) — interpretation
+        # stays in parse_expression so Network TZ / next-occurrence rules win.
         raw_phrase = str(item[0]).strip()
         phrase = _normalize_search_phrase(raw_phrase)
         if not phrase:
             continue
-        located = _locate_phrase(protected, phrase, used=used)
+        located = _locate_phrase(masked, phrase, used=used, search_from=cursor)
         if located is None:
-            located = _locate_phrase(text, phrase, used=used)
+            located = _locate_phrase(text, phrase, used=used, search_from=cursor)
         if located is None and raw_phrase != phrase:
             head = raw_phrase.split("#", 1)[0].strip()
             head = _normalize_search_phrase(head)
             if head:
-                located = _locate_phrase(protected, head, used=used)
+                located = _locate_phrase(masked, head, used=used, search_from=cursor)
                 if located is None:
-                    located = _locate_phrase(text, head, used=used)
+                    located = _locate_phrase(text, head, used=used, search_from=cursor)
+        if located is None:
+            # Fall back to a full-string scan for this phrase only.
+            located = _locate_phrase(masked, phrase, used=used, search_from=0)
+            if located is None:
+                located = _locate_phrase(text, phrase, used=used, search_from=0)
         if located is None:
             continue
-        start, end = _trim_candidate_bounds(text, protected, *located)
+        start, end = _trim_candidate_bounds(text, masked, *located)
         start, end = _expand_candidate(text, start, end)
-        start, end = _trim_candidate_bounds(text, protected, start, end)
+        start, end = _trim_candidate_bounds(text, masked, start, end)
         if start >= end:
             continue
         if any(used[start:end]):
             continue
         for index in range(start, end):
             used[index] = True
-        found.append(TemporalCandidate(start=start, end=end, text=text[start:end]))
+        cursor = end
+        found.append(
+            TemporalCandidate(
+                start=start,
+                end=end,
+                text=text[start:end],
+                source=_SOURCE_SEARCH,
+            )
+        )
 
-    for pattern in _FALLBACK_PATTERNS:
-        for match in pattern.finditer(text):
-            start, end = match.start(), match.end()
-            if any(used[start:end]):
-                continue
-            if protected[start:end] and set(protected[start:end]) <= {"#"}:
-                continue
-            start, end = _trim_candidate_bounds(text, protected, start, end)
-            if start >= end or any(used[start:end]):
-                continue
-            for index in range(start, end):
+    return found
+
+
+def add_strict_fallback_candidates(
+    text: str,
+    candidates: list[TemporalCandidate],
+    *,
+    protected: str,
+) -> list[TemporalCandidate]:
+    """Append strict regex hits for spans the broad extractor missed."""
+    used = [False] * len(text)
+    for candidate in candidates:
+        for index in range(candidate.start, candidate.end):
+            if 0 <= index < len(used):
                 used[index] = True
-            found.append(TemporalCandidate(start=start, end=end, text=text[start:end]))
-
-    return _dedupe_candidates(_merge_nearby_candidates(text, found))
+    strict = find_strict_temporal_candidates(text, protected=protected, used=used)
+    return merge_temporal_candidates(text, [*candidates, *strict])
 
 
 def replace_dates(text: str) -> str:
     """Find dates on a sanitized view of ``text``, replace spans in the original."""
     sanitized = sanitize_for_dates(text)
     source = sanitized.original
-    replacements: list[tuple[int, int, str]] = []
+    protected = protect_non_temporal_spans(sanitized.text)
 
-    for candidate in find_temporal_candidates(sanitized.text):
-        phrase = candidate.text.strip()
-        if not validate_temporal_candidate(phrase):
+    candidates = find_temporal_candidates(sanitized.text, protected=protected.text)
+    candidates = add_strict_fallback_candidates(
+        sanitized.text,
+        candidates,
+        protected=protected.text,
+    )
+
+    replacements: list[tuple[int, int, str]] = []
+    for candidate in candidates:
+        timestamp = parse_expression(candidate.text)
+        if timestamp is None:
             continue
-        ts = parse_expression(phrase)
-        if ts is None:
+        if not validate_temporal_candidate(
+            candidate,
+            timestamp,
+            context=sanitized.text,
+        ):
             continue
         start, end = sanitized.original_span(candidate.start, candidate.end)
         # Discord timestamp chips need a trailing space when the next character
         # would otherwise glue (e.g. ``<t:…>!`` / ``<t:…>.``), or rendering breaks.
         suffix = " " if end < len(source) and not source[end].isspace() else ""
-        replacements.append((start, end, f"<t:{ts}>{suffix}"))
+        replacements.append((start, end, f"<t:{timestamp}>{suffix}"))
 
     result = source
     for start, end, replacement in sorted(replacements, reverse=True):

@@ -7,7 +7,7 @@ from typing import Any
 import discord
 
 from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_hub_slice
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     HUB_CATEGORY_LEADERS,
     HUB_CHANNEL_CHANGELOG,
     HUB_CHANNEL_LEADERS,
@@ -168,7 +168,7 @@ async def grant_leaders_channel_access(
         resolve_access_role,
         resolve_operator_role_by_name,
     )
-    from bot.features.channels.resolve import resolve_human_moderator_role
+    from bot.features.channels.roles import resolve_human_moderator_role
 
     _leaders, _changelog, sync_result = await ensure_leaders_channels(
         guild,

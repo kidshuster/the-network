@@ -21,17 +21,17 @@ from bot.features.channels.layout.managed import (
     hub_channel_aliases,
     preserved_channel_names,
 )
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CHANNEL_ADMIN,
     CHANNEL_CHANGELOG,
     CHANNEL_LEADERS,
     resolve_changelog_channel,
-    resolve_human_moderator_role,
     resolve_leaders_category,
     resolve_leaders_channel,
 )
+from bot.features.channels.roles import resolve_human_moderator_role
 from bot.features.recipes.hub.initialize import initialize_guild
 from bot.features.recipes.hub.leaders import ensure_leaders_channels
 from tests.core.constants import SERVER_INIT_PROBE_REASON
@@ -354,11 +354,11 @@ async def probe_hub_announcements(
 ) -> ProbeResult:
     del context, settings
     from bot.features.channels.layout.managed import hub_channel_name
-    from bot.features.channels.resolve import (
-        HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
-        resolve_moderation_category,
-        resolve_network_announcements_channel,
-    )
+    from bot.features.channels.resources import (
+    HUB_CHANNEL_NETWORK_ANNOUNCEMENTS,
+    resolve_moderation_category,
+    resolve_network_announcements_channel,
+)
 
     mod_category = resolve_moderation_category(guild)
     mod_channel = resolve_network_announcements_channel(guild)

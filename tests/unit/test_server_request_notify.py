@@ -55,7 +55,7 @@ async def test_submit_request_defaults_display_name_to_server_name(
         MagicMock(return_value=channel),
     )
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.roles.resolve_human_moderator_role",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(

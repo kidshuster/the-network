@@ -74,7 +74,7 @@ async def uninitialize_server(
 async def sync_join_guide(
     recipe_context: RecipeContext, *, interaction: discord.Interaction
 ) -> tuple[Any, discord.TextChannel]:
-    from bot.features.channels.resolve import resolve_join_the_network_channel
+    from bot.features.channels.resources import resolve_join_the_network_channel
     from bot.features.channels.stickies.join import sync_hub_join_sticky
 
     guild = interaction.guild

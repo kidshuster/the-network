@@ -7,8 +7,10 @@ from typing import Any
 
 from bot.app.recipes.registry import RecipeRegistry, collect_recipes
 
-# Explicit, deterministic recipe modules (Architecture Contract Phase 4).
-# Domain entry modules first; hub helpers remain until Phase 5 reclassification.
+# Explicit, deterministic recipe modules (Architecture Contract Phase 4/5).
+# Domain entry modules first; hub modules are registered recipes (not helpers).
+# Helper packages under hub/ (clients/, probe, leaders, …) are imported by recipes
+# and are intentionally absent from this list — see hub/__init__.py.
 RECIPE_MODULES: tuple[str, ...] = (
     "bot.features.recipes.server",
     "bot.features.recipes.startup",

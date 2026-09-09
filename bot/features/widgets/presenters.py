@@ -38,7 +38,7 @@ def server_init_embed(result: GuildInitResult) -> discord.Embed:
     if not result.success:
         raise UserFacingError(result.reason or "Server initialization failed.")
     from bot.features.channels.layout.managed import hub_channel_name
-    from bot.features.channels.resolve import HUB_CHANNEL_ADMIN
+    from bot.features.channels.resources import HUB_CHANNEL_ADMIN
 
     embed = render_embed(
         "server_init_success",

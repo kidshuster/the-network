@@ -136,7 +136,7 @@ async def test_submit_creates_repair_request_for_malformed_client(
         MagicMock(return_value=channel),
     )
     monkeypatch.setattr(
-        "bot.features.channels.resolve.resolve_human_moderator_role",
+        "bot.features.channels.roles.resolve_human_moderator_role",
         MagicMock(return_value=None),
     )
     monkeypatch.setattr(

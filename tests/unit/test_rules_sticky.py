@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import discord
 
-from bot.features.channels.resolve import (
+from bot.features.channels.resources import (
     resolve_join_requests_channel,
     resolve_network_hub_category,
 )

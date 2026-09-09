@@ -21,7 +21,7 @@ from bot.core.networks.roles import (
 from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
 from bot.features.channels.layout.loader import load_layout
 from bot.features.channels.layout.managed import hub_category_names
-from bot.features.channels.resolve import resolve_human_moderator_role
+from bot.features.channels.roles import resolve_human_moderator_role
 
 
 def slugify_server_name(server_name: str) -> str:

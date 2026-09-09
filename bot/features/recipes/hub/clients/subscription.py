@@ -35,7 +35,7 @@ from bot.core.networks.roles import (
 )
 from bot.core.views import ViewRegistry
 from bot.features.channels.layout import ApplyMode, LayoutContext, apply_layout, compile_client
-from bot.features.channels.resolve import resolve_human_moderator_role
+from bot.features.channels.roles import resolve_human_moderator_role
 
 logger = logging.getLogger(__name__)
 

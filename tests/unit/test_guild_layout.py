@@ -5,23 +5,29 @@ from unittest.mock import MagicMock
 import discord
 import pytest
 
-from bot.features.channels.resolve import (
+from bot.core.channels.finder import (
+    ChannelLookupError,
+    find_channel,
+    require_channel,
+)
+from bot.features.channels.resources import (
     CATEGORY_LEADERS,
     CATEGORY_MODERATION,
     CATEGORY_NETWORK,
     CHANNEL_CHANGELOG,
     CHANNEL_JOIN_REQUESTS,
     CHANNEL_NETWORK_ANNOUNCEMENTS,
-    ChannelLookupError,
-    find_channel,
-    require_channel,
-    resolve_announcement_channel_in_category,
-    resolve_bot_role,
     resolve_changelog_channel,
-    resolve_human_moderator_role,
-    resolve_moderator_role,
     resolve_network_announcements_channel,
     resolve_network_hub_category,
+)
+from bot.features.channels.resources import (
+    find_channel as find_resource_channel,
+)
+from bot.features.channels.roles import (
+    resolve_bot_role,
+    resolve_human_moderator_role,
+    resolve_moderator_role,
 )
 
 
@@ -160,11 +166,26 @@ def test_resolve_announcement_channel_in_category_ignores_plain_text() -> None:
     plain.is_news = MagicMock(return_value=False)
     guild.text_channels = [plain]
 
+    # News-only lookup: plain text channel must not match.
     assert (
-        resolve_announcement_channel_in_category(
+        find_channel(
             guild,
-            name=CHANNEL_NETWORK_ANNOUNCEMENTS,
+            CHANNEL_NETWORK_ANNOUNCEMENTS,
+            channel_type=discord.TextChannel,
             category_id=10,
+            predicate=lambda channel: isinstance(channel, discord.TextChannel)
+            and channel.is_news(),
         )
         is None
+    )
+    # Resource API with include_announcement=False also skips news-only expectation
+    # when only a plain text channel exists under the announcements name.
+    assert (
+        find_resource_channel(
+            guild,
+            "network_announcements",
+            category_id=10,
+            include_announcement=False,
+        )
+        is plain
     )

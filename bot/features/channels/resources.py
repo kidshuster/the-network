@@ -1,4 +1,8 @@
-"""Public feature channel/category resource API (Architecture Contract Phase 7)."""
+"""Public feature channel/category resource API (Architecture Contract Phase 7).
+
+This module is the only production boundary for hub channel/category lookup.
+Display names come from feature layout YAML; lookup uses generic core finders.
+"""
 
 from __future__ import annotations
 
@@ -36,6 +40,18 @@ HUB_CHANNEL_CHANGELOG = CHANGELOG
 HUB_CHANNEL_JOIN_REQUESTS = JOIN_REQUESTS
 HUB_CHANNEL_ADMIN = ADMIN
 HUB_CHANNEL_NETWORK_ANNOUNCEMENTS = NETWORK_ANNOUNCEMENTS
+
+# Display-name snapshots from layout YAML (prefer name(resource_id) for new code).
+CATEGORY_NETWORK = hub_category_name(NETWORK)
+CATEGORY_MODERATION = hub_category_name(MODERATION)
+CATEGORY_LEADERS = hub_category_name(LEADERS)
+CHANNEL_RULES = hub_channel_name(RULES)
+CHANNEL_JOIN_THE_NETWORK = hub_channel_name(JOIN_THE_NETWORK)
+CHANNEL_LEADERS = hub_channel_name(LEADERS_CHANNEL)
+CHANNEL_CHANGELOG = hub_channel_name(CHANGELOG)
+CHANNEL_JOIN_REQUESTS = hub_channel_name(JOIN_REQUESTS)
+CHANNEL_ADMIN = hub_channel_name(ADMIN)
+CHANNEL_NETWORK_ANNOUNCEMENTS = hub_channel_name(NETWORK_ANNOUNCEMENTS)
 
 
 class ResourceLookupError(LookupError):
@@ -101,3 +117,111 @@ def require_channel(
     if channel is None:
         raise ResourceLookupError(resource_id, kind="channel")
     return channel
+
+
+# --- Convenience resolvers (category-scoped hub lookups) -------------------
+
+
+def find_network_category(guild: discord.Guild) -> discord.CategoryChannel | None:
+    return find_category(guild, NETWORK)
+
+
+def find_moderation_category(guild: discord.Guild) -> discord.CategoryChannel | None:
+    return find_category(guild, MODERATION)
+
+
+def find_leaders_category(guild: discord.Guild) -> discord.CategoryChannel | None:
+    return find_category(guild, LEADERS)
+
+
+def find_join_the_network_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    hub = find_network_category(guild)
+    if hub is not None:
+        match = find_channel(guild, JOIN_THE_NETWORK, category_id=hub.id)
+        if match is not None:
+            return match
+    return find_channel(guild, JOIN_THE_NETWORK)
+
+
+def find_leaders_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    leaders_category = find_leaders_category(guild)
+    if leaders_category is not None:
+        match = find_channel(guild, LEADERS_CHANNEL, category_id=leaders_category.id)
+        if match is not None:
+            return match
+
+    hub = find_network_category(guild)
+    if hub is not None:
+        match = find_channel(guild, LEADERS_CHANNEL, category_id=hub.id)
+        if match is not None:
+            return match
+    return find_channel(guild, LEADERS_CHANNEL)
+
+
+def find_changelog_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    leaders_category = find_leaders_category(guild)
+    if leaders_category is None:
+        return None
+    return find_channel(guild, CHANGELOG, category_id=leaders_category.id)
+
+
+def find_join_requests_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    mod_category = find_moderation_category(guild)
+    if mod_category is not None:
+        match = find_channel(guild, JOIN_REQUESTS, category_id=mod_category.id)
+        if match is not None:
+            return match
+    return find_channel(guild, JOIN_REQUESTS)
+
+
+def find_admin_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    community = guild.public_updates_channel
+    if isinstance(community, discord.TextChannel):
+        return community
+    mod_category = find_moderation_category(guild)
+    if mod_category is not None:
+        match = find_channel(guild, ADMIN, category_id=mod_category.id)
+        if match is not None:
+            return match
+    return find_channel(guild, ADMIN)
+
+
+def find_network_announcements_channel(
+    guild: discord.Guild,
+) -> discord.TextChannel | None:
+    category = find_moderation_category(guild)
+    return find_channel(
+        guild,
+        NETWORK_ANNOUNCEMENTS,
+        category_id=category.id if category is not None else None,
+        include_announcement=False,
+    )
+
+
+def find_network_announcements_text_channel(
+    guild: discord.Guild,
+    *,
+    category_id: int | None = None,
+    include_announcement: bool = True,
+) -> discord.TextChannel | None:
+    """Find #network-announcements regardless of announcement type (migration helper)."""
+    return find_channel(
+        guild,
+        NETWORK_ANNOUNCEMENTS,
+        category_id=category_id,
+        include_announcement=include_announcement,
+    )
+
+
+# Legacy aliases kept for call-site clarity during migration reviews.
+resolve_hub_category = find_category
+resolve_hub_channel = find_channel
+resolve_network_hub_category = find_network_category
+resolve_moderation_category = find_moderation_category
+resolve_leaders_category = find_leaders_category
+resolve_join_the_network_channel = find_join_the_network_channel
+resolve_leaders_channel = find_leaders_channel
+resolve_changelog_channel = find_changelog_channel
+resolve_join_requests_channel = find_join_requests_channel
+resolve_network_admin_channel = find_admin_channel
+resolve_network_announcements_channel = find_network_announcements_channel

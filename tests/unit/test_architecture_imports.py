@@ -225,6 +225,24 @@ def test_legacy_packages_are_removed() -> None:
     assert not (package / "core" / "integrations").exists()
 
 
+def test_feature_channel_resource_api_is_singular() -> None:
+    """Phase 7: resources.py is the only channel lookup boundary; resolve.py is gone."""
+    package = Path(bot.__file__).resolve().parent
+    assert (package / "features" / "channels" / "resources.py").is_file()
+    assert not (package / "features" / "channels" / "resolve.py").exists()
+    offenders: list[str] = []
+    for path in package.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        imports = _imports_forbidden_layer(
+            source,
+            ("bot.features.channels.resolve",),
+        )
+        if imports:
+            rel = path.relative_to(package.parent)
+            offenders.append(f"{rel}: {', '.join(imports)}")
+    assert offenders == [], "resolve.py reintroduced:\n" + "\n".join(offenders)
+
+
 def test_test_core_is_not_imported_by_production_code() -> None:
     offenders: list[str] = []
     package = Path(bot.__file__).resolve().parent
