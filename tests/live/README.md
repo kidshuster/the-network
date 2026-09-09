@@ -71,6 +71,11 @@ subscribe (announcement) channel into the smoke client's publish channel, then
 asserts the bot deletes that follower webhook, leaves publish unconfigured, and
 posts the profile rejection notice.
 
+**Mock limitation:** `--backend mock` stubs `publish.hub_follow_reject` with a
+canned success. It does not create Channel Follows or list webhooks — Discord
+API timing (`follow()` vs `channel.webhooks()`) and `source_guild` omissions are
+live-only. Use `./test --full` or a live recipe run to validate that probe.
+
 **Scenarios:** YAML under `tests/scenarios/` only changes **mock** Discord state.
 On live Discord, `/server test … scenario:all` re-runs the same recipe once per
 name (expensive and redundant). Prefer **`release`** (default) — one `healthy`

@@ -139,6 +139,8 @@ async def run_mock_probe(
     if name == "relay.setup_welcome":
         return ProbeOutcome("setup/welcome relay", "sticky and welcome delivery passed")
     if name == "publish.hub_follow_reject":
+        # Offline mock cannot exercise Discord Channel Follow / webhook listing.
+        # Live Discord owns this probe; mock only checks recipe composition.
         return ProbeOutcome(
             "hub follow reject",
             "hub-sourced follow deleted and profile alert posted",

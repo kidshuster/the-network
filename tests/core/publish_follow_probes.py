@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from dataclasses import dataclass
@@ -39,6 +40,53 @@ _SMOKE_PREFIX = "Smoke HubFollow "
 _PROBE_REASON = "The Network smoke: hub follow reject"
 _REJECT_TITLE = "publish follow rejected"
 _HISTORY_LIMIT = 40
+# Discord often returns the follow webhook before it appears in channel.webhooks().
+_FOLLOW_LIST_ATTEMPTS = 8
+_FOLLOW_LIST_DELAY_SEC = 0.75
+
+
+async def _wait_for_follower_webhook(
+    publish: discord.TextChannel,
+    *,
+    followed: discord.Webhook,
+    source_channel_id: int,
+) -> discord.Webhook:
+    """Re-list publish webhooks until the Channel Follow appears (or time out)."""
+    last_listed: list[discord.Webhook] = []
+    for attempt in range(1, _FOLLOW_LIST_ATTEMPTS + 1):
+        try:
+            last_listed = list(await publish.webhooks())
+        except discord.HTTPException as exc:
+            logger.warning(
+                "Hub-follow smoke: webhooks() attempt %s/%s failed: %s",
+                attempt,
+                _FOLLOW_LIST_ATTEMPTS,
+                exc,
+            )
+            last_listed = []
+        follower = next(
+            (
+                webhook
+                for webhook in last_listed
+                if webhook.id == followed.id
+                or (
+                    webhook.type is discord.WebhookType.channel_follower
+                    and getattr(getattr(webhook, "source_channel", None), "id", None)
+                    == source_channel_id
+                )
+            ),
+            None,
+        )
+        if follower is not None:
+            return follower
+        if attempt < _FOLLOW_LIST_ATTEMPTS:
+            await asyncio.sleep(_FOLLOW_LIST_DELAY_SEC)
+    ids = ", ".join(str(webhook.id) for webhook in last_listed) or "(none)"
+    raise RuntimeError(
+        "Hub-follow smoke: channel_follower webhook missing on publish after follow() "
+        f"(followed_id={followed.id}, source_channel={source_channel_id}, "
+        f"listed={ids})."
+    )
 
 
 @dataclass(frozen=True)
@@ -210,8 +258,9 @@ async def run_hub_follow_reject_smoke_flow(
                 )
 
             # User fuck-up: Follow a hub network announcement feed into publish.
-            # ``follow()`` may omit source_guild on the returned webhook payload —
-            # re-list publish webhooks and classify with known hub channel ids.
+            # ``follow()`` may omit source_guild on the returned webhook payload, and
+            # the destination webhook list can lag — wait/re-list, then classify with
+            # known hub channel ids.
             followed = await subscribe.follow(destination=publish, reason=_PROBE_REASON)
             if followed.type is not discord.WebhookType.channel_follower:
                 raise RuntimeError(
@@ -221,24 +270,11 @@ async def run_hub_follow_reject_smoke_flow(
             known = await collect_known_hub_channel_ids(context.store.clients, guild)
             known = frozenset({*known, int(subscribe.id)})
 
-            listed = await publish.webhooks()
-            follower = next(
-                (
-                    webhook
-                    for webhook in listed
-                    if webhook.id == followed.id
-                    or (
-                        webhook.type is discord.WebhookType.channel_follower
-                        and getattr(getattr(webhook, "source_channel", None), "id", None)
-                        == subscribe.id
-                    )
-                ),
-                None,
+            follower = await _wait_for_follower_webhook(
+                publish,
+                followed=followed,
+                source_channel_id=int(subscribe.id),
             )
-            if follower is None:
-                raise RuntimeError(
-                    "Hub-follow smoke: channel_follower webhook missing on publish after follow()."
-                )
 
             from bot.core.clients.setup_state import classify_publish_follower_webhooks
 
