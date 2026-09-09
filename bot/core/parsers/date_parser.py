@@ -1,16 +1,29 @@
+"""Discord message timecode conversion.
+
+Architecture (extract → interpret → validate → replace):
+
+1. ``sanitize_for_dates`` — normalize text; keep an index map to the original
+2. ``protect_non_temporal_spans`` — mask IDs, URLs, versions, slash commands
+3. ``find_temporal_candidates`` — broad extraction via ``dateparser.search``
+   (``strategy="ngram"``) plus a tiny high-precision regex fallback
+4. ``parse_expression`` — Network timezone / next-occurrence interpretation
+5. ``validate_temporal_candidate`` — drop false positives
+6–7. ``replace_dates`` — map spans back and stitch ``<t:UNIX>`` chips
+
+The search extractor is intentionally swappable later (e.g. ctparse) without
+changing interpretation, validation, or replacement.
+"""
+
 from __future__ import annotations
 
 import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
-from importlib import resources
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import dateparser  # type: ignore[import-untyped]
-import yaml
+from dateparser.search import search_dates  # type: ignore[import-untyped]
 
 DEFAULT_TZ = ZoneInfo("America/New_York")
 
@@ -31,27 +44,142 @@ TZ_MAP = {
     "gmt": "UTC",
 }
 
-_FRAGMENT_RE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
-_CATALOG_NAME = "timecode_patterns.yaml"
+TZ_PATTERN = "(?:pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt)"
+
+# Explicit-date cues for next_occurrence gating (not a candidate catalog).
+_DATE_HINTS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\d{4}-\d{1,2}-\d{1,2}"),
+    re.compile(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?"),
+    re.compile(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:today|tomorrow|tonight|next)\b", re.IGNORECASE),
+)
+
+# Tiny high-precision fallback when search_dates misses reliable clock/ISO forms.
+_FALLBACK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        rf"\b\d{{1,2}}(?::\d{{2}})?\s*(?:am|pm)(?:\s+{TZ_PATTERN})?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(rf"\b\d{{1,2}}:\d{{2}}\s*(?:{TZ_PATTERN})?\b", re.IGNORECASE),
+    re.compile(
+        r"\b\d{4}-\d{1,2}-\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b",
+    ),
+)
+
+# Mask before search so snowflakes / versions / URLs are not treated as dates.
+_PROTECT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"https?://\S+", re.IGNORECASE),
+    re.compile(r"</[^>]+>"),
+    re.compile(r"<a?:\w+:\d+>"),
+    re.compile(r"<(?:@[!&]?|#)\d+>"),
+    re.compile(r"\bv?\d+\.\d+(?:\.\d+)+\b", re.IGNORECASE),
+    re.compile(r"\b\d{17,20}\b"),
+    re.compile(r"/mirror\b[^\n]*", re.IGNORECASE),
+)
+
+_TEMPORAL_CUE = re.compile(
+    r"""
+    \b(?:
+        am|pm|noon|midnight|morning|evening|night|tonight|today|tomorrow|
+        monday|tuesday|wednesday|thursday|friday|saturday|sunday|
+        mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|
+        jan[a-z]*|feb[a-z]*|mar[a-z]*|apr[a-z]*|may|jun[a-z]*|jul[a-z]*|
+        aug[a-z]*|sep[a-z]*|oct[a-z]*|nov[a-z]*|dec[a-z]*|
+        next|quarter|past|after|around|coming|eight|nine|ten|eleven|twelve|
+        one|two|three|four|five|six|seven
+    )\b
+    | \b\d{1,2}:\d{2}\b
+    | \b\d{1,2}\s*(?:am|pm)\b
+    | \b\d{4}-\d{1,2}-\d{1,2}\b
+    | \b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b
+    | \b(?:pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt)\b
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_EXPAND_TOKEN = re.compile(
+    r"^(?:"
+    r"quarter|half|past|to|after|before|at|on|of|around|"
+    r"evening|morning|night|tonight|today|tomorrow|noon|midnight|"
+    r"am|pm|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|"
+    r"jan[a-z]*|feb[a-z]*|mar[a-z]*|apr[a-z]*|may|jun[a-z]*|jul[a-z]*|"
+    r"aug[a-z]*|sep[a-z]*|oct[a-z]*|nov[a-z]*|dec[a-z]*|"
+    r"next|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"\d{1,2}(?::\d{2})?|"
+    r"pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt"
+    r")$",
+    re.IGNORECASE,
+)
+
+_NUM_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
+
+_TRAIL_PUNCT = frozenset(".,;:!?\"')]}>")
+_LEAD_PUNCT = frozenset("\"'([{<")
+
+_BARE_INTEGER = re.compile(r"^\d{1,4}$")
+_VERSION_LIKE = re.compile(r"^v?\d+\.\d+(?:\.\d+)*$", re.IGNORECASE)
+_IP_LIKE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+_DENYLIST_PHRASES = frozenset(
+    {
+        "we",
+        "me",
+        "you",
+        "a",
+        "an",
+        "the",
+        "to",
+        "for",
+        "on",
+        "at",
+        "in",
+        "of",
+        "and",
+        "or",
+        "by",
+        "is",
+        "be",
+        "now",
+    }
+)
 
 # Discord markdown markers stripped before date matching (lossy; mapped back).
 _MARKDOWN_CHARS = frozenset("*_`~|")
 
-
-@dataclass(frozen=True)
-class TimecodePattern:
-    id: str
-    example: str
-    match: str
-    compiled: re.Pattern[str]
-
-
-@dataclass(frozen=True)
-class TimecodeCatalog:
-    fragments: dict[str, str]
-    patterns: tuple[TimecodePattern, ...]
-    hints: tuple[str, ...]
-    tz_pattern: str
+_ABBREV_WEEKDAY = {
+    "mon": "monday",
+    "tue": "tuesday",
+    "tues": "tuesday",
+    "wed": "wednesday",
+    "thu": "thursday",
+    "thur": "thursday",
+    "thurs": "thursday",
+    "fri": "friday",
+    "sat": "saturday",
+    "sun": "sunday",
+}
 
 
 @dataclass(frozen=True)
@@ -85,120 +213,16 @@ class SanitizedText:
 
 
 @dataclass(frozen=True)
-class _DateMatch:
+class TemporalCandidate:
+    """A candidate temporal phrase located in sanitized/protected text."""
+
     start: int
     end: int
     text: str
-    length: int
 
-
-def _expand_fragments(
-    template: str,
-    fragments: dict[str, str],
-    *,
-    stack: tuple[str, ...] = (),
-) -> str:
-    def replace(match: re.Match[str]) -> str:
-        key = match.group(1)
-        if key not in fragments:
-            raise ValueError(f"unknown timecode fragment {{{key}}}")
-        if key in stack:
-            raise ValueError(f"cyclic timecode fragment {{{key}}}")
-        return _expand_fragments(fragments[key], fragments, stack=(*stack, key))
-
-    return _FRAGMENT_RE.sub(replace, template)
-
-
-def _catalog_path() -> Path:
-    return Path(__file__).with_name(_CATALOG_NAME)
-
-
-def _read_catalog_yaml() -> str:
-    path = _catalog_path()
-    if path.is_file():
-        return path.read_text(encoding="utf-8")
-    package = resources.files("bot.core.parsers")
-    return (package / _CATALOG_NAME).read_text(encoding="utf-8")
-
-
-@lru_cache(maxsize=1)
-def load_timecode_catalog() -> TimecodeCatalog:
-    """Load and compile ``timecode_patterns.yaml`` (fail fast on bad patterns)."""
-    raw = yaml.safe_load(_read_catalog_yaml())
-    if not isinstance(raw, dict):
-        raise ValueError("timecode_patterns.yaml must be a mapping")
-
-    fragments_raw = raw.get("fragments") or {}
-    if not isinstance(fragments_raw, dict) or not fragments_raw:
-        raise ValueError("timecode_patterns.yaml requires non-empty fragments")
-    fragments = {str(key): str(value) for key, value in fragments_raw.items()}
-    # Expand fragment values so callers can use fully-resolved snippets.
-    expanded_fragments = {
-        key: _expand_fragments(value, fragments) for key, value in fragments.items()
-    }
-
-    patterns_raw = raw.get("patterns") or []
-    if not isinstance(patterns_raw, list) or not patterns_raw:
-        raise ValueError("timecode_patterns.yaml requires a non-empty patterns list")
-
-    patterns: list[TimecodePattern] = []
-    seen_ids: set[str] = set()
-    for item in patterns_raw:
-        if not isinstance(item, dict):
-            raise ValueError("each timecode pattern must be a mapping")
-        pattern_id = str(item.get("id") or "").strip()
-        example = str(item.get("example") or "").strip()
-        match_template = str(item.get("match") or "")
-        if not pattern_id or not example or not match_template:
-            raise ValueError("timecode pattern requires id, example, and match")
-        if pattern_id in seen_ids:
-            raise ValueError(f"duplicate timecode pattern id {pattern_id!r}")
-        seen_ids.add(pattern_id)
-        expanded = _expand_fragments(match_template, fragments)
-        try:
-            compiled = re.compile(expanded)
-        except re.error as exc:
-            raise ValueError(f"invalid regex for pattern {pattern_id!r}: {exc}") from exc
-        patterns.append(
-            TimecodePattern(
-                id=pattern_id,
-                example=example,
-                match=expanded,
-                compiled=compiled,
-            )
-        )
-
-    hints_raw = raw.get("hints") or []
-    if not isinstance(hints_raw, list) or not hints_raw:
-        raise ValueError("timecode_patterns.yaml requires a non-empty hints list")
-    hints = tuple(_expand_fragments(str(item), fragments) for item in hints_raw)
-    for index, hint in enumerate(hints):
-        try:
-            re.compile(hint)
-        except re.error as exc:
-            raise ValueError(f"invalid regex for hint[{index}]: {exc}") from exc
-
-    tz_alt = expanded_fragments.get("tz")
-    if not tz_alt:
-        raise ValueError("timecode_patterns.yaml fragments.tz is required")
-    tz_pattern = rf"(?:{tz_alt})"
-
-    return TimecodeCatalog(
-        fragments=expanded_fragments,
-        patterns=tuple(patterns),
-        hints=hints,
-        tz_pattern=tz_pattern,
-    )
-
-
-def _catalog() -> TimecodeCatalog:
-    return load_timecode_catalog()
-
-
-# Eager load so import fails fast if the catalog is broken.
-PATTERNS: tuple[str, ...] = tuple(item.match for item in _catalog().patterns)
-DATE_HINTS: tuple[str, ...] = _catalog().hints
-TZ_PATTERN: str = _catalog().tz_pattern
+    @property
+    def length(self) -> int:
+        return self.end - self.start
 
 
 def sanitize_for_dates(text: str) -> SanitizedText:
@@ -239,11 +263,26 @@ def sanitize_for_dates(text: str) -> SanitizedText:
     )
 
 
+def protect_non_temporal_spans(text: str) -> str:
+    """Mask non-temporal syntax with same-length placeholders (index-preserving)."""
+
+    chars = list(text)
+    occupied = [False] * len(chars)
+
+    def _mask_span(start: int, end: int) -> None:
+        for index in range(start, end):
+            if 0 <= index < len(chars) and not occupied[index]:
+                chars[index] = "#"
+                occupied[index] = True
+
+    for pattern in _PROTECT_PATTERNS:
+        for match in pattern.finditer(text):
+            _mask_span(match.start(), match.end())
+    return "".join(chars)
+
+
 def has_explicit_date(text: str) -> bool:
-    for pattern in DATE_HINTS:
-        if re.search(pattern, text, re.IGNORECASE):
-            return True
-    return False
+    return any(pattern.search(text) for pattern in _DATE_HINTS)
 
 
 def extract_timezone(text: str) -> ZoneInfo:
@@ -260,20 +299,6 @@ def remove_timezone(text: str) -> str:
         text,
         flags=re.IGNORECASE,
     ).strip()
-
-
-_ABBREV_WEEKDAY = {
-    "mon": "monday",
-    "tue": "tuesday",
-    "tues": "tuesday",
-    "wed": "wednesday",
-    "thu": "thursday",
-    "thur": "thursday",
-    "thurs": "thursday",
-    "fri": "friday",
-    "sat": "saturday",
-    "sun": "sunday",
-}
 
 
 def _normalize_for_parse(text: str) -> str:
@@ -330,52 +355,190 @@ def next_occurrence(
     return min(future)
 
 
-def parse_expression(expr: str) -> int | None:
-    tz = extract_timezone(expr)
-    cleaned = _normalize_for_parse(remove_timezone(expr))
-    # Anchor relative phrases (today/tomorrow/future) to "now" in the *parsed*
-    # timezone. dateparser otherwise uses the process local clock (UTC in Docker),
-    # so "8 pm pst" near UTC midnight can land on the wrong civil day.
-    relative_base = datetime.now(tz).replace(tzinfo=None)
-    dt = dateparser.parse(
-        cleaned,
-        settings={
-            "TIMEZONE": tz.key,
-            "RETURN_AS_TIMEZONE_AWARE": True,
-            "PREFER_DATES_FROM": "future",
-            "RELATIVE_BASE": relative_base,
-        },
+def _hour_token_to_int(token: str) -> int | None:
+    lowered = token.lower()
+    if lowered in _NUM_WORDS:
+        return _NUM_WORDS[lowered]
+    if re.fullmatch(r"\d{1,2}", token):
+        value = int(token)
+        if 1 <= value <= 23:
+            return value
+    return None
+
+
+def _soft_normalize(text: str) -> str:
+    """Rewrite softer natural-language time phrases into dateparser-friendly forms."""
+    normalized = text.strip()
+    normalized = re.sub(
+        r"\b(?:this|coming|a|an|the|about|around|little|by|for)\s+",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
     )
-    if dt is None:
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    def _quarter_past(match: re.Match[str]) -> str:
+        hour = _hour_token_to_int(match.group(1))
+        if hour is None:
+            return match.group(0)
+        return f"{hour}:15"
+
+    def _half_past(match: re.Match[str]) -> str:
+        hour = _hour_token_to_int(match.group(1))
+        if hour is None:
+            return match.group(0)
+        return f"{hour}:30"
+
+    normalized = re.sub(
+        r"\bquarter\s+past\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b",
+        _quarter_past,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\bhalf\s+past\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b",
+        _half_past,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\b(?:evening|morning|night)\s+of\s+",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\baround\s+(noon|midnight)\b",
+        r"at \1",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    def _word_clock_relative(match: re.Match[str]) -> str:
+        hour = _hour_token_to_int(match.group(1))
+        day = match.group(2).lower()
+        if hour is None:
+            return match.group(0)
+        meridiem = "pm" if hour < 12 else ""
+        clock = f"{hour} {meridiem}".strip()
+        return f"{day} at {clock}"
+
+    normalized = re.sub(
+        r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+        r"\s+(today|tomorrow)(?:\s+(?:night|evening))?\b",
+        _word_clock_relative,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    def _after_on_weekday(match: re.Match[str]) -> str:
+        hour = _hour_token_to_int(match.group(1))
+        weekday = match.group(2)
+        if hour is None:
+            return match.group(0)
+        meridiem = "pm" if hour < 12 else ""
+        return f"{weekday} at {hour} {meridiem}".strip()
+
+    normalized = re.sub(
+        r"\bafter\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+        r"\s+on\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)"
+        r"(?:\s+evening)?\b",
+        _after_on_weekday,
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\s+around\s+(noon|midnight)\b",
+        r"\1 at \2",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def parse_expression(expr: str) -> int | None:
+    """Interpret a temporal phrase into a UTC unix timestamp using Network rules."""
+    cleaned_source = expr.strip()
+    if not cleaned_source:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=tz)
-    if not has_explicit_date(expr):
-        dt = next_occurrence(
-            dt.astimezone(tz),
-            tz,
-            allow_twelve_hour=not _has_meridiem(cleaned),
+    softened = _soft_normalize(cleaned_source)
+    candidates = [cleaned_source]
+    if softened and softened.lower() != cleaned_source.lower():
+        candidates.append(softened)
+
+    for candidate in candidates:
+        tz = extract_timezone(candidate)
+        cleaned = _normalize_for_parse(remove_timezone(candidate))
+        if not cleaned:
+            continue
+        relative_base = datetime.now(tz).replace(tzinfo=None)
+        dt = dateparser.parse(
+            cleaned,
+            settings={
+                "TIMEZONE": tz.key,
+                "RETURN_AS_TIMEZONE_AWARE": True,
+                "PREFER_DATES_FROM": "future",
+                "RELATIVE_BASE": relative_base,
+            },
         )
-    return int(dt.astimezone(UTC).timestamp())
-
-
-def find_candidates(text: str) -> list[_DateMatch]:
-    matches: list[_DateMatch] = []
-    for pattern in _catalog().patterns:
-        for match in pattern.compiled.finditer(text):
-            matches.append(
-                _DateMatch(
-                    start=match.start(),
-                    end=match.end(),
-                    text=match.group(),
-                    length=match.end() - match.start(),
-                )
+        if dt is None:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        if not has_explicit_date(candidate) and not has_explicit_date(cleaned_source):
+            dt = next_occurrence(
+                dt.astimezone(tz),
+                tz,
+                allow_twelve_hour=not _has_meridiem(cleaned),
             )
+        return int(dt.astimezone(UTC).timestamp())
+    return None
 
-    matches.sort(key=lambda item: (item.start, -item.length))
 
-    final: list[_DateMatch] = []
-    for candidate in matches:
+def validate_temporal_candidate(phrase: str) -> bool:
+    """Reject false-positive search hits before replacement."""
+    text = phrase.strip().strip(".,;:!?\"'()[]{}")
+    if not text:
+        return False
+    lowered = text.lower()
+    if lowered in _DENYLIST_PHRASES:
+        return False
+    if _BARE_INTEGER.fullmatch(text):
+        return False
+    if _VERSION_LIKE.fullmatch(text):
+        return False
+    if _IP_LIKE.fullmatch(text):
+        return False
+    if re.fullmatch(r"#+", text):
+        return False
+    if "#" in text:
+        return False
+    if not _TEMPORAL_CUE.search(text):
+        return False
+    return parse_expression(text) is not None
+
+
+def _locate_phrase(haystack: str, needle: str, *, used: list[bool]) -> tuple[int, int] | None:
+    """Find the next unused occurrence of ``needle`` in ``haystack``."""
+    if not needle:
+        return None
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index < 0:
+            return None
+        end = index + len(needle)
+        if not any(used[index:end]):
+            return (index, end)
+        start = index + 1
+
+
+def _dedupe_candidates(candidates: list[TemporalCandidate]) -> list[TemporalCandidate]:
+    candidates.sort(key=lambda item: (item.start, -item.length))
+    final: list[TemporalCandidate] = []
+    for candidate in candidates:
         overlap = False
         for existing in final:
             if candidate.start < existing.end and candidate.end > existing.start:
@@ -386,17 +549,167 @@ def find_candidates(text: str) -> list[_DateMatch]:
     return final
 
 
+def _trim_candidate_bounds(text: str, protected: str, start: int, end: int) -> tuple[int, int]:
+    """Drop masked placeholders and hugging punctuation from a candidate span."""
+    while start < end and start < len(protected) and protected[start] == "#":
+        start += 1
+    while end > start and end - 1 < len(protected) and protected[end - 1] == "#":
+        end -= 1
+    while start < end and (text[start].isspace() or text[start] in _LEAD_PUNCT):
+        start += 1
+    while end > start and (text[end - 1].isspace() or text[end - 1] in _TRAIL_PUNCT):
+        end -= 1
+    return start, end
+
+
+def _token_spans(text: str) -> list[tuple[int, int, str]]:
+    return [(match.start(), match.end(), match.group(0)) for match in re.finditer(r"\S+", text)]
+
+
+def _expand_candidate(text: str, start: int, end: int) -> tuple[int, int]:
+    """Grow a weak hit across adjacent temporal/connector tokens."""
+    tokens = _token_spans(text)
+    if not tokens:
+        return start, end
+    left = 0
+    while left < len(tokens) and tokens[left][1] <= start:
+        left += 1
+    if left >= len(tokens):
+        # start lands inside a token
+        left = next((i for i, (s, e, _) in enumerate(tokens) if s <= start < e), 0)
+    right = left
+    while right + 1 < len(tokens) and tokens[right][1] < end:
+        right += 1
+    if not (tokens[left][0] <= start < tokens[left][1] or tokens[left][0] >= start):
+        return start, end
+
+    # Align to covering token indices.
+    for index, (tok_start, tok_end, _) in enumerate(tokens):
+        if tok_start <= start < tok_end:
+            left = index
+        if tok_start < end <= tok_end or tok_start <= end - 1 < tok_end:
+            right = index
+
+    punct = "".join(_TRAIL_PUNCT | _LEAD_PUNCT)
+    while left > 0 and _EXPAND_TOKEN.match(tokens[left - 1][2].strip(punct)):
+        left -= 1
+    while right + 1 < len(tokens) and _EXPAND_TOKEN.match(
+        tokens[right + 1][2].strip(punct)
+    ):
+        right += 1
+    return tokens[left][0], tokens[right][1]
+
+
+def _normalize_search_phrase(phrase: str) -> str:
+    """Strip mask placeholders that search_dates may absorb from protected text."""
+    cleaned = re.sub(r"#+", " ", phrase)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned.strip("".join(_TRAIL_PUNCT | _LEAD_PUNCT))
+
+
+def _merge_nearby_candidates(
+    text: str,
+    candidates: list[TemporalCandidate],
+) -> list[TemporalCandidate]:
+    """Merge candidates separated only by connector tokens (e.g. sunday around noon)."""
+    if len(candidates) < 2:
+        return candidates
+    ordered = sorted(candidates, key=lambda item: item.start)
+    merged: list[TemporalCandidate] = [ordered[0]]
+    punct = "".join(_TRAIL_PUNCT | _LEAD_PUNCT)
+    for candidate in ordered[1:]:
+        prev = merged[-1]
+        gap = text[prev.end : candidate.start].strip()
+        gap_tokens = [token.strip(punct) for token in gap.split() if token.strip(punct)]
+        if gap_tokens and all(_EXPAND_TOKEN.match(token) for token in gap_tokens):
+            start, end = prev.start, candidate.end
+            merged[-1] = TemporalCandidate(start=start, end=end, text=text[start:end])
+        else:
+            merged.append(candidate)
+    return merged
+
+
+def find_temporal_candidates(text: str) -> list[TemporalCandidate]:
+    """Broad candidate extraction (search_dates + tiny regex fallback)."""
+    if not text.strip():
+        return []
+
+    protected = protect_non_temporal_spans(text)
+    used = [False] * len(protected)
+    found: list[TemporalCandidate] = []
+
+    try:
+        hits = search_dates(
+            protected,
+            languages=["en"],
+            settings={
+                "PREFER_DATES_FROM": "future",
+                "RETURN_AS_TIMEZONE_AWARE": True,
+            },
+            strategy="ngram",
+        )
+    except Exception:
+        hits = None
+
+    for item in hits or ():
+        raw_phrase = str(item[0]).strip()
+        phrase = _normalize_search_phrase(raw_phrase)
+        if not phrase:
+            continue
+        located = _locate_phrase(protected, phrase, used=used)
+        if located is None:
+            located = _locate_phrase(text, phrase, used=used)
+        if located is None and raw_phrase != phrase:
+            head = raw_phrase.split("#", 1)[0].strip()
+            head = _normalize_search_phrase(head)
+            if head:
+                located = _locate_phrase(protected, head, used=used)
+                if located is None:
+                    located = _locate_phrase(text, head, used=used)
+        if located is None:
+            continue
+        start, end = _trim_candidate_bounds(text, protected, *located)
+        start, end = _expand_candidate(text, start, end)
+        start, end = _trim_candidate_bounds(text, protected, start, end)
+        if start >= end:
+            continue
+        if any(used[start:end]):
+            continue
+        for index in range(start, end):
+            used[index] = True
+        found.append(TemporalCandidate(start=start, end=end, text=text[start:end]))
+
+    for pattern in _FALLBACK_PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = match.start(), match.end()
+            if any(used[start:end]):
+                continue
+            if protected[start:end] and set(protected[start:end]) <= {"#"}:
+                continue
+            start, end = _trim_candidate_bounds(text, protected, start, end)
+            if start >= end or any(used[start:end]):
+                continue
+            for index in range(start, end):
+                used[index] = True
+            found.append(TemporalCandidate(start=start, end=end, text=text[start:end]))
+
+    return _dedupe_candidates(_merge_nearby_candidates(text, found))
+
+
 def replace_dates(text: str) -> str:
     """Find dates on a sanitized view of ``text``, replace spans in the original."""
     sanitized = sanitize_for_dates(text)
-    # Prefer the sanitized.original base when NFKC rewrote characters so spans align.
     source = sanitized.original
     replacements: list[tuple[int, int, str]] = []
-    for match in find_candidates(sanitized.text):
-        ts = parse_expression(match.text)
+
+    for candidate in find_temporal_candidates(sanitized.text):
+        phrase = candidate.text.strip()
+        if not validate_temporal_candidate(phrase):
+            continue
+        ts = parse_expression(phrase)
         if ts is None:
             continue
-        start, end = sanitized.original_span(match.start, match.end)
+        start, end = sanitized.original_span(candidate.start, candidate.end)
         # Discord timestamp chips need a trailing space when the next character
         # would otherwise glue (e.g. ``<t:…>!`` / ``<t:…>.``), or rendering breaks.
         suffix = " " if end < len(source) and not source[end].isspace() else ""

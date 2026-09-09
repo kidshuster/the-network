@@ -9,6 +9,7 @@ import discord
 
 from bot.app.testing.catalog import (
     ALL_SCENARIOS_CHOICE,
+    RELEASE_SCENARIOS_CHOICE,
     expand_scenarios_for_recipe,
     requires_confirmation,
     validate_recipe_choice,
@@ -70,7 +71,7 @@ async def open_smoke_test(
     *,
     interaction: discord.Interaction,
     recipe_name: str,
-    scenario: str = "healthy",
+    scenario: str = "release",
 ) -> Any:
     bot = recipe_context.bot
     guild = _require_test_guild(bot, interaction.guild)
@@ -86,11 +87,17 @@ async def open_smoke_test(
         )
     if requires_confirmation(name):
         scenarios = expand_scenarios_for_recipe(name, scenario_name)
-        scenario_label = (
-            f"all ({len(scenarios)}: {', '.join(scenarios)})"
-            if scenario_name == ALL_SCENARIOS_CHOICE and len(scenarios) > 1
-            else scenarios[0] if scenario_name == ALL_SCENARIOS_CHOICE else scenario_name
-        )
+        if scenario_name == RELEASE_SCENARIOS_CHOICE:
+            scenario_label = f"release ({scenarios[0]} — one live product pass)"
+        elif scenario_name == ALL_SCENARIOS_CHOICE and len(scenarios) > 1:
+            scenario_label = (
+                f"all ({len(scenarios)}: {', '.join(scenarios)}; "
+                "live re-runs the same recipe per name — prefer release)"
+            )
+        elif scenario_name == ALL_SCENARIOS_CHOICE:
+            scenario_label = scenarios[0]
+        else:
+            scenario_label = scenario_name
         return OpenEphemeralView(
             template_id="test_smoke_confirm",
             content=render_text(

@@ -1,0 +1,10 @@
+kind: embed
+title: "Publish follow rejected"
+colour: orange
+description: |
+  A Channel Follow into {publish_mention} pointed at a channel **inside this hub server**.
+
+  That setup creates a feedback loop (network announcements would bounce back into publish). The bad Follow was removed.
+
+  **Fix:** On **your own server**, Follow only **your** announcement channel into {publish_mention}. Never Follow a hub subscribe, announcements, or other network channel into publish.
+footer: "The Network • publish setup"

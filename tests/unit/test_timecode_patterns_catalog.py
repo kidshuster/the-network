@@ -1,64 +1,30 @@
+"""Former YAML catalog examples kept as data-driven positive fixtures."""
+
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
-from bot.core.parsers.date_parser import (
-    load_timecode_catalog,
-    replace_dates,
-    sanitize_for_dates,
+from bot.core.parsers.date_parser import replace_dates
+
+TIMECODE = re.compile(r"<t:\d+>")
+
+# Examples migrated from the retired timecode_patterns.yaml production catalog.
+CATALOG_EXAMPLES = (
+    "2026-08-07 14:30",
+    "3/15/2026 4:00 pm",
+    "march 3 2026 6 pm",
+    "today at 8 pm pst",
+    "next friday at 7 pm cst",
+    "saturday at 10am pst",
+    "noon",
+    "4 pm pst",
+    "16:00 utc",
 )
 
 
-def test_catalog_loads_and_compiles() -> None:
-    catalog = load_timecode_catalog()
-    assert catalog.patterns
-    assert catalog.hints
-    assert "tz" in catalog.fragments
-    assert catalog.tz_pattern.startswith("(?:")
-
-
-def test_every_pattern_example_matches_its_regex() -> None:
-    catalog = load_timecode_catalog()
-    for pattern in catalog.patterns:
-        sanitized = sanitize_for_dates(pattern.example).text
-        match = pattern.compiled.search(sanitized)
-        assert match is not None, (
-            f"pattern {pattern.id!r} example {pattern.example!r} did not match"
-        )
-        assert match.group(0)
-
-
-def test_catalog_examples_convert_through_replace_dates() -> None:
-    catalog = load_timecode_catalog()
-    for pattern in catalog.patterns:
-        result = replace_dates(pattern.example)
-        assert re.search(r"<t:\d+>", result), (
-            f"pattern {pattern.id!r} example {pattern.example!r} -> {result!r}"
-        )
-
-
-def test_unknown_fragment_fails_at_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from bot.core.parsers import date_parser as module
-
-    bad = {
-        "fragments": {"tz": "pst"},
-        "patterns": [
-            {
-                "id": "broken",
-                "example": "saturday",
-                "match": r"\b(?:{missing})\b",
-            }
-        ],
-        "hints": [r"\b(?:{tz})\b"],
-    }
-    path = tmp_path / "timecode_patterns.yaml"
-    path.write_text(yaml.safe_dump(bad), encoding="utf-8")
-    monkeypatch.setattr(module, "_catalog_path", lambda: path)
-    module.load_timecode_catalog.cache_clear()
-    with pytest.raises(ValueError, match="unknown timecode fragment"):
-        module.load_timecode_catalog()
-    module.load_timecode_catalog.cache_clear()
+@pytest.mark.parametrize("example", CATALOG_EXAMPLES)
+def test_former_catalog_examples_convert(example: str) -> None:
+    result = replace_dates(example)
+    assert TIMECODE.search(result), f"{example!r} -> {result!r}"

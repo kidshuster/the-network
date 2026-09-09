@@ -8,6 +8,7 @@ from view_registry_helpers import make_test_view_registry
 
 from bot.core.clients.setup_state import (
     SubscriptionSetupState,
+    classify_publish_follower_webhooks,
     derive_network_link_status,
     is_publish_configured,
 )
@@ -26,21 +27,71 @@ from bot.features.channels.stickies.subscription import (
 @pytest.mark.asyncio
 async def test_is_publish_configured_true_when_channel_follower_webhook() -> None:
     channel = MagicMock(spec=discord.TextChannel)
+    channel.guild.id = 100
     follower = MagicMock()
     follower.type = discord.WebhookType.channel_follower
+    follower.source_guild = MagicMock(id=999)
+    follower.source_channel = MagicMock(id=1)
     channel.webhooks = AsyncMock(return_value=[follower])
 
-    assert await is_publish_configured(channel) is True
+    assert await is_publish_configured(channel, hub_guild_id=100) is True
 
 
 @pytest.mark.asyncio
 async def test_is_publish_configured_false_without_follower_webhooks() -> None:
     channel = MagicMock(spec=discord.TextChannel)
+    channel.guild.id = 100
     incoming = MagicMock()
     incoming.type = discord.WebhookType.incoming
     channel.webhooks = AsyncMock(return_value=[incoming])
 
-    assert await is_publish_configured(channel) is False
+    assert await is_publish_configured(channel, hub_guild_id=100) is False
+
+
+@pytest.mark.asyncio
+async def test_is_publish_configured_false_for_hub_sourced_follower() -> None:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.guild.id = 100
+    follower = MagicMock()
+    follower.type = discord.WebhookType.channel_follower
+    follower.source_guild = MagicMock(id=100)
+    follower.source_channel = MagicMock(id=501)
+    channel.webhooks = AsyncMock(return_value=[follower])
+
+    assert await is_publish_configured(channel, hub_guild_id=100) is False
+
+
+def test_classify_publish_follower_webhooks_splits_hub_and_external() -> None:
+    hub = MagicMock()
+    hub.type = discord.WebhookType.channel_follower
+    hub.source_guild = MagicMock(id=100)
+    hub.source_channel = MagicMock(id=501)
+
+    external = MagicMock()
+    external.type = discord.WebhookType.channel_follower
+    external.source_guild = MagicMock(id=999)
+    external.source_channel = MagicMock(id=1)
+
+    unknown = MagicMock()
+    unknown.type = discord.WebhookType.channel_follower
+    unknown.source_guild = None
+    unknown.source_channel = MagicMock(id=42)
+
+    known_hub = MagicMock()
+    known_hub.type = discord.WebhookType.channel_follower
+    known_hub.source_guild = None
+    known_hub.source_channel = MagicMock(id=501)
+
+    inspection = classify_publish_follower_webhooks(
+        [hub, external, unknown, known_hub],
+        hub_guild_id=100,
+        known_hub_channel_ids={501},
+    )
+    assert inspection.valid == (external,)
+    assert hub in inspection.forbidden
+    assert known_hub in inspection.forbidden
+    assert inspection.unknown == (unknown,)
+    assert inspection.configured is True
 
 
 def test_derive_network_link_status() -> None:

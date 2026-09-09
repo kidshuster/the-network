@@ -21,6 +21,9 @@ ALLOWED_SCENARIOS: frozenset[str] = frozenset(
 )
 
 ALL_SCENARIOS_CHOICE = "all"
+# One product-path pass. Prefer this for live release gates — scenario YAML only
+# changes mock Discord state; on live, ``all`` re-runs the same recipe N times.
+RELEASE_SCENARIOS_CHOICE = "release"
 
 
 def validate_recipe_choice(recipe: str) -> str:
@@ -35,19 +38,32 @@ def validate_recipe_choice(recipe: str) -> str:
 
 def validate_scenario_choice(scenario: str | None) -> str:
     value = (scenario or "healthy").strip() or "healthy"
-    if value == ALL_SCENARIOS_CHOICE:
-        return ALL_SCENARIOS_CHOICE
+    if value in {ALL_SCENARIOS_CHOICE, RELEASE_SCENARIOS_CHOICE}:
+        return value
     if value not in ALLOWED_SCENARIOS:
         raise ValueError(
             "Unsupported scenario. Allowed: "
-            + ", ".join([ALL_SCENARIOS_CHOICE, *sorted(ALLOWED_SCENARIOS)])
+            + ", ".join(
+                [
+                    RELEASE_SCENARIOS_CHOICE,
+                    ALL_SCENARIOS_CHOICE,
+                    *sorted(ALLOWED_SCENARIOS),
+                ]
+            )
         )
     return value
 
 
 def expand_scenarios(scenario: str) -> tuple[str, ...]:
-    """Expand a scenario choice into concrete scenario names to run."""
+    """Expand a scenario choice into concrete scenario names to run.
+
+    On live Discord, scenario YAML is not applied — only the recipe probes run.
+    ``release`` therefore expands to a single ``healthy`` pass. ``all`` still
+    expands to every named scenario (useful for mock burn-in; wasteful on live).
+    """
     name = validate_scenario_choice(scenario)
+    if name == RELEASE_SCENARIOS_CHOICE:
+        return ("healthy",)
     if name != ALL_SCENARIOS_CHOICE:
         return (name,)
     # Healthy first, then remaining scenarios alphabetically.
@@ -71,4 +87,9 @@ def allowed_recipe_names() -> list[str]:
 
 
 def allowed_scenario_names() -> list[str]:
-    return [ALL_SCENARIOS_CHOICE, *sorted(ALLOWED_SCENARIOS)]
+    # Prefer release/all aliases before the individual drift fixtures.
+    return [
+        RELEASE_SCENARIOS_CHOICE,
+        ALL_SCENARIOS_CHOICE,
+        *sorted(ALLOWED_SCENARIOS),
+    ]

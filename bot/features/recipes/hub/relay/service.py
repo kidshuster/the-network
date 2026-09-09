@@ -161,6 +161,8 @@ class RelayService:
     async def relay_message(self, message: discord.Message) -> RelayResult | None:
         if not self._passes_filters(message):
             return None
+        if await self._remediate_hub_sourced_follow_message(message):
+            return None
 
         lock = self._locks.setdefault(message.id, asyncio.Lock())
         async with lock:
@@ -171,6 +173,55 @@ class RelayService:
                 )
                 return None
             return await self._relay_locked(message)
+
+    async def _remediate_hub_sourced_follow_message(self, message: discord.Message) -> bool:
+        """Reject + remediate when publish intake is from a hub-sourced Channel Follow."""
+        if not self._is_followed_message(message) or message.webhook_id is None:
+            return False
+        if message.guild is None or message.guild.id != self._settings.guild_id:
+            return False
+        channel = message.channel
+        if not isinstance(channel, discord.TextChannel):
+            return False
+
+        from bot.features.recipes.hub.clients.publish_follow_guard import (
+            collect_known_hub_channel_ids,
+            publish_webhook_is_hub_sourced,
+            remediate_hub_sourced_publish_follows,
+        )
+
+        subscription = self._routing.resolve_publish_subscription(channel.id)
+        if subscription is None:
+            return False
+        client = self._clients.get_client(subscription.client_id)
+        if client is None:
+            return False
+
+        known = await collect_known_hub_channel_ids(self._client_repo, message.guild)
+        if not await publish_webhook_is_hub_sourced(
+            channel,
+            webhook_id=int(message.webhook_id),
+            hub_guild_id=self._settings.guild_id,
+            known_hub_channel_ids=known,
+        ):
+            return False
+
+        await remediate_hub_sourced_publish_follows(
+            message.guild,
+            client=client,
+            subscription=subscription,
+            clients_store=self._client_repo,
+            known_hub_channel_ids=known,
+        )
+        logger.warning(
+            "Rejected hub-sourced publish follow at relay time",
+            extra={
+                "publish_channel_id": channel.id,
+                "webhook_id": message.webhook_id,
+                "client_id": client.id,
+            },
+        )
+        return True
 
     async def relay_announcements_message(self, message: discord.Message) -> RelayResult | None:
         if message.guild is None or message.guild.id != self._settings.guild_id:

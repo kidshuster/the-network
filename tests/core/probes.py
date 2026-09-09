@@ -16,6 +16,7 @@ from tests.core.provision_flow import (
     run_hub_rebuild_smoke_flow,
     run_join_approval_smoke_flow,
 )
+from tests.core.publish_follow_probes import run_hub_follow_reject_smoke_flow
 from tests.core.resource_guard import cleanup_guild_test_artifacts
 from tests.core.server_init_probes import (
     ProbeResult,
@@ -116,6 +117,14 @@ async def relay_setup_welcome(context: LiveContext) -> ProbeOutcome:
         context.guild, context.bot, context.runtime
     )
     return ProbeOutcome("setup/welcome relay", result.network_key)
+
+
+@register("publish.hub_follow_reject")
+async def publish_hub_follow_reject(context: LiveContext) -> ProbeOutcome:
+    result = await run_hub_follow_reject_smoke_flow(
+        context.guild, context.bot, context.runtime
+    )
+    return ProbeOutcome("hub follow reject", result.server_name)
 
 
 @register("client.read_only")

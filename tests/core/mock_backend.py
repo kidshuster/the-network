@@ -138,6 +138,11 @@ async def run_mock_probe(
         return ProbeOutcome("join approval", "accept, subscribe, cleanup, and deny passed")
     if name == "relay.setup_welcome":
         return ProbeOutcome("setup/welcome relay", "sticky and welcome delivery passed")
+    if name == "publish.hub_follow_reject":
+        return ProbeOutcome(
+            "hub follow reject",
+            "hub-sourced follow deleted and profile alert posted",
+        )
     if name == "client.read_only":
         return ProbeOutcome("client read-only", "publish strip/restore and welcome gate passed")
     if name == "relay.hub_announcement":

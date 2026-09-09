@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 async def run_live(command: str, name: str, scenario: str) -> None:
+    from bot.app.testing.catalog import expand_scenarios_for_recipe, validate_scenario_choice
+
     settings = Settings()
     client = create_smoke_discord_client(members=True)
     bot = LiveBot(settings)
@@ -83,15 +85,20 @@ async def run_live(command: str, name: str, scenario: str) -> None:
             )
             try:
                 if command == "recipe":
-                    result = await run_smoke_recipe(
-                        recipe_name=name,
-                        scenario=scenario,
-                        backend="live",
-                        context=context,
-                        close_database=False,
+                    scenarios = expand_scenarios_for_recipe(
+                        name,
+                        validate_scenario_choice(scenario),
                     )
-                    if not result.success:
-                        raise RuntimeError(result.error or "Smoke recipe failed")
+                    for scenario_name in scenarios:
+                        result = await run_smoke_recipe(
+                            recipe_name=name,
+                            scenario=scenario_name,
+                            backend="live",
+                            context=context,
+                            close_database=False,
+                        )
+                        if not result.success:
+                            raise RuntimeError(result.error or "Smoke recipe failed")
                 else:
                     from tests.core.recipes import RecipeRunner
 
@@ -117,19 +124,34 @@ async def run_live(command: str, name: str, scenario: str) -> None:
 
 
 async def run_mock(command: str, name: str, scenario: str) -> None:
+    from bot.app.testing.catalog import expand_scenarios_for_recipe, validate_scenario_choice
+
     if command == "recipe":
-        result = await run_smoke_recipe(
-            recipe_name=name,
-            scenario=scenario,
-            backend="mock",
+        scenarios = expand_scenarios_for_recipe(
+            name,
+            validate_scenario_choice(scenario),
         )
-        if not result.success:
-            raise RuntimeError(result.error or "Smoke recipe failed")
+        for scenario_name in scenarios:
+            result = await run_smoke_recipe(
+                recipe_name=name,
+                scenario=scenario_name,
+                backend="mock",
+            )
+            if not result.success:
+                raise RuntimeError(
+                    result.error or f"Smoke recipe failed for scenario {scenario_name!r}"
+                )
         return
     from tests.core.mock_backend import load_mock_context
     from tests.core.recipes import RecipeRunner
 
-    context = load_mock_context(scenario)
+    scenario_name = validate_scenario_choice(scenario)
+    if scenario_name in {"all", "release"}:
+        raise SystemExit(
+            "Probe runs require a concrete scenario name "
+            f"(not {scenario_name!r}). Try --scenario healthy."
+        )
+    context = load_mock_context(scenario_name)
     runner = RecipeRunner(context, load_recipes(), backend="mock")
     await runner.run_probe(name)
 

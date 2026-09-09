@@ -1,10 +1,10 @@
 name: full
 description: Product-path smoke test in one Discord session
 budgets:
-  max_mutations: 160
-  max_rest_reads: 500
+  max_mutations: 200
+  max_rest_reads: 600
   max_rate_limit_wait_seconds: 180
-  max_duration_seconds: 600
+  max_duration_seconds: 720
 steps:
   - artifacts.cleanup
   - probe: permissions.provision
@@ -12,6 +12,8 @@ steps:
   - probe: onboarding.join_approval
     pause: true
   - probe: relay.setup_welcome
+    pause: true
+  - probe: publish.hub_follow_reject
     pause: true
   - probe: client.read_only
     pause: true

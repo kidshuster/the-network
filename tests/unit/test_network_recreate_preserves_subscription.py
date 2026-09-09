@@ -126,6 +126,8 @@ async def test_network_delete_recreate_preserves_setup_and_skips_welcomes(
     )
     follower = MagicMock()
     follower.type = discord.WebhookType.channel_follower
+    follower.source_guild = MagicMock(id=999)
+    follower.source_channel = MagicMock(id=1)
     publish.webhooks = AsyncMock(return_value=[follower])
 
     bot = MagicMock()
@@ -210,6 +212,8 @@ async def test_network_create_silently_adopts_zombie_channels(
     )
     follower = MagicMock()
     follower.type = discord.WebhookType.channel_follower
+    follower.source_guild = MagicMock(id=999)
+    follower.source_channel = MagicMock(id=1)
     publish.webhooks = AsyncMock(return_value=[follower])
 
     bot = MagicMock()

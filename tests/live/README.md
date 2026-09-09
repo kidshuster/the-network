@@ -66,5 +66,17 @@ bot are reported rather than silently treated as repaired.
 that non-smoke clients still exist after every probe by default. Cleanup runs
 from `finally` even when an earlier probe fails.
 
+The `full` recipe includes `publish.hub_follow_reject`: it Follows a hub
+subscribe (announcement) channel into the smoke client's publish channel, then
+asserts the bot deletes that follower webhook, leaves publish unconfigured, and
+posts the profile rejection notice.
+
+**Scenarios:** YAML under `tests/scenarios/` only changes **mock** Discord state.
+On live Discord, `/server test … scenario:all` re-runs the same recipe once per
+name (expensive and redundant). Prefer **`release`** (default) — one `healthy`
+product pass. Use `all` only when you intentionally want that burn-in matrix, or
+run curated mock drift with
+`python -m tests.core.runner recipe full --backend mock --scenario <name>`.
+
 Add a probe by registering one async function in `probes.py`. Add or reorder
 coverage by editing YAML; do not add another orchestration script.

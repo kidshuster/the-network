@@ -39,6 +39,7 @@ def test_validate_scenario_allowlist() -> None:
     assert validate_scenario_choice(None) == "healthy"
     assert validate_scenario_choice("malformed_channels") == "malformed_channels"
     assert validate_scenario_choice("all") == "all"
+    assert validate_scenario_choice("release") == "release"
     with pytest.raises(ValueError):
         validate_scenario_choice("../evil")
 
@@ -54,8 +55,14 @@ def test_expand_scenarios_all_runs_healthy_first() -> None:
         "missing_layout",
         "hard_blocker",
     }
-    assert allowed_scenario_names()[0] == "all"
+    assert allowed_scenario_names()[0] == "release"
+    assert "all" in allowed_scenario_names()
     assert "healthy" in allowed_scenario_names()
+
+
+def test_expand_scenarios_release_is_single_pass() -> None:
+    assert expand_scenarios("release") == ("healthy",)
+    assert expand_scenarios_for_recipe("full", "release") == ("healthy",)
 
 
 def test_clean_recipe_ignores_scenario_matrix() -> None:
@@ -63,6 +70,7 @@ def test_clean_recipe_ignores_scenario_matrix() -> None:
     assert expand_scenarios_for_recipe("clean", "malformed_channels") == ("healthy",)
     assert expand_scenarios_for_recipe("full", "all")[0] == "healthy"
     assert len(expand_scenarios_for_recipe("full", "all")) > 1
+    assert expand_scenarios_for_recipe("full", "release") == ("healthy",)
 
 
 def test_production_catalog_excludes_server_test() -> None:

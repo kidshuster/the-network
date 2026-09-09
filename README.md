@@ -21,6 +21,11 @@ Optional `bot/contracts/` holds immutable recipe/widget metadata when needed to 
 
 Stack: Python 3.12+, discord.py 2.x, SQLite, YAML-driven hub layout, structured logging.
 
+Timecode conversion (relay bodies when enabled) uses
+**extract → interpret → validate → replace**: normalize/mask non-dates, find candidates
+with `dateparser.search` (`ngram`), interpret with Network timezone rules, validate
+false positives, then stitch Discord `<t:UNIX>` chips. See `bot/core/parsers/date_parser.py`.
+
 ## Discord Developer Portal setup
 
 Before inviting, configure **Installation** (required for modern Discord apps):

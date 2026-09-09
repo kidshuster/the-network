@@ -518,11 +518,27 @@ async def sync_subscription_setup(
     allow_create = setup_mode == "create"
     bot_user_id = bot.user.id if bot.user is not None else 0
     network_active = network is not None and network.enabled
+
+    from bot.features.recipes.hub.clients.publish_follow_guard import (
+        collect_known_hub_channel_ids,
+        remediate_hub_sourced_publish_follows,
+    )
+
+    known_hub_channel_ids = await collect_known_hub_channel_ids(context.store.clients, guild)
+    await remediate_hub_sourced_publish_follows(
+        guild,
+        client=client,
+        subscription=subscription,
+        clients_store=context.store.clients,
+        known_hub_channel_ids=known_hub_channel_ids,
+    )
+
     state = await resolve_setup_state(
         guild,
         subscription,
         network_active=network_active,
         read_only=client.read_only,
+        known_hub_channel_ids=known_hub_channel_ids,
     )
 
     if network is not None and network_active and bot_user_id:
@@ -546,6 +562,7 @@ async def sync_subscription_setup(
                 subscription,
                 network_active=network_active,
                 read_only=client.read_only,
+                known_hub_channel_ids=known_hub_channel_ids,
             )
         if client.read_only:
             announcements_channel = await fetch_announcements_channel(guild, subscription)
@@ -578,6 +595,7 @@ async def sync_subscription_setup(
                 subscription,
                 network_active=network_active,
                 read_only=client.read_only,
+                known_hub_channel_ids=known_hub_channel_ids,
             )
             # Welcomes are first-activation only. Relink/reconcile after network
             # recreate must not repost local or network-wide welcome messages.

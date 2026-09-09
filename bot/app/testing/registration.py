@@ -65,7 +65,7 @@ def register_test_commands(bot: NetworkRelayBot) -> None:
     async def server_test(
         interaction: discord.Interaction,
         recipe: str,
-        scenario: str = "healthy",
+        scenario: str = "release",
     ) -> None:
         if not bot.settings.enable_test_commands:
             raise UserFacingError("Test commands are disabled.", code="test_commands_disabled")

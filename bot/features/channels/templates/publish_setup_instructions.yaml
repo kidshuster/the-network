@@ -12,10 +12,12 @@ fields:
       2. Create an **announcement channel** (megaphone icon) for posts that should go to the network.
       3. In that announcement channel, click **Follow**, select **this hub server**, and choose {publish_mention}. **Channel Follow works only in the Discord desktop app** (not mobile or web).
       4. Post a short test message there and confirm it appears in {publish_mention}.
+
+      **Never Follow a hub/network channel** (subscribe, announcements, or any channel on this server) into publish — that creates a feedback loop and the bot will remove the Follow.
     inline: false
   - name: Timecodes
     value: |
-      When **Timecodes** is **On** on your client profile, natural times in your announcements (for example `raid at 5:30 pst` or `Saturday at 10am est`) are converted to Discord timestamps so every viewer sees the correct local time.
+      When **Timecodes** is **On** on your client profile, natural times in your announcements (for example `raid at 5:30 pst`, `5:30 pst on 9/11`, or `Saturday at 10am est`) are converted to Discord timestamps so every viewer sees the correct local time.
       Toggle **Timecodes: On/Off** on your profile card anytime.
     inline: false
 footer: "The Network • publish setup • remove this card automatically when connected"

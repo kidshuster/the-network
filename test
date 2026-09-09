@@ -14,7 +14,7 @@ Usage: ./test [--dev | --full] [--smoke-restart] [--check-quota]
 
 Modes:
   --dev           Local only — ruff, mypy, pytest, mock smoke (default; ~1 minute)
-  --full          --dev, then live Testwork smoke suite (~15–30 minutes)
+  --full          --dev, then live Testwork smoke suite once (~5–15 minutes)
 
 Options:
   --smoke-restart     After live smoke, restart the bot (default: leave stopped)

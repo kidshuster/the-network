@@ -180,10 +180,41 @@ class TestPlainTextUnchanged:
             "/mirror id:1535347363604865105 mirrorkey:stinghublive.",
             "Use /lfg to sign up — no schedule yet",
             "Check the pinned message for rules",
+            "We need 8 players",
+            "version 1.2.3 is live",
+            "v1.3.2",
+            "See <#123456789012345678> for details",
+            "Run </network status:123456789012345678> please",
+            "https://example.com/path/2026-01-01",
         ],
     )
     def test_unchanged(self, text: str) -> None:
         _assert_unchanged(text)
+
+
+class TestOrderIndependentPhrases:
+    def test_date_then_time_matches_time_then_date(self) -> None:
+        moment = datetime(2026, 8, 14, 12, 0, tzinfo=PT)
+        with _freeze_now(moment):
+            a = replace_dates("raid 9/11 at 5:30 pm pst")
+            b = replace_dates("raid 5:30 pm pst on 9/11")
+        assert TIMECODE.findall(a) == TIMECODE.findall(b)
+        assert len(TIMECODE.findall(a)) == 1
+
+
+class TestSofterNaturalLanguage:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Can we do the raid around eight tomorrow night?",
+            "Let's meet a little after 7 on Friday evening.",
+            "I should be online by quarter past nine tonight.",
+            "How about this coming Sunday around noon?",
+            "The run is planned for the evening of September 14.",
+        ],
+    )
+    def test_converts(self, text: str) -> None:
+        _assert_converts(text)
 
 
 class TestSanitizeForDates:
