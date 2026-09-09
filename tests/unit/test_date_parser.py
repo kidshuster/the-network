@@ -18,6 +18,7 @@ from bot.core.parsers.date_parser import (
     parse_expression,
     protect_non_temporal_spans,
     replace_dates,
+    resolve_expression_datetime,
     sanitize_for_dates,
     validate_temporal_candidate,
 )
@@ -93,6 +94,40 @@ class TestNextOccurrenceUsesParsedTimezone:
         with _freeze_now(moment):
             ts = parse_expression("5:30 am pst")
         _assert_timestamp_local(ts, datetime(2026, 8, 15, 5, 30, tzinfo=PT))
+
+    def test_hyphen_month_day_keeps_calendar_day_across_utc_midnight(self) -> None:
+        # 02:00 UTC Sep 10 == 19:00 PDT Sep 9 — must not collapse 9-11 → "today".
+        moment = datetime(2026, 9, 10, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("9-11 at 5:30 pst")
+        _assert_timestamp_local(ts, datetime(2026, 9, 11, 17, 30, tzinfo=PT))
+
+    def test_slash_month_day_ambiguous_clock_prefers_evening_in_expression_tz(
+        self,
+    ) -> None:
+        moment = datetime(2026, 9, 10, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("9/11 at 5:30 pst")
+        _assert_timestamp_local(ts, datetime(2026, 9, 11, 17, 30, tzinfo=PT))
+
+    def test_slash_month_day_explicit_am_preserved(self) -> None:
+        moment = datetime(2026, 9, 10, 2, 0, tzinfo=UTC)
+        with _freeze_now(moment):
+            ts = parse_expression("9/11 at 5:30 am pst")
+        _assert_timestamp_local(ts, datetime(2026, 9, 11, 5, 30, tzinfo=PT))
+
+    def test_resolve_wraps_only_after_projecting_now_into_expression_tz(self) -> None:
+        # Server/UTC instant is already Sep 10; expression TZ is still Sep 9 evening.
+        now_utc = datetime(2026, 9, 10, 2, 0, tzinfo=UTC)
+        parsed_am = datetime(2026, 9, 11, 5, 30, tzinfo=PT)
+        resolved = resolve_expression_datetime(
+            parsed_am,
+            PT,
+            now=now_utc,
+            explicit_date=True,
+            allow_twelve_hour=True,
+        )
+        assert resolved == datetime(2026, 9, 11, 17, 30, tzinfo=PT)
 
 
 class TestTimeWithTimezone:

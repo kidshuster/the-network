@@ -52,6 +52,8 @@ TZ_PATTERN = "(?:pst|pdt|pt|mst|mdt|mt|cst|cdt|ct|est|edt|et|utc|gmt)"
 _EXPLICIT_DATE_HINTS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\d{4}-\d{1,2}-\d{1,2}"),
     re.compile(r"\d{1,2}/\d{1,2}(?:/\d{2,4})?"),
+    # Common announcement form "9-11 at 5:30" (not ISO — yearless month-day).
+    re.compile(r"\b\d{1,2}-\d{1,2}(?:-\d{2,4})?\b"),
     re.compile(
         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b",
         re.IGNORECASE,
@@ -354,32 +356,105 @@ def _has_meridiem(text: str) -> bool:
     return _MERIDIEM_RE.search(text) is not None
 
 
+def _normalize_month_day_separators(text: str) -> str:
+    """Yearless ``9-11`` → ``9/11`` without touching ISO ``2026-09-14``."""
+    return re.sub(
+        r"(?<!\d)(?<!-)(\d{1,2})-(\d{1,2})(?:-(\d{2,4}))?\b",
+        lambda match: (
+            f"{match.group(1)}/{match.group(2)}/{match.group(3)}"
+            if match.group(3)
+            else f"{match.group(1)}/{match.group(2)}"
+        ),
+        text,
+    )
+
+
+def _rewrite_zone_names(text: str) -> str:
+    normalized = re.sub(r"\beastern\b", "et", text, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bpacific\b", "pt", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bcentral\b", "ct", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bmountain\b", "mt", normalized, flags=re.IGNORECASE)
+    return normalized
+
+
+def now_in_timezone(tz: ZoneInfo) -> datetime:
+    """Project the current server instant into the expression timezone."""
+    return datetime.now(tz)
+
+
+def resolve_expression_datetime(
+    dt: datetime,
+    tz: ZoneInfo,
+    *,
+    now: datetime,
+    explicit_date: bool,
+    allow_twelve_hour: bool,
+) -> datetime:
+    """Normalize a parsed datetime into ``tz``, then apply wrap rules vs ``now`` in ``tz``.
+
+    Hardening contract:
+    1. Convert server ``now`` and the parsed value into the text's timezone first.
+    2. Build AM/PM candidates only after that normalization.
+    3. Apply day wrapping / future selection against that same local ``now``.
+    """
+    now_local = now.astimezone(tz) if now.tzinfo is not None else now.replace(tzinfo=tz)
+    local = dt.astimezone(tz).replace(second=0, microsecond=0)
+
+    if allow_twelve_hour and 0 < local.hour < 12:
+        clock_options = (local, local + timedelta(hours=12))
+    else:
+        clock_options = (local,)
+
+    if explicit_date:
+        future = [option for option in clock_options if option > now_local]
+        if len(future) == 1:
+            return future[0]
+        if len(future) >= 2:
+            # Future calendar day + bare clock → prefer evening.
+            return max(future)
+        return max(clock_options)
+
+    # Time-only / relative clock: pin to today's date in the expression TZ, then
+    # roll forward until the instant is still ahead of local now.
+    pinned = [
+        option.replace(
+            year=now_local.year,
+            month=now_local.month,
+            day=now_local.day,
+        )
+        for option in clock_options
+    ]
+    rolled = [
+        option + timedelta(days=1) if option <= now_local else option for option in pinned
+    ]
+    return min(rolled)
+
+
 def next_occurrence(
     dt: datetime,
     tz: ZoneInfo,
     *,
     allow_twelve_hour: bool = False,
 ) -> datetime:
-    """Pick the next future clock time in ``tz`` (not the server local zone).
-
-    When ``allow_twelve_hour`` is set (time had no am/pm), also consider the
-    opposite meridiem and take the sooner future instant — e.g. at 4:47pm PST,
-    ``5:30`` means 5:30pm today, not 5:30am tomorrow.
-    """
-    now = datetime.now(tz)
-    local = dt.astimezone(tz)
-    today = local.replace(
-        year=now.year,
-        month=now.month,
-        day=now.day,
-        second=0,
-        microsecond=0,
+    """Pick the next future clock time in ``tz`` (not the server local zone)."""
+    return resolve_expression_datetime(
+        dt,
+        tz,
+        now=now_in_timezone(tz),
+        explicit_date=False,
+        allow_twelve_hour=allow_twelve_hour,
     )
-    options = [today]
-    if allow_twelve_hour and 0 < today.hour < 12:
-        options.append(today + timedelta(hours=12))
-    future = [option + timedelta(days=1) if option <= now else option for option in options]
-    return min(future)
+
+
+def disambiguate_twelve_hour(dt: datetime, tz: ZoneInfo) -> datetime:
+    """Resolve ambiguous 1–11 hour clocks on the datetime's own calendar day in ``tz``."""
+    return resolve_expression_datetime(
+        dt,
+        tz,
+        now=now_in_timezone(tz),
+        explicit_date=True,
+        allow_twelve_hour=True,
+    )
 
 
 def _hour_token_to_int(token: str) -> int | None:
@@ -393,14 +468,14 @@ def _hour_token_to_int(token: str) -> int | None:
     return None
 
 
-def _soft_normalize(text: str) -> str:
+def _soft_normalize(text: str, *, now: datetime | None = None) -> str:
     """Rewrite softer natural-language time phrases into dateparser-friendly forms."""
-    normalized = text.strip()
-    # Zone names before filler stripping so they stay attached to the phrase.
-    normalized = re.sub(r"\beastern\b", "et", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bpacific\b", "pt", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bcentral\b", "ct", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bmountain\b", "mt", normalized, flags=re.IGNORECASE)
+    normalized = _rewrite_zone_names(_normalize_month_day_separators(text.strip()))
+    anchor = now if now is not None else datetime.now(DEFAULT_TZ)
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=DEFAULT_TZ)
+    else:
+        anchor = anchor.astimezone(anchor.tzinfo)
 
     def _quarter_past(match: re.Match[str]) -> str:
         hour = _hour_token_to_int(match.group(1))
@@ -531,9 +606,8 @@ def _soft_normalize(text: str) -> str:
 
     def _ordinal_day(match: re.Match[str]) -> str:
         day = int(match.group(1))
-        now = datetime.now(DEFAULT_TZ)
-        month = now.strftime("%B")
-        year = now.year
+        month = anchor.strftime("%B")
+        year = anchor.year
         return f"{month} {day} {year}"
 
     normalized = re.sub(
@@ -554,21 +628,35 @@ def _soft_normalize(text: str) -> str:
 
 
 def parse_expression(expr: str) -> int | None:
-    """Interpret a temporal phrase into a UTC unix timestamp using Network rules."""
+    """Interpret a temporal phrase into a UTC unix timestamp using Network rules.
+
+    Pipeline: normalize text formats → resolve expression TZ → project server now
+    into that TZ → dateparser with that relative base → wrap/disambiguate in TZ.
+    """
     cleaned_source = expr.strip()
     if not cleaned_source:
         return None
-    softened = _soft_normalize(cleaned_source)
-    candidates = [cleaned_source]
-    if softened and softened.lower() != cleaned_source.lower():
-        candidates.append(softened)
+
+    # Format/zone-name normalization first so TZ extraction does not depend on
+    # whether the caller wrote "9-11", "9/11", or "eastern".
+    preliminary = _rewrite_zone_names(_normalize_month_day_separators(cleaned_source))
+    tz = extract_timezone(preliminary)
+    now_local = now_in_timezone(tz)
+
+    softened = _soft_normalize(cleaned_source, now=now_local)
+    candidates: list[str] = [cleaned_source]
+    for option in (preliminary, softened):
+        if option and option.lower() not in {item.lower() for item in candidates}:
+            candidates.append(option)
 
     for candidate in candidates:
         tz = extract_timezone(candidate)
+        now_local = now_in_timezone(tz)
         cleaned = _normalize_for_parse(remove_timezone(candidate))
         if not cleaned:
             continue
-        relative_base = datetime.now(tz).replace(tzinfo=None)
+        # dateparser's RELATIVE_BASE is naive — feed wall time already in expression TZ.
+        relative_base = now_local.replace(tzinfo=None)
         dt = dateparser.parse(
             cleaned,
             settings={
@@ -582,12 +670,14 @@ def parse_expression(expr: str) -> int | None:
             continue
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=tz)
-        if not has_explicit_date(candidate) and not has_explicit_date(cleaned_source):
-            dt = next_occurrence(
-                dt.astimezone(tz),
-                tz,
-                allow_twelve_hour=not _has_meridiem(cleaned),
-            )
+        explicit = has_explicit_date(candidate) or has_explicit_date(cleaned_source)
+        dt = resolve_expression_datetime(
+            dt,
+            tz,
+            now=now_local,
+            explicit_date=explicit,
+            allow_twelve_hour=not _has_meridiem(cleaned),
+        )
         return int(dt.astimezone(UTC).timestamp())
     return None
 
