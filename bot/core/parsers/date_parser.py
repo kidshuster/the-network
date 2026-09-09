@@ -400,6 +400,7 @@ def resolve_expression_datetime(
     now_local = now.astimezone(tz) if now.tzinfo is not None else now.replace(tzinfo=tz)
     local = dt.astimezone(tz).replace(second=0, microsecond=0)
 
+    clock_options: tuple[datetime, ...]
     if allow_twelve_hour and 0 < local.hour < 12:
         clock_options = (local, local + timedelta(hours=12))
     else:
