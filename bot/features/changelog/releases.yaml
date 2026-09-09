@@ -1,4 +1,12 @@
 releases:
+  "1.3.3":
+    post: true
+    summary: "Broader timecode extraction, hub-follow publish guards, and channel resource silo cleanup."
+    changes:
+      - "Rebuild timecode conversion as sanitize → protect → extract → interpret → validate → Discord <t:UNIX>, with soft natural-language coverage and stricter false-positive rejection."
+      - "Reject Channel Follows into publish that are sourced from the hub guild (feedback-loop risk); delete them, leave publish unconfigured, and alert on the client profile channel."
+      - "Make features/channels/resources.py the sole hub channel lookup API (roles helpers split out); remove the dual resolve façade and lock it with architecture tests."
+      - "Harden live publish.hub_follow_reject smoke against Discord follow/webhook list lag; document that mock smoke stubs this probe."
   "1.3.2":
     post: true
     summary: "Read-only clients, emoji channel naming, and Blacklist sticky refresh."
